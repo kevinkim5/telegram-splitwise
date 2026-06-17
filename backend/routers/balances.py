@@ -61,34 +61,33 @@ def simplify_debts(net_map: dict[int, float]) -> list[dict]:
 async def get_balances(chat_id: str, user: dict = Depends(verify_init_data)):
     async with get_db() as db:
         # Resolve group
-        row = await db.execute("SELECT id FROM groups WHERE chat_id=?", (chat_id,))
-        g = await row.fetchone()
+        g = await db.fetchrow("SELECT id FROM groups WHERE chat_id=$1", chat_id)
         if not g:
             raise HTTPException(status_code=404, detail="Group not found")
         group_id = g["id"]
 
         # Build member lookup: id → {first_name, last_name, username}
-        rows = await db.execute(
-            "SELECT id, first_name, last_name, username FROM members WHERE group_id=?",
-            (group_id,),
+        member_rows = await db.fetch(
+            "SELECT id, first_name, last_name, username FROM members WHERE group_id=$1",
+            group_id,
         )
         member_info: dict[int, dict] = {
-            r["id"]: dict(r) for r in await rows.fetchall()
+            r["id"]: dict(r) for r in member_rows
         }
 
         # Gather all distinct currencies from non-deleted expenses
-        rows = await db.execute(
-            "SELECT DISTINCT currency FROM expenses WHERE group_id=? AND deleted_at IS NULL",
-            (group_id,),
+        currencies_rows = await db.fetch(
+            "SELECT DISTINCT currency FROM expenses WHERE group_id=$1 AND deleted_at IS NULL",
+            group_id,
         )
-        currencies = [r["currency"] for r in await rows.fetchall()]
+        currencies = [r["currency"] for r in currencies_rows]
 
         # Also include currencies from non-deleted settlements
-        rows = await db.execute(
-            "SELECT DISTINCT currency FROM settlements WHERE group_id=? AND deleted_at IS NULL",
-            (group_id,),
+        settlement_currency_rows = await db.fetch(
+            "SELECT DISTINCT currency FROM settlements WHERE group_id=$1 AND deleted_at IS NULL",
+            group_id,
         )
-        for r in await rows.fetchall():
+        for r in settlement_currency_rows:
             if r["currency"] not in currencies:
                 currencies.append(r["currency"])
 
@@ -101,14 +100,14 @@ async def get_balances(chat_id: str, user: dict = Depends(verify_init_data)):
             # --- Expense contributions ---
             # The payer is credited for each split (they paid on behalf of others).
             # Each split member is debited their share.
-            rows = await db.execute(
+            split_rows = await db.fetch(
                 """SELECT e.paid_by, es.member_id, es.amount
                    FROM expenses e
                    JOIN expense_splits es ON es.expense_id = e.id
-                   WHERE e.group_id=? AND e.currency=? AND e.deleted_at IS NULL""",
-                (group_id, currency),
+                   WHERE e.group_id=$1 AND e.currency=$2 AND e.deleted_at IS NULL""",
+                group_id, currency,
             )
-            for r in await rows.fetchall():
+            for r in split_rows:
                 paid_by = r["paid_by"]
                 member_id = r["member_id"]
                 amount = r["amount"]
@@ -126,13 +125,13 @@ async def get_balances(chat_id: str, user: dict = Depends(verify_init_data)):
 
             # --- Settlement contributions ---
             # from_member paid to_member, reducing from_member's debt / to_member's credit
-            rows = await db.execute(
+            settlement_rows = await db.fetch(
                 """SELECT from_member, to_member, amount
                    FROM settlements
-                   WHERE group_id=? AND currency=? AND deleted_at IS NULL""",
-                (group_id, currency),
+                   WHERE group_id=$1 AND currency=$2 AND deleted_at IS NULL""",
+                group_id, currency,
             )
-            for r in await rows.fetchall():
+            for r in settlement_rows:
                 from_member = r["from_member"]
                 to_member = r["to_member"]
                 amount = r["amount"]

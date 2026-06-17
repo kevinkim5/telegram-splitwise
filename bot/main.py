@@ -1,4 +1,3 @@
-import asyncio
 import os
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -9,6 +8,10 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://example.com")
+
+# NOTE: In production (Vercel) the bot runs via webhook — Telegram POSTs updates
+# to /api/bot/webhook/{token} handled by backend/routers/bot_webhook.py.
+# This polling script is for LOCAL DEVELOPMENT only.
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat

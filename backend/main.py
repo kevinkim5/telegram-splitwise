@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
 from backend.database import init_db
-from backend.routers import balances, expenses, groups, settlements
+from backend.routers import balances, bot_webhook, expenses, groups, settlements
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.include_router(groups.router)
 app.include_router(expenses.router)
 app.include_router(balances.router)
 app.include_router(settlements.router)
+app.include_router(bot_webhook.router)
 
 # Serve frontend if built
 frontend_dist = Path(settings.frontend_dist)

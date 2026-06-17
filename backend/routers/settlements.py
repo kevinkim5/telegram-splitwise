@@ -24,8 +24,7 @@ class SettlementIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 async def _get_group_id(db, chat_id: str) -> int:
-    row = await db.execute("SELECT id FROM groups WHERE chat_id=?", (chat_id,))
-    g = await row.fetchone()
+    g = await db.fetchrow("SELECT id FROM groups WHERE chat_id=$1", chat_id)
     if not g:
         raise HTTPException(status_code=404, detail="Group not found")
     return g["id"]
@@ -35,19 +34,17 @@ async def _format_settlement(db, row) -> dict:
     s = dict(row)
 
     # Fetch from_member info
-    r = await db.execute(
-        "SELECT id, first_name, last_name, username FROM members WHERE id=?",
-        (s["from_member"],),
+    from_m = await db.fetchrow(
+        "SELECT id, first_name, last_name, username FROM members WHERE id=$1",
+        s["from_member"],
     )
-    from_m = await r.fetchone()
     s["from_member"] = dict(from_m) if from_m else {"id": s["from_member"]}
 
     # Fetch to_member info
-    r = await db.execute(
-        "SELECT id, first_name, last_name, username FROM members WHERE id=?",
-        (s["to_member"],),
+    to_m = await db.fetchrow(
+        "SELECT id, first_name, last_name, username FROM members WHERE id=$1",
+        s["to_member"],
     )
-    to_m = await r.fetchone()
     s["to_member"] = dict(to_m) if to_m else {"id": s["to_member"]}
 
     return s
@@ -62,13 +59,12 @@ async def list_settlements(chat_id: str, user: dict = Depends(verify_init_data))
     async with get_db() as db:
         group_id = await _get_group_id(db, chat_id)
 
-        rows = await db.execute(
+        settlement_rows = await db.fetch(
             """SELECT * FROM settlements
-               WHERE group_id=? AND deleted_at IS NULL
+               WHERE group_id=$1 AND deleted_at IS NULL
                ORDER BY settled_at DESC""",
-            (group_id,),
+            group_id,
         )
-        settlement_rows = await rows.fetchall()
 
         result = []
         for row in settlement_rows:
@@ -93,27 +89,26 @@ async def create_settlement(
 
         # Validate both members belong to this group
         for mid in (body.from_member_id, body.to_member_id):
-            row = await db.execute(
-                "SELECT id FROM members WHERE id=? AND group_id=?",
-                (mid, group_id),
+            member_check = await db.fetchrow(
+                "SELECT id FROM members WHERE id=$1 AND group_id=$2",
+                mid, group_id,
             )
-            if not await row.fetchone():
+            if not member_check:
                 raise HTTPException(
                     status_code=422,
                     detail=f"member_id={mid} not in group",
                 )
 
-        cur = await db.execute(
+        settlement_id = await db.fetchval(
             """INSERT INTO settlements (group_id, from_member, to_member, amount, currency, note)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (group_id, body.from_member_id, body.to_member_id,
-             body.amount, body.currency, body.note),
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+            group_id, body.from_member_id, body.to_member_id,
+            body.amount, body.currency, body.note,
         )
-        settlement_id = cur.lastrowid
-        await db.commit()
 
-        row = await db.execute("SELECT * FROM settlements WHERE id=?", (settlement_id,))
-        settlement_row = await row.fetchone()
+        settlement_row = await db.fetchrow(
+            "SELECT * FROM settlements WHERE id=$1", settlement_id
+        )
         return await _format_settlement(db, settlement_row)
 
 
@@ -126,15 +121,14 @@ async def delete_settlement(
     async with get_db() as db:
         group_id = await _get_group_id(db, chat_id)
 
-        row = await db.execute(
-            "SELECT id FROM settlements WHERE id=? AND group_id=? AND deleted_at IS NULL",
-            (settlement_id, group_id),
+        existing = await db.fetchrow(
+            "SELECT id FROM settlements WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL",
+            settlement_id, group_id,
         )
-        if not await row.fetchone():
+        if not existing:
             raise HTTPException(status_code=404, detail="Settlement not found")
 
         await db.execute(
-            "UPDATE settlements SET deleted_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id=?",
-            (settlement_id,),
+            "UPDATE settlements SET deleted_at=NOW() WHERE id=$1",
+            settlement_id,
         )
-        await db.commit()

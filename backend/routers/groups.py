@@ -15,52 +15,36 @@ class JoinRequest(BaseModel):
 @router.post("/join")
 async def join_group(body: JoinRequest, user: dict = Depends(verify_init_data)):
     async with get_db() as db:
-        # Upsert group
-        await db.execute(
-            "INSERT INTO groups (chat_id, title) VALUES (?, ?)"
-            " ON CONFLICT(chat_id) DO UPDATE SET title=excluded.title",
-            (body.chat_id, body.title),
+        group = await db.fetchrow(
+            """INSERT INTO groups (chat_id, title) VALUES ($1, $2)
+               ON CONFLICT(chat_id) DO UPDATE SET title=EXCLUDED.title
+               RETURNING id, chat_id, title, created_at""",
+            body.chat_id, body.title
         )
 
-        row = await db.execute("SELECT * FROM groups WHERE chat_id=?", (body.chat_id,))
-        group = dict(await row.fetchone())
-
-        # Upsert member
-        await db.execute(
+        member = await db.fetchrow(
             """INSERT INTO members (group_id, telegram_user_id, first_name, last_name, username)
-               VALUES (?, ?, ?, ?, ?)
+               VALUES ($1, $2, $3, $4, $5)
                ON CONFLICT(group_id, telegram_user_id) DO UPDATE SET
-                 first_name=excluded.first_name,
-                 last_name=excluded.last_name,
-                 username=excluded.username""",
-            (
-                group["id"],
-                str(user["id"]),
-                user.get("first_name", ""),
-                user.get("last_name"),
-                user.get("username"),
-            ),
+                 first_name=EXCLUDED.first_name,
+                 last_name=EXCLUDED.last_name,
+                 username=EXCLUDED.username
+               RETURNING id, group_id, telegram_user_id, first_name, last_name, username""",
+            group["id"], str(user["id"]), user.get("first_name", ""),
+            user.get("last_name"), user.get("username")
         )
-        await db.commit()
 
-        row = await db.execute(
-            "SELECT * FROM members WHERE group_id=? AND telegram_user_id=?",
-            (group["id"], str(user["id"])),
-        )
-        member = dict(await row.fetchone())
-        return {"group": group, "member": member}
+        return {"group": dict(group), "member": dict(member)}
 
 
 @router.get("/{chat_id}/members")
 async def list_members(chat_id: str, user: dict = Depends(verify_init_data)):
     async with get_db() as db:
-        row = await db.execute("SELECT id FROM groups WHERE chat_id=?", (chat_id,))
-        g = await row.fetchone()
+        g = await db.fetchrow("SELECT id FROM groups WHERE chat_id=$1", chat_id)
         if not g:
             raise HTTPException(status_code=404, detail="Group not found")
-
-        rows = await db.execute(
-            "SELECT * FROM members WHERE group_id=? ORDER BY first_name",
-            (g["id"],),
+        rows = await db.fetch(
+            "SELECT id, telegram_user_id, first_name, last_name, username FROM members WHERE group_id=$1 ORDER BY first_name",
+            g["id"]
         )
-        return [dict(r) for r in await rows.fetchall()]
+        return [dict(r) for r in rows]

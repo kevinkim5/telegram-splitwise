@@ -30,8 +30,7 @@ class ExpenseIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 async def _get_group_id(db, chat_id: str) -> int:
-    row = await db.execute("SELECT id FROM groups WHERE chat_id=?", (chat_id,))
-    g = await row.fetchone()
+    g = await db.fetchrow("SELECT id FROM groups WHERE chat_id=$1", chat_id)
     if not g:
         raise HTTPException(status_code=404, detail="Group not found")
     return g["id"]
@@ -41,23 +40,22 @@ async def _format_expense(db, expense_row) -> dict:
     exp = dict(expense_row)
 
     # Fetch paid_by member
-    row = await db.execute(
-        "SELECT id, first_name, last_name, username FROM members WHERE id=?",
-        (exp["paid_by"],),
+    paid_by_member = await db.fetchrow(
+        "SELECT id, first_name, last_name, username FROM members WHERE id=$1",
+        exp["paid_by"],
     )
-    paid_by_member = await row.fetchone()
     exp["paid_by"] = dict(paid_by_member) if paid_by_member else {"id": exp["paid_by"]}
 
     # Fetch splits with member info
-    rows = await db.execute(
+    split_rows = await db.fetch(
         """SELECT es.member_id, es.amount, m.first_name, m.last_name, m.username
            FROM expense_splits es
            JOIN members m ON m.id = es.member_id
-           WHERE es.expense_id=?
+           WHERE es.expense_id=$1
            ORDER BY m.first_name""",
-        (exp["id"],),
+        exp["id"],
     )
-    exp["splits"] = [dict(r) for r in await rows.fetchall()]
+    exp["splits"] = [dict(r) for r in split_rows]
     return exp
 
 
@@ -104,20 +102,18 @@ async def list_expenses(
         group_id = await _get_group_id(db, chat_id)
         offset = (page - 1) * limit
 
-        count_row = await db.execute(
-            "SELECT COUNT(*) FROM expenses WHERE group_id=? AND deleted_at IS NULL",
-            (group_id,),
+        total = await db.fetchval(
+            "SELECT COUNT(*) FROM expenses WHERE group_id=$1 AND deleted_at IS NULL",
+            group_id,
         )
-        total = (await count_row.fetchone())[0]
 
-        rows = await db.execute(
+        expense_rows = await db.fetch(
             """SELECT * FROM expenses
-               WHERE group_id=? AND deleted_at IS NULL
+               WHERE group_id=$1 AND deleted_at IS NULL
                ORDER BY created_at DESC
-               LIMIT ? OFFSET ?""",
-            (group_id, limit, offset),
+               LIMIT $2 OFFSET $3""",
+            group_id, limit, offset,
         )
-        expense_rows = await rows.fetchall()
 
         items = []
         for row in expense_rows:
@@ -135,47 +131,43 @@ async def create_expense(
         group_id = await _get_group_id(db, chat_id)
 
         # Validate paid_by member belongs to group
-        row = await db.execute(
-            "SELECT id FROM members WHERE id=? AND group_id=?",
-            (body.paid_by_member_id, group_id),
+        paid_by_check = await db.fetchrow(
+            "SELECT id FROM members WHERE id=$1 AND group_id=$2",
+            body.paid_by_member_id, group_id,
         )
-        if not await row.fetchone():
+        if not paid_by_check:
             raise HTTPException(status_code=422, detail="paid_by_member_id not in group")
 
         splits = _validate_splits(body)
 
         # Validate all split members belong to group
         for member_id, _ in splits:
-            row = await db.execute(
-                "SELECT id FROM members WHERE id=? AND group_id=?",
-                (member_id, group_id),
+            member_check = await db.fetchrow(
+                "SELECT id FROM members WHERE id=$1 AND group_id=$2",
+                member_id, group_id,
             )
-            if not await row.fetchone():
+            if not member_check:
                 raise HTTPException(
                     status_code=422,
                     detail=f"member_id={member_id} not in group",
                 )
 
-        # Insert expense
-        cur = await db.execute(
+        # Insert expense, get id via RETURNING
+        expense_id = await db.fetchval(
             """INSERT INTO expenses (group_id, description, total_amount, currency, paid_by, split_type)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (group_id, body.description, body.total_amount, body.currency,
-             body.paid_by_member_id, body.split_type),
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+            group_id, body.description, body.total_amount, body.currency,
+            body.paid_by_member_id, body.split_type,
         )
-        expense_id = cur.lastrowid
 
         # Insert splits
         for member_id, amount in splits:
             await db.execute(
-                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES (?, ?, ?)",
-                (expense_id, member_id, amount),
+                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES ($1, $2, $3)",
+                expense_id, member_id, amount,
             )
 
-        await db.commit()
-
-        row = await db.execute("SELECT * FROM expenses WHERE id=?", (expense_id,))
-        expense_row = await row.fetchone()
+        expense_row = await db.fetchrow("SELECT * FROM expenses WHERE id=$1", expense_id)
         return await _format_expense(db, expense_row)
 
 
@@ -188,11 +180,10 @@ async def get_expense(
     async with get_db() as db:
         group_id = await _get_group_id(db, chat_id)
 
-        row = await db.execute(
-            "SELECT * FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
-            (expense_id, group_id),
+        expense_row = await db.fetchrow(
+            "SELECT * FROM expenses WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL",
+            expense_id, group_id,
         )
-        expense_row = await row.fetchone()
         if not expense_row:
             raise HTTPException(status_code=404, detail="Expense not found")
 
@@ -209,30 +200,30 @@ async def update_expense(
     async with get_db() as db:
         group_id = await _get_group_id(db, chat_id)
 
-        row = await db.execute(
-            "SELECT id FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
-            (expense_id, group_id),
+        existing = await db.fetchrow(
+            "SELECT id FROM expenses WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL",
+            expense_id, group_id,
         )
-        if not await row.fetchone():
+        if not existing:
             raise HTTPException(status_code=404, detail="Expense not found")
 
         # Validate paid_by member belongs to group
-        row = await db.execute(
-            "SELECT id FROM members WHERE id=? AND group_id=?",
-            (body.paid_by_member_id, group_id),
+        paid_by_check = await db.fetchrow(
+            "SELECT id FROM members WHERE id=$1 AND group_id=$2",
+            body.paid_by_member_id, group_id,
         )
-        if not await row.fetchone():
+        if not paid_by_check:
             raise HTTPException(status_code=422, detail="paid_by_member_id not in group")
 
         splits = _validate_splits(body)
 
         # Validate all split members belong to group
         for member_id, _ in splits:
-            row = await db.execute(
-                "SELECT id FROM members WHERE id=? AND group_id=?",
-                (member_id, group_id),
+            member_check = await db.fetchrow(
+                "SELECT id FROM members WHERE id=$1 AND group_id=$2",
+                member_id, group_id,
             )
-            if not await row.fetchone():
+            if not member_check:
                 raise HTTPException(
                     status_code=422,
                     detail=f"member_id={member_id} not in group",
@@ -241,25 +232,22 @@ async def update_expense(
         # Update expense
         await db.execute(
             """UPDATE expenses
-               SET description=?, total_amount=?, currency=?, paid_by=?, split_type=?,
-                   updated_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-               WHERE id=?""",
-            (body.description, body.total_amount, body.currency,
-             body.paid_by_member_id, body.split_type, expense_id),
+               SET description=$1, total_amount=$2, currency=$3, paid_by=$4, split_type=$5,
+                   updated_at=NOW()
+               WHERE id=$6""",
+            body.description, body.total_amount, body.currency,
+            body.paid_by_member_id, body.split_type, expense_id,
         )
 
         # Replace splits
-        await db.execute("DELETE FROM expense_splits WHERE expense_id=?", (expense_id,))
+        await db.execute("DELETE FROM expense_splits WHERE expense_id=$1", expense_id)
         for member_id, amount in splits:
             await db.execute(
-                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES (?, ?, ?)",
-                (expense_id, member_id, amount),
+                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES ($1, $2, $3)",
+                expense_id, member_id, amount,
             )
 
-        await db.commit()
-
-        row = await db.execute("SELECT * FROM expenses WHERE id=?", (expense_id,))
-        expense_row = await row.fetchone()
+        expense_row = await db.fetchrow("SELECT * FROM expenses WHERE id=$1", expense_id)
         return await _format_expense(db, expense_row)
 
 
@@ -272,15 +260,14 @@ async def delete_expense(
     async with get_db() as db:
         group_id = await _get_group_id(db, chat_id)
 
-        row = await db.execute(
-            "SELECT id FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
-            (expense_id, group_id),
+        existing = await db.fetchrow(
+            "SELECT id FROM expenses WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL",
+            expense_id, group_id,
         )
-        if not await row.fetchone():
+        if not existing:
             raise HTTPException(status_code=404, detail="Expense not found")
 
         await db.execute(
-            "UPDATE expenses SET deleted_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id=?",
-            (expense_id,),
+            "UPDATE expenses SET deleted_at=NOW() WHERE id=$1",
+            expense_id,
         )
-        await db.commit()
