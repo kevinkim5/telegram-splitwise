@@ -8,7 +8,7 @@ SCHEMA_PATH = Path(__file__).parent / "db" / "schema.sql"
 
 
 async def init_db():
-    conn = await asyncpg.connect(settings.database_url)
+    conn = await asyncpg.connect(settings.db_url)
     try:
         schema = SCHEMA_PATH.read_text()
         await conn.execute(schema)
@@ -18,7 +18,7 @@ async def init_db():
 
 @asynccontextmanager
 async def get_db():
-    conn = await asyncpg.connect(settings.database_url)
+    conn = await asyncpg.connect(settings.db_url)
     try:
         yield conn
     finally:
