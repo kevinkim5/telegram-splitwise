@@ -1,0 +1,286 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from backend.database import get_db
+from backend.auth import verify_init_data
+
+router = APIRouter(prefix="/api/groups", tags=["expenses"])
+
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
+
+class SplitIn(BaseModel):
+    member_id: int
+    amount: float | None = None  # required for custom, ignored for equal
+
+
+class ExpenseIn(BaseModel):
+    description: str
+    total_amount: float
+    currency: str
+    paid_by_member_id: int
+    split_type: str  # 'equal' or 'custom'
+    splits: list[SplitIn]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _get_group_id(db, chat_id: str) -> int:
+    row = await db.execute("SELECT id FROM groups WHERE chat_id=?", (chat_id,))
+    g = await row.fetchone()
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return g["id"]
+
+
+async def _format_expense(db, expense_row) -> dict:
+    exp = dict(expense_row)
+
+    # Fetch paid_by member
+    row = await db.execute(
+        "SELECT id, first_name, last_name, username FROM members WHERE id=?",
+        (exp["paid_by"],),
+    )
+    paid_by_member = await row.fetchone()
+    exp["paid_by"] = dict(paid_by_member) if paid_by_member else {"id": exp["paid_by"]}
+
+    # Fetch splits with member info
+    rows = await db.execute(
+        """SELECT es.member_id, es.amount, m.first_name, m.last_name, m.username
+           FROM expense_splits es
+           JOIN members m ON m.id = es.member_id
+           WHERE es.expense_id=?
+           ORDER BY m.first_name""",
+        (exp["id"],),
+    )
+    exp["splits"] = [dict(r) for r in await rows.fetchall()]
+    return exp
+
+
+def _validate_splits(expense: ExpenseIn) -> list[tuple[int, float]]:
+    """Return list of (member_id, amount) after validation/computation."""
+    if not expense.splits:
+        raise HTTPException(status_code=422, detail="splits must not be empty")
+
+    if expense.split_type == "equal":
+        per_share = round(expense.total_amount / len(expense.splits), 10)
+        return [(s.member_id, per_share) for s in expense.splits]
+
+    elif expense.split_type == "custom":
+        for s in expense.splits:
+            if s.amount is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"amount is required for custom split (member_id={s.member_id})",
+                )
+        total = sum(s.amount for s in expense.splits)
+        if abs(total - expense.total_amount) > 0.01:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Sum of split amounts ({total}) does not match total_amount ({expense.total_amount})",
+            )
+        return [(s.member_id, s.amount) for s in expense.splits]
+
+    else:
+        raise HTTPException(status_code=422, detail="split_type must be 'equal' or 'custom'")
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/{chat_id}/expenses")
+async def list_expenses(
+    chat_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(30, ge=1, le=100),
+    user: dict = Depends(verify_init_data),
+):
+    async with get_db() as db:
+        group_id = await _get_group_id(db, chat_id)
+        offset = (page - 1) * limit
+
+        count_row = await db.execute(
+            "SELECT COUNT(*) FROM expenses WHERE group_id=? AND deleted_at IS NULL",
+            (group_id,),
+        )
+        total = (await count_row.fetchone())[0]
+
+        rows = await db.execute(
+            """SELECT * FROM expenses
+               WHERE group_id=? AND deleted_at IS NULL
+               ORDER BY created_at DESC
+               LIMIT ? OFFSET ?""",
+            (group_id, limit, offset),
+        )
+        expense_rows = await rows.fetchall()
+
+        items = []
+        for row in expense_rows:
+            items.append(await _format_expense(db, row))
+        return {"total": total, "page": page, "items": items}
+
+
+@router.post("/{chat_id}/expenses", status_code=201)
+async def create_expense(
+    chat_id: str,
+    body: ExpenseIn,
+    user: dict = Depends(verify_init_data),
+):
+    async with get_db() as db:
+        group_id = await _get_group_id(db, chat_id)
+
+        # Validate paid_by member belongs to group
+        row = await db.execute(
+            "SELECT id FROM members WHERE id=? AND group_id=?",
+            (body.paid_by_member_id, group_id),
+        )
+        if not await row.fetchone():
+            raise HTTPException(status_code=422, detail="paid_by_member_id not in group")
+
+        splits = _validate_splits(body)
+
+        # Validate all split members belong to group
+        for member_id, _ in splits:
+            row = await db.execute(
+                "SELECT id FROM members WHERE id=? AND group_id=?",
+                (member_id, group_id),
+            )
+            if not await row.fetchone():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"member_id={member_id} not in group",
+                )
+
+        # Insert expense
+        cur = await db.execute(
+            """INSERT INTO expenses (group_id, description, total_amount, currency, paid_by, split_type)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (group_id, body.description, body.total_amount, body.currency,
+             body.paid_by_member_id, body.split_type),
+        )
+        expense_id = cur.lastrowid
+
+        # Insert splits
+        for member_id, amount in splits:
+            await db.execute(
+                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES (?, ?, ?)",
+                (expense_id, member_id, amount),
+            )
+
+        await db.commit()
+
+        row = await db.execute("SELECT * FROM expenses WHERE id=?", (expense_id,))
+        expense_row = await row.fetchone()
+        return await _format_expense(db, expense_row)
+
+
+@router.get("/{chat_id}/expenses/{expense_id}")
+async def get_expense(
+    chat_id: str,
+    expense_id: int,
+    user: dict = Depends(verify_init_data),
+):
+    async with get_db() as db:
+        group_id = await _get_group_id(db, chat_id)
+
+        row = await db.execute(
+            "SELECT * FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
+            (expense_id, group_id),
+        )
+        expense_row = await row.fetchone()
+        if not expense_row:
+            raise HTTPException(status_code=404, detail="Expense not found")
+
+        return await _format_expense(db, expense_row)
+
+
+@router.put("/{chat_id}/expenses/{expense_id}")
+async def update_expense(
+    chat_id: str,
+    expense_id: int,
+    body: ExpenseIn,
+    user: dict = Depends(verify_init_data),
+):
+    async with get_db() as db:
+        group_id = await _get_group_id(db, chat_id)
+
+        row = await db.execute(
+            "SELECT id FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
+            (expense_id, group_id),
+        )
+        if not await row.fetchone():
+            raise HTTPException(status_code=404, detail="Expense not found")
+
+        # Validate paid_by member belongs to group
+        row = await db.execute(
+            "SELECT id FROM members WHERE id=? AND group_id=?",
+            (body.paid_by_member_id, group_id),
+        )
+        if not await row.fetchone():
+            raise HTTPException(status_code=422, detail="paid_by_member_id not in group")
+
+        splits = _validate_splits(body)
+
+        # Validate all split members belong to group
+        for member_id, _ in splits:
+            row = await db.execute(
+                "SELECT id FROM members WHERE id=? AND group_id=?",
+                (member_id, group_id),
+            )
+            if not await row.fetchone():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"member_id={member_id} not in group",
+                )
+
+        # Update expense
+        await db.execute(
+            """UPDATE expenses
+               SET description=?, total_amount=?, currency=?, paid_by=?, split_type=?,
+                   updated_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+               WHERE id=?""",
+            (body.description, body.total_amount, body.currency,
+             body.paid_by_member_id, body.split_type, expense_id),
+        )
+
+        # Replace splits
+        await db.execute("DELETE FROM expense_splits WHERE expense_id=?", (expense_id,))
+        for member_id, amount in splits:
+            await db.execute(
+                "INSERT INTO expense_splits (expense_id, member_id, amount) VALUES (?, ?, ?)",
+                (expense_id, member_id, amount),
+            )
+
+        await db.commit()
+
+        row = await db.execute("SELECT * FROM expenses WHERE id=?", (expense_id,))
+        expense_row = await row.fetchone()
+        return await _format_expense(db, expense_row)
+
+
+@router.delete("/{chat_id}/expenses/{expense_id}", status_code=204)
+async def delete_expense(
+    chat_id: str,
+    expense_id: int,
+    user: dict = Depends(verify_init_data),
+):
+    async with get_db() as db:
+        group_id = await _get_group_id(db, chat_id)
+
+        row = await db.execute(
+            "SELECT id FROM expenses WHERE id=? AND group_id=? AND deleted_at IS NULL",
+            (expense_id, group_id),
+        )
+        if not await row.fetchone():
+            raise HTTPException(status_code=404, detail="Expense not found")
+
+        await db.execute(
+            "UPDATE expenses SET deleted_at=strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id=?",
+            (expense_id,),
+        )
+        await db.commit()
