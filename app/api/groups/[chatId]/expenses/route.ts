@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 
 async function formatExpense(expenseId: number) {
@@ -15,10 +15,11 @@ async function formatExpense(expenseId: number) {
   return { ...exp, paid_by: paidBy, splits }
 }
 
-export async function GET(request: Request, { params }: { params: { chatId: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const params = await props.params
   const { searchParams } = new URL(request.url)
   const page = parseInt(searchParams.get('page') ?? '1')
   const limit = 30
@@ -35,13 +36,15 @@ export async function GET(request: Request, { params }: { params: { chatId: stri
     ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
   `
 
-  const items = await Promise.all(expenses.map(e => formatExpense(e.id)))
-  return NextResponse.json({ total: parseInt(count), page, items })
+  const items = await Promise.all(expenses.map(e => formatExpense(e.id as number)))
+  return NextResponse.json({ total: parseInt(count as string), page, items })
 }
 
-export async function POST(request: Request, { params }: { params: { chatId: string } }) {
+export async function POST(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = await props.params
 
   const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
@@ -76,5 +79,5 @@ export async function POST(request: Request, { params }: { params: { chatId: str
     `
   }
 
-  return NextResponse.json(await formatExpense(expense.id), { status: 201 })
+  return NextResponse.json(await formatExpense(expense.id as number), { status: 201 })
 }

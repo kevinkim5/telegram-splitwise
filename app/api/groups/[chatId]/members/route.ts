@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 
-export async function GET(request: Request, { params }: { params: { chatId: string } }) {
+export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = await props.params
 
   const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })

@@ -11,8 +11,9 @@ async function sendMessage(chatId: number, text: string, extra: Record<string, u
   })
 }
 
-export async function POST(request: Request, { params }: { params: { token: string } }) {
-  if (!BOT_TOKEN || params.token !== BOT_TOKEN) {
+export async function POST(request: Request, props: { params: Promise<{ token: string }> }) {
+  const { token } = await props.params
+  if (!BOT_TOKEN || token !== BOT_TOKEN) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

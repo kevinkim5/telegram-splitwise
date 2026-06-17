@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres'
+import { sql } from '@/lib/sql'
 
 export async function ensureSchema() {
   await sql`

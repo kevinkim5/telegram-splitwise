@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 
 async function formatExpense(expenseId: number) {
@@ -13,11 +13,13 @@ async function formatExpense(expenseId: number) {
   return { ...exp, paid_by: paidBy, splits }
 }
 
-type Params = { params: { chatId: string; expenseId: string } }
+type Props = { params: Promise<{ chatId: string; expenseId: string }> }
 
-export async function GET(request: Request, { params }: Params) {
+export async function GET(request: Request, props: Props) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = await props.params
 
   const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
@@ -27,12 +29,14 @@ export async function GET(request: Request, { params }: Params) {
   `
   if (!expense) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
 
-  return NextResponse.json(await formatExpense(expense.id))
+  return NextResponse.json(await formatExpense(expense.id as number))
 }
 
-export async function PUT(request: Request, { params }: Params) {
+export async function PUT(request: Request, props: Props) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = await props.params
 
   const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
@@ -73,9 +77,11 @@ export async function PUT(request: Request, { params }: Params) {
   return NextResponse.json(await formatExpense(expenseId))
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(request: Request, props: Props) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const params = await props.params
 
   const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
