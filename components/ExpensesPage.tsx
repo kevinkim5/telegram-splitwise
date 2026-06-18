@@ -89,7 +89,7 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
 
 export function ExpensesPage() {
   const router = useRouter()
-  const { chatId, group, currentMember, apiHeaders } = useAppContext()
+  const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [settlements, setSettlements] = useState<Settlement[]>([])
@@ -232,19 +232,24 @@ export function ExpensesPage() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => setShowMembers(true)}
-          className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full"
-          style={{
-            background: 'var(--tg-theme-secondary-bg-color)',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '18px',
-          }}
-          aria-label="Group members"
-        >
-          👥
-        </button>
+        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+          <button
+            onClick={() => setShowMembers(true)}
+            className="flex items-center justify-center w-9 h-9 rounded-full"
+            style={{
+              background: 'var(--tg-theme-secondary-bg-color)',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '18px',
+            }}
+            aria-label="Group members"
+          >
+            👥
+          </button>
+          <p style={{ fontSize: '10px', color: 'var(--tg-theme-hint-color)', lineHeight: 1 }}>
+            {members.length} people
+          </p>
+        </div>
       </div>
 
       {/* Action buttons row */}
