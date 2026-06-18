@@ -295,7 +295,7 @@ export function BalancesPage() {
                             <span key={currency} className="text-xs font-bold" style={{
                               color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
                             }}>
-                              {net > 0 ? '+' : ''}{net.toFixed(2)} {currency}
+                              {currency} {Math.abs(net).toFixed(2)}
                             </span>
                           ))}
                           {hasDetails && (

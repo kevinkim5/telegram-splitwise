@@ -221,7 +221,7 @@ export function ExpensesPage() {
     {/* Fixed header: title, balance, action buttons */}
     <div
       className="flex-shrink-0 px-4 pt-4 pb-3"
-      style={{ background: 'var(--tg-theme-bg-color)' }}
+      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 rgba(0,0,0,0.08)' }}
     >
       {/* Top row: title + balance + members icon */}
       <div className="flex items-start justify-between mb-3">
@@ -324,7 +324,12 @@ export function ExpensesPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-base">✅</span>
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+                      >
+                        Paid
+                      </span>
                       <button
                         onClick={() => handleDeleteSettlement(s.id)}
                         disabled={deletingSettlementId === s.id}

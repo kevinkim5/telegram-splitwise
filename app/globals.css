@@ -92,6 +92,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   display: none;
 }
 
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 .tg-label {
   font-size: 13px;
   color: var(--tg-theme-section-header-text-color);
