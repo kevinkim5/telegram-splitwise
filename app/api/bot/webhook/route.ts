@@ -54,7 +54,7 @@ async function handleMessage(message: {
         text: 'Tap the button below to Split.',
         reply_markup: {
           inline_keyboard: [[
-            { text: 'Open Split', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
+            { text: 'Split now!', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
           ]],
         },
       })
@@ -65,7 +65,7 @@ async function handleMessage(message: {
         text: 'Tap the button below to Split.',
         reply_markup: {
           inline_keyboard: [[
-            { text: 'Open Split', web_app: { url: webAppUrl } },
+            { text: 'Split now!', web_app: { url: webAppUrl } },
           ]],
         },
       })
