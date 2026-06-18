@@ -648,12 +648,6 @@ export function ExpensesPage() {
                   onClick={() => openSettlementDetail(s)}
                 >
                   <div className="flex items-center gap-3 p-3">
-                    <div
-                      className="flex items-center justify-center flex-shrink-0"
-                      style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '20px' }}
-                    >
-                      ✓
-                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
                         {s.from_name} paid {s.to_name}{' '}
