@@ -10,7 +10,9 @@ async function callTelegram(method: string, body: object) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return res.json()
+  const data = await res.json()
+  if (!data.ok) console.error(`Telegram ${method} failed:`, JSON.stringify(data))
+  return data
 }
 
 async function handleMessage(message: {
@@ -43,6 +45,7 @@ async function handleMessage(message: {
   if (text && /^\/start(@\w+)?$/.test(text.split(' ')[0])) {
     const chatTitle = encodeURIComponent(chat.title ?? chat.first_name ?? 'Chat')
     const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
+    console.log(`/start in chat ${chat.id}, webAppUrl: ${webAppUrl}`)
 
     await callTelegram('sendMessage', {
       chat_id: chat.id,
