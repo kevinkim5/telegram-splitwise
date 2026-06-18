@@ -576,7 +576,7 @@ export function ExpensesPage() {
             <div
               key={m.id}
               style={{
-                marginRight: i < Math.min(members.length, 3) - 1 ? -8 : 0,
+                marginRight: -8,
                 borderRadius: '50%',
                 border: '2px solid var(--tg-theme-bg-color)',
                 lineHeight: 0,
@@ -586,6 +586,24 @@ export function ExpensesPage() {
               <MemberAvatar member={m} size={26} />
             </div>
           ))}
+          {members.length > 3 && (
+            <div
+              className="flex items-center justify-center flex-shrink-0"
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                background: 'var(--tg-theme-secondary-bg-color)',
+                border: '2px solid var(--tg-theme-bg-color)',
+                fontSize: '10px',
+                fontWeight: 700,
+                color: 'var(--tg-theme-hint-color)',
+                marginLeft: 0,
+              }}
+            >
+              +{members.length - 3}
+            </div>
+          )}
         </button>
       </div>
 
