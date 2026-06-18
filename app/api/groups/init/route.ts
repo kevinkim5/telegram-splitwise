@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { ensureSchema } from '@/lib/db'
 
 export async function POST(request: Request) {
   const user = getAuthUser(request)
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
   if (!chatId || !chatTitle) {
     return NextResponse.json({ error: 'chatId and chatTitle are required' }, { status: 400 })
   }
+
+  await ensureSchema()
 
   // Check if group already exists
   const [existing] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
