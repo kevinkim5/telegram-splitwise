@@ -49,25 +49,23 @@ async function handleMessage(message: {
     console.log(`/start in chat ${chat.id} (${chat.type})`)
 
     if (isGroup && TELEGRAM_APP_URL) {
-      // Use t.me app link — Telegram opens it as a proper Mini App with initData populated
       await callTelegram('sendMessage', {
         chat_id: chat.id,
-        text: '💰 Tap the button below to open Splitwise.',
+        text: 'Ready to split! Tap the button to split.',
         reply_markup: {
           inline_keyboard: [[
-            { text: '💰 Open Splitwise', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
+            { text: 'Split now!', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
           ]],
         },
       })
     } else {
-      // Private chat: web_app inline button works here
       const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
       await callTelegram('sendMessage', {
         chat_id: chat.id,
-        text: '💰 Open Splitwise to manage your group expenses.',
+        text: 'Ready to split! Tap the button to split.',
         reply_markup: {
           inline_keyboard: [[
-            { text: '💰 Open Splitwise', web_app: { url: webAppUrl } },
+            { text: 'Split now!', web_app: { url: webAppUrl } },
           ]],
         },
       })
