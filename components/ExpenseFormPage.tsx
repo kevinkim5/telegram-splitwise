@@ -180,27 +180,27 @@ export function ExpenseFormPage({ editId }: Props) {
         <div className="flex gap-3">
           <div className="flex-1">
             <p className="tg-label">Amount</p>
-            <div className="tg-section flex items-center">
+            <div className="tg-section" style={{ display: 'flex', alignItems: 'stretch' }}>
               <button
                 type="button"
                 onClick={() => setShowCurrencyPicker(true)}
-                className="text-sm font-semibold px-2 flex-shrink-0"
                 style={{
                   background: 'none',
                   border: 'none',
+                  borderRight: '1px solid rgba(0,0,0,0.1)',
                   cursor: 'pointer',
                   color: 'var(--tg-theme-link-color)',
-                  borderRight: '1px solid var(--tg-theme-hint-color)',
-                  marginRight: '8px',
-                  paddingRight: '8px',
-                  lineHeight: '1',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  padding: '12px 10px 12px 16px',
+                  flexShrink: 0,
                 }}
               >
                 {group.currency}
               </button>
               <input
                 className="tg-input"
-                style={{ padding: 0 }}
+                style={{ paddingLeft: '10px' }}
                 type="number"
                 inputMode="decimal"
                 step="0.01"

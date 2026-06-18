@@ -56,7 +56,7 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
         className="w-full rounded-t-2xl flex flex-col"
         style={{
           background: 'var(--tg-theme-bg-color)',
-          maxHeight: '80vh',
+          maxHeight: '80dvh',
         }}
       >
         {/* Header */}
@@ -89,7 +89,7 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
               placeholder="Search currency…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              autoFocus
+              autoFocus={false}
             />
           </div>
         </div>
