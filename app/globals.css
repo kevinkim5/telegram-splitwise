@@ -82,6 +82,10 @@ input, select, button, textarea {
   padding: 12px 16px;
 }
 
+input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
 .tg-label {
   font-size: 13px;
   color: var(--tg-theme-section-header-text-color);
