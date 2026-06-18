@@ -51,7 +51,7 @@ async function handleMessage(message: {
     if (isGroup && TELEGRAM_APP_URL) {
       await callTelegram('sendMessage', {
         chat_id: chat.id,
-        text: 'Tap the button below to Split.',
+        text: '💰Tap the button below to Split.',
         reply_markup: {
           inline_keyboard: [[
             { text: 'Split now!', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
@@ -62,7 +62,7 @@ async function handleMessage(message: {
       const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
       await callTelegram('sendMessage', {
         chat_id: chat.id,
-        text: 'Tap the button below to Split.',
+        text: '💰Tap the button below to Split.',
         reply_markup: {
           inline_keyboard: [[
             { text: 'Split now!', web_app: { url: webAppUrl } },
