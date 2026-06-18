@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   // Upsert group — only set currency on insert, not on update (preserve user's setting)
   await sql`
     INSERT INTO groups (chat_id, title, currency)
-    VALUES (${BigInt(chatId)}, ${chatTitle}, ${currency ?? 'USD'})
+    VALUES (${BigInt(chatId)}, ${chatTitle}, ${currency ?? 'SGD'})
     ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title
   `
 

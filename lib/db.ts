@@ -6,7 +6,7 @@ export async function ensureSchema() {
       id         SERIAL PRIMARY KEY,
       chat_id    BIGINT NOT NULL UNIQUE,
       title      TEXT   NOT NULL,
-      currency   VARCHAR(10) NOT NULL DEFAULT 'USD',
+      currency   VARCHAR(10) NOT NULL DEFAULT 'SGD',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
