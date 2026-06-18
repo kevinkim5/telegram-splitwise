@@ -40,6 +40,54 @@ function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name:
   )
 }
 
+function ActionSheet({
+  actions,
+  onClose,
+}: {
+  actions: Array<{ label: string; onClick: () => void; destructive?: boolean }>
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 flex items-end justify-center z-50"
+      style={{ background: 'rgba(0,0,0,0.4)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full p-4 flex flex-col gap-2">
+        <div className="tg-section">
+          {actions.map((action, i) => (
+            <button
+              key={i}
+              onClick={() => { action.onClick(); onClose() }}
+              className="w-full text-center text-base font-medium py-3.5"
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: i < actions.length - 1 ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
+                cursor: 'pointer',
+                color: action.destructive
+                  ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+                  : 'var(--tg-theme-text-color)',
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+        <div className="tg-section">
+          <button
+            onClick={onClose}
+            className="w-full text-center text-base font-semibold py-3.5"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MembersSheet({ onClose }: { onClose: () => void }) {
   const { members } = useAppContext()
   return (
@@ -101,6 +149,7 @@ export function ExpensesPage() {
   const [deletingSettlementId, setDeletingSettlementId] = useState<number | null>(null)
   const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
+  const [actionSheet, setActionSheet] = useState<{ kind: 'expense'; id: number } | { kind: 'settlement'; id: number } | null>(null)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -331,18 +380,12 @@ export function ExpensesPage() {
                         Paid
                       </span>
                       <button
-                        onClick={() => handleDeleteSettlement(s.id)}
-                        disabled={deletingSettlementId === s.id}
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{
-                          background: 'var(--tg-theme-secondary-bg-color)',
-                          color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                          border: 'none',
-                          cursor: 'pointer',
-                          opacity: deletingSettlementId === s.id ? 0.5 : 1,
-                        }}
+                        onClick={() => setActionSheet({ kind: 'settlement', id: s.id })}
+                        className="flex items-center justify-center w-7 h-7 rounded-full"
+                        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '16px', letterSpacing: '-1px', color: 'var(--tg-theme-hint-color)' }}
+                        aria-label="More options"
                       >
-                        {deletingSettlementId === s.id ? '…' : 'Del'}
+                        ···
                       </button>
                     </div>
                   </div>
@@ -394,30 +437,14 @@ export function ExpensesPage() {
                     ) : (
                       <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
                     )}
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => navigate(`/edit/${exp.id}`)}
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{
-                          background: 'var(--tg-theme-secondary-bg-color)',
-                          color: 'var(--tg-theme-link-color)',
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(exp.id)}
-                        disabled={deletingId === exp.id}
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{
-                          background: 'var(--tg-theme-secondary-bg-color)',
-                          color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                          opacity: deletingId === exp.id ? 0.5 : 1,
-                        }}
-                      >
-                        {deletingId === exp.id ? '…' : 'Del'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setActionSheet({ kind: 'expense', id: exp.id })}
+                      className="flex items-center justify-center w-7 h-7 rounded-full"
+                      style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '16px', letterSpacing: '-1px', color: 'var(--tg-theme-hint-color)' }}
+                      aria-label="More options"
+                    >
+                      ···
+                    </button>
                   </div>
                 </div>
               </div>
@@ -454,6 +481,21 @@ export function ExpensesPage() {
     </div>
 
     {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}
+
+    {actionSheet && (
+      <ActionSheet
+        onClose={() => setActionSheet(null)}
+        actions={actionSheet.kind === 'expense'
+          ? [
+              { label: 'Edit', onClick: () => navigate(`/edit/${actionSheet.id}`) },
+              { label: 'Delete', destructive: true, onClick: () => handleDelete(actionSheet.id) },
+            ]
+          : [
+              { label: 'Delete', destructive: true, onClick: () => handleDeleteSettlement(actionSheet.id) },
+            ]
+        }
+      />
+    )}
     </>
   )
 }
