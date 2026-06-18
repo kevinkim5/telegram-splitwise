@@ -28,6 +28,7 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
     e.preventDefault()
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return }
+    if (amt > debt.amount + 0.005) { setError(`Amount cannot exceed the debt (${debt.currency} ${debt.amount.toFixed(2)})`); return }
     setSubmitting(true)
     try { await onConfirm(amt) }
     catch (err) { setError(String(err)) }
@@ -56,7 +57,7 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
             <p className="tg-label">Amount ({debt.currency})</p>
             <div className="tg-section">
               <input className="tg-input text-lg font-semibold" type="number" inputMode="decimal"
-                step="0.01" min="0.01" value={amount} onChange={e => setAmount(e.target.value)} autoFocus />
+                step="0.01" min="0.01" max={debt.amount} value={amount} onChange={e => setAmount(e.target.value)} autoFocus />
             </div>
           </div>
           <div className="flex gap-3">

@@ -98,6 +98,7 @@ export function ExpensesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deletingSettlementId, setDeletingSettlementId] = useState<number | null>(null)
   const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
 
@@ -161,6 +162,27 @@ export function ExpensesPage() {
     if (tg) {
       tg.showConfirm('Delete this expense?', confirmed => { if (confirmed) doDelete() })
     } else if (confirm('Delete this expense?')) {
+      doDelete()
+    }
+  }
+
+  const handleDeleteSettlement = (id: number) => {
+    const tg = window.Telegram?.WebApp
+    const doDelete = async () => {
+      setDeletingSettlementId(id)
+      try {
+        await fetch(`/api/groups/${chatId}/settlements/${id}`, { method: 'DELETE', headers: apiHeaders })
+        fetchSettlements()
+        fetchBalance()
+      } catch (e) {
+        alert(String(e))
+      } finally {
+        setDeletingSettlementId(null)
+      }
+    }
+    if (tg) {
+      tg.showConfirm('Delete this payment record?', confirmed => { if (confirmed) doDelete() })
+    } else if (confirm('Delete this payment record?')) {
       doDelete()
     }
   }
@@ -295,7 +317,23 @@ export function ExpensesPage() {
                         Settlement · {formatDate(s.created_at)}
                       </p>
                     </div>
-                    <span className="text-base flex-shrink-0">✅</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-base">✅</span>
+                      <button
+                        onClick={() => handleDeleteSettlement(s.id)}
+                        disabled={deletingSettlementId === s.id}
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{
+                          background: 'var(--tg-theme-secondary-bg-color)',
+                          color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                          border: 'none',
+                          cursor: 'pointer',
+                          opacity: deletingSettlementId === s.id ? 0.5 : 1,
+                        }}
+                      >
+                        {deletingSettlementId === s.id ? '…' : 'Del'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
