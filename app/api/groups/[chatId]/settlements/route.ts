@@ -31,10 +31,11 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-  const { from_member_id, to_member_id, amount } = await request.json() as {
+  const { from_member_id, to_member_id, amount, currency } = await request.json() as {
     from_member_id: number
     to_member_id: number
     amount: number
+    currency?: string
   }
 
   if (!from_member_id || !to_member_id || !amount) {
@@ -47,7 +48,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
 
   const [settlement] = await sql`
     INSERT INTO settlements (group_id, from_member_id, to_member_id, amount, currency)
-    VALUES (${group.id}, ${from_member_id}, ${to_member_id}, ${amount}, ${group.currency})
+    VALUES (${group.id}, ${from_member_id}, ${to_member_id}, ${amount}, ${currency ?? group.currency})
     RETURNING id
   `
 

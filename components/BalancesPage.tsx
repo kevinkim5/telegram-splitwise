@@ -103,7 +103,7 @@ export function BalancesPage() {
     const res = await fetch(`/api/groups/${chatId}/settlements`, {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({ from_member_id: debt.from_member_id, to_member_id: debt.to_member_id, amount }),
+      body: JSON.stringify({ from_member_id: debt.from_member_id, to_member_id: debt.to_member_id, amount, currency: debt.currency }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({})) as { error?: string }
