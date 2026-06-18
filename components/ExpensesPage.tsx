@@ -702,7 +702,7 @@ export function ExpensesPage() {
                     className="flex items-center justify-center flex-shrink-0"
                     style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '22px' }}
                   >
-                    {exp.category ?? '🧾'}
+                    {exp.category ? exp.category.split(' ')[0] : '🧾'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-base truncate">{exp.description}</p>
