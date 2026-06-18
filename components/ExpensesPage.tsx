@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import type { Expense } from '@/types'
+import type { Expense, Settlement } from '@/types'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -92,6 +92,7 @@ export function ExpensesPage() {
   const { chatId, group, currentMember, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [settlements, setSettlements] = useState<Settlement[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -130,8 +131,17 @@ export function ExpensesPage() {
     } catch { /* ignore */ }
   }, [chatId, apiHeaders, currentMember.id])
 
+  const fetchSettlements = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/groups/${chatId}/settlements`, { headers: apiHeaders })
+      if (!res.ok) return
+      setSettlements(await res.json())
+    } catch { /* ignore */ }
+  }, [chatId, apiHeaders])
+
   useEffect(() => { fetchExpenses(page) }, [fetchExpenses, page])
   useEffect(() => { fetchBalance() }, [fetchBalance])
+  useEffect(() => { fetchSettlements() }, [fetchSettlements])
 
   const handleDelete = (id: number) => {
     const tg = window.Telegram?.WebApp
@@ -256,85 +266,107 @@ export function ExpensesPage() {
         </div>
       )}
 
-      {/* Expense list */}
+      {/* Merged expense + settlement list, sorted by date desc */}
       <div className="flex flex-col gap-2">
-        {expenses.map(exp => {
-          const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
-          const isPayer = exp.paid_by_member_id === currentMember.id
-          const total = Number(exp.total_amount)
-          let myVerbLabel: string | null = null
-          let myAmtDisplay: string | null = null
-          let myLabelColor = 'var(--tg-theme-hint-color)'
-          if (myAmt !== null) {
-            if (isPayer && total - myAmt > 0.005) {
-              myVerbLabel = 'You lent'
-              myAmtDisplay = `${exp.currency} ${(total - myAmt).toFixed(2)}`
-              myLabelColor = 'var(--tg-theme-button-color)'
-            } else if (!isPayer && myAmt > 0.005) {
-              myVerbLabel = 'You borrowed'
-              myAmtDisplay = `${exp.currency} ${myAmt.toFixed(2)}`
-              myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
-            }
-          }
-          return (
-          <div
-            key={exp.id}
-            className="tg-section"
-            style={{ borderRadius: '12px' }}
-          >
-            <div className="flex items-start gap-3 p-3">
-              {/* Left: info */}
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-base truncate">{exp.description}</p>
-                {exp.category && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                    {exp.category}
-                  </p>
-                )}
-                <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {exp.paid_by_name ?? '?'} paid {exp.currency} {total.toFixed(2)} · {formatDate(exp.date)}
-                </p>
-              </div>
-
-              {/* Right: personal amount + actions */}
-              <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                {myVerbLabel ? (
-                  <div className="flex flex-col items-end gap-0.5">
-                    <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
-                    <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
+        {[
+          ...expenses.map(e => ({ kind: 'expense' as const, date: new Date(e.date).getTime(), data: e })),
+          ...settlements.map(s => ({ kind: 'settlement' as const, date: new Date(s.created_at).getTime(), data: s })),
+        ]
+          .sort((a, b) => b.date - a.date)
+          .map(item => {
+            if (item.kind === 'settlement') {
+              const s = item.data
+              return (
+                <div key={`s-${s.id}`} className="tg-section" style={{ borderRadius: '12px' }}>
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">
+                        {s.from_name} paid {s.to_name}{' '}
+                        <span className="font-bold">{s.currency} {Number(s.amount).toFixed(2)}</span>
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                        Settlement · {formatDate(s.created_at)}
+                      </p>
+                    </div>
+                    <span className="text-base flex-shrink-0">✅</span>
                   </div>
-                ) : (
-                  <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
-                )}
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => navigate(`/edit/${exp.id}`)}
-                    className="text-xs px-2 py-1 rounded-lg"
-                    style={{
-                      background: 'var(--tg-theme-secondary-bg-color)',
-                      color: 'var(--tg-theme-link-color)',
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(exp.id)}
-                    disabled={deletingId === exp.id}
-                    className="text-xs px-2 py-1 rounded-lg"
-                    style={{
-                      background: 'var(--tg-theme-secondary-bg-color)',
-                      color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                      opacity: deletingId === exp.id ? 0.5 : 1,
-                    }}
-                  >
-                    {deletingId === exp.id ? '…' : 'Del'}
-                  </button>
+                </div>
+              )
+            }
+
+            const exp = item.data
+            const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
+            const isPayer = exp.paid_by_member_id === currentMember.id
+            const total = Number(exp.total_amount)
+            let myVerbLabel: string | null = null
+            let myAmtDisplay: string | null = null
+            let myLabelColor = 'var(--tg-theme-hint-color)'
+            if (myAmt !== null) {
+              if (isPayer && total - myAmt > 0.005) {
+                myVerbLabel = 'You lent'
+                myAmtDisplay = `${exp.currency} ${(total - myAmt).toFixed(2)}`
+                myLabelColor = 'var(--tg-theme-button-color)'
+              } else if (!isPayer && myAmt > 0.005) {
+                myVerbLabel = 'You borrowed'
+                myAmtDisplay = `${exp.currency} ${myAmt.toFixed(2)}`
+                myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
+              }
+            }
+            return (
+              <div key={`e-${exp.id}`} className="tg-section" style={{ borderRadius: '12px' }}>
+                <div className="flex items-start gap-3 p-3">
+                  {/* Left: info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-base truncate">{exp.description}</p>
+                    {exp.category && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                        {exp.category}
+                      </p>
+                    )}
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                      {exp.paid_by_name ?? '?'} paid {exp.currency} {total.toFixed(2)} · {formatDate(exp.date)}
+                    </p>
+                  </div>
+
+                  {/* Right: personal amount + actions */}
+                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                    {myVerbLabel ? (
+                      <div className="flex flex-col items-end gap-0.5">
+                        <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
+                        <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
+                    )}
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => navigate(`/edit/${exp.id}`)}
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{
+                          background: 'var(--tg-theme-secondary-bg-color)',
+                          color: 'var(--tg-theme-link-color)',
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(exp.id)}
+                        disabled={deletingId === exp.id}
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{
+                          background: 'var(--tg-theme-secondary-bg-color)',
+                          color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                          opacity: deletingId === exp.id ? 0.5 : 1,
+                        }}
+                      >
+                        {deletingId === exp.id ? '…' : 'Del'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-          )
-        })}
+            )
+          })}
       </div>
 
       {/* Pagination */}
