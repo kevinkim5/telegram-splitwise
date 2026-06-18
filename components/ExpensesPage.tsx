@@ -261,15 +261,18 @@ export function ExpensesPage() {
         {expenses.map(exp => {
           const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
           const isPayer = exp.paid_by_member_id === currentMember.id
-          let myLabel: string | null = null
+          const total = Number(exp.total_amount)
+          let myVerbLabel: string | null = null
+          let myAmtDisplay: string | null = null
           let myLabelColor = 'var(--tg-theme-hint-color)'
           if (myAmt !== null) {
-            const total = Number(exp.total_amount)
             if (isPayer && total - myAmt > 0.005) {
-              myLabel = `You lent ${exp.currency} ${(total - myAmt).toFixed(2)}`
+              myVerbLabel = 'You lent'
+              myAmtDisplay = `${exp.currency} ${(total - myAmt).toFixed(2)}`
               myLabelColor = 'var(--tg-theme-button-color)'
             } else if (!isPayer && myAmt > 0.005) {
-              myLabel = `You borrowed ${exp.currency} ${myAmt.toFixed(2)}`
+              myVerbLabel = 'You borrowed'
+              myAmtDisplay = `${exp.currency} ${myAmt.toFixed(2)}`
               myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
             }
           }
@@ -289,19 +292,19 @@ export function ExpensesPage() {
                   </p>
                 )}
                 <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  Paid by {exp.paid_by_name ?? '?'} · {formatDate(exp.date)}
+                  {exp.paid_by_name ?? '?'} paid {exp.currency} {total.toFixed(2)} · {formatDate(exp.date)}
                 </p>
               </div>
 
-              {/* Right: amount + actions */}
+              {/* Right: personal amount + actions */}
               <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                <p className="font-bold text-base">
-                  {exp.currency} {Number(exp.total_amount).toFixed(2)}
-                </p>
-                {myLabel && (
-                  <p className="text-xs font-medium" style={{ color: myLabelColor }}>
-                    {myLabel}
-                  </p>
+                {myVerbLabel ? (
+                  <div className="flex flex-col items-end gap-0.5">
+                    <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
+                    <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
                 )}
                 <div className="flex gap-1">
                   <button
