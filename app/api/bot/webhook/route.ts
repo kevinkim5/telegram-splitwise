@@ -45,20 +45,35 @@ async function handleMessage(message: {
   if (text && /^\/start(@\w+)?$/.test(text.split(' ')[0])) {
     const chatTitle = encodeURIComponent(chat.title ?? chat.first_name ?? 'Chat')
     const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
-    console.log(`/start in chat ${chat.id}, webAppUrl: ${webAppUrl}`)
+    console.log(`/start in chat ${chat.id} (${chat.type}), webAppUrl: ${webAppUrl}`)
 
-    await callTelegram('sendMessage', {
-      chat_id: chat.id,
-      text: '💰 Open Splitwise to manage your group expenses.',
-      reply_markup: {
-        inline_keyboard: [[
-          {
-            text: '💰 Open Splitwise',
-            web_app: { url: webAppUrl },
-          },
-        ]],
-      },
-    })
+    const isGroup = chat.type === 'group' || chat.type === 'supergroup'
+
+    if (isGroup) {
+      // web_app inline buttons don't work in groups — set a persistent menu button instead
+      await callTelegram('setChatMenuButton', {
+        chat_id: chat.id,
+        menu_button: {
+          type: 'web_app',
+          text: '💰 Splitwise',
+          web_app: { url: webAppUrl },
+        },
+      })
+      await callTelegram('sendMessage', {
+        chat_id: chat.id,
+        text: '💰 Splitwise is ready! Tap the button next to the message input to open it.',
+      })
+    } else {
+      await callTelegram('sendMessage', {
+        chat_id: chat.id,
+        text: '💰 Open Splitwise to manage your group expenses.',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '💰 Open Splitwise', web_app: { url: webAppUrl } },
+          ]],
+        },
+      })
+    }
   }
 }
 

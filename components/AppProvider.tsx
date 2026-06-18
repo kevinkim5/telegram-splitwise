@@ -38,8 +38,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const searchParams = new URLSearchParams(window.location.search)
-    const chatId = searchParams.get('chatId')
-    const chatTitle = decodeURIComponent(searchParams.get('chatTitle') ?? 'Group')
+    // chatId from URL param (inline button) or initData.chat (menu button in group)
+    const chatId = searchParams.get('chatId') ?? tg?.initDataUnsafe?.chat?.id?.toString() ?? null
+    const chatTitle = decodeURIComponent(searchParams.get('chatTitle') ?? tg?.initDataUnsafe?.chat?.title ?? 'Group')
     const initData = tg?.initData ?? ''
 
     if (!chatId) {
