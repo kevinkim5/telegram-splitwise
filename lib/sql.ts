@@ -1,17 +1,24 @@
-import { neon } from '@neondatabase/serverless'
+import { neon, type NeonQueryFunction } from '@neondatabase/serverless'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _neon: any = null
+let _db: NeonQueryFunction<false, false> | null = null
 
-function getNeon() {
-  if (!_neon) _neon = neon(process.env.POSTGRES_URL!)
-  return _neon
+function getDb(): NeonQueryFunction<false, false> {
+  if (!_db) _db = neon(process.env.POSTGRES_URL!)
+  return _db
 }
 
-export const sql = async (
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-): Promise<{ rows: Record<string, unknown>[] }> => {
-  const rows: Record<string, unknown>[] = await getNeon()(strings, ...values)
-  return { rows }
-}
+// Proxy lazily forwards tagged template calls and property access (e.g. .transaction) to neon
+export const sql = new Proxy(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function () {} as unknown as NeonQueryFunction<false, false>,
+  {
+    apply(_target, _thisArg, args) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (getDb() as any)(...args)
+    },
+    get(_target, prop) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (getDb() as any)[prop]
+    },
+  }
+)

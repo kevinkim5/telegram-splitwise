@@ -9,12 +9,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const webhookUrl = `${WEBAPP_URL}/api/bot/webhook/${BOT_TOKEN}`
+  const webhookUrl = `${WEBAPP_URL}/api/bot/webhook`
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: webhookUrl }),
+    body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message'] }),
   })
   const data = await res.json()
   return NextResponse.json({ ok: data.ok, webhook_url: webhookUrl })
+}
+
+export async function GET(request: Request) {
+  const token = new URL(request.url).searchParams.get('token') ?? ''
+  if (!BOT_TOKEN || token !== BOT_TOKEN) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const webhookUrl = `${WEBAPP_URL}/api/bot/webhook`
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message'] }),
+  })
+  const data = await res.json()
+  return NextResponse.json({ ok: data.ok, webhook_url: webhookUrl, telegram_response: data })
 }

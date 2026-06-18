@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { ensureSchema } from '@/lib/db'
 
-export async function POST(request: Request) {
-  const token = request.headers.get('x-bot-token') ?? ''
-  const botToken = process.env.BOT_TOKEN ?? ''
-  if (botToken && token !== botToken) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+export async function GET() {
+  try {
+    await ensureSchema()
+    return NextResponse.json({ ok: true, message: 'Schema initialized successfully' })
+  } catch (err) {
+    console.error('init-db error:', err)
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 })
   }
-  await ensureSchema()
-  return NextResponse.json({ ok: true })
 }

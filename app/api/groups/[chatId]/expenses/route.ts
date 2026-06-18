@@ -2,73 +2,100 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 
-async function formatExpense(expenseId: number) {
-  const { rows: [exp] } = await sql`SELECT * FROM expenses WHERE id = ${expenseId}`
-  const { rows: [paidBy] } = await sql`
-    SELECT id, first_name, last_name, username FROM members WHERE id = ${exp.paid_by}
+async function getExpenseWithSplits(expenseId: number) {
+  const [exp] = await sql`
+    SELECT e.*, m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name
+    FROM expenses e
+    JOIN members m ON m.id = e.paid_by_member_id
+    WHERE e.id = ${expenseId}
   `
-  const { rows: splits } = await sql`
-    SELECT es.member_id, es.amount, m.first_name, m.last_name, m.username
-    FROM expense_splits es JOIN members m ON m.id = es.member_id
-    WHERE es.expense_id = ${expenseId} ORDER BY m.first_name
+  const splits = await sql`
+    SELECT es.id, es.expense_id, es.member_id, es.amount,
+           m.first_name || COALESCE(' ' || m.last_name, '') AS member_name
+    FROM expense_splits es
+    JOIN members m ON m.id = es.member_id
+    WHERE es.expense_id = ${expenseId}
+    ORDER BY m.first_name
   `
-  return { ...exp, paid_by: paidBy, splits }
+  return { ...exp, splits }
 }
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const params = await props.params
+  const { chatId } = await props.params
   const { searchParams } = new URL(request.url)
-  const page = parseInt(searchParams.get('page') ?? '1')
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
   const limit = 30
   const offset = (page - 1) * limit
 
-  const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-  const { rows: [{ count }] } = await sql`
+  const [{ count }] = await sql`
     SELECT COUNT(*) FROM expenses WHERE group_id = ${group.id} AND deleted_at IS NULL
   `
-  const { rows: expenses } = await sql`
-    SELECT * FROM expenses WHERE group_id = ${group.id} AND deleted_at IS NULL
-    ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+  const expenses = await sql`
+    SELECT e.*, m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name
+    FROM expenses e
+    JOIN members m ON m.id = e.paid_by_member_id
+    WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
+    ORDER BY e.date DESC, e.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
   `
 
-  const items = await Promise.all(expenses.map(e => formatExpense(e.id as number)))
-  return NextResponse.json({ total: parseInt(count as string), page, items })
+  return NextResponse.json({ total: parseInt(count as string), page, items: expenses })
 }
 
 export async function POST(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const params = await props.params
-
-  const { rows: [group] } = await sql`SELECT id FROM groups WHERE chat_id = ${params.chatId}`
+  const { chatId } = await props.params
+  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
+  const [currentMember] = await sql`
+    SELECT id FROM members WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}
+  `
+  if (!currentMember) return NextResponse.json({ error: 'Member not found in group' }, { status: 403 })
+
   const body = await request.json()
-  const { description, total_amount, currency, paid_by_member_id, split_type, splits } = body
-
-  if (!splits?.length) return NextResponse.json({ error: 'splits required' }, { status: 422 })
-
-  let resolvedSplits: { member_id: number; amount: number }[]
-  if (split_type === 'equal') {
-    const share = total_amount / splits.length
-    resolvedSplits = splits.map((s: { member_id: number }) => ({ member_id: s.member_id, amount: share }))
-  } else {
-    const sum = splits.reduce((a: number, s: { amount: number }) => a + s.amount, 0)
-    if (Math.abs(sum - total_amount) > 0.01) {
-      return NextResponse.json({ error: `Split amounts sum to ${sum}, expected ${total_amount}` }, { status: 422 })
-    }
-    resolvedSplits = splits
+  const { description, total_amount, paid_by_member_id, split_type, splits, date } = body as {
+    description: string
+    total_amount: number
+    paid_by_member_id: number
+    split_type: 'equal' | 'custom'
+    splits: { member_id: number; amount?: number }[]
+    date?: string
   }
 
-  const { rows: [expense] } = await sql`
-    INSERT INTO expenses (group_id, description, total_amount, currency, paid_by, split_type)
-    VALUES (${group.id}, ${description}, ${total_amount}, ${currency}, ${paid_by_member_id}, ${split_type})
+  if (!description || !total_amount || !paid_by_member_id || !splits?.length) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  let resolvedSplits: { member_id: number; amount: number }[]
+
+  if (split_type === 'equal') {
+    const share = Math.round((total_amount / splits.length) * 100) / 100
+    resolvedSplits = splits.map(s => ({ member_id: s.member_id, amount: share }))
+  } else {
+    const sum = splits.reduce((a, s) => a + (s.amount ?? 0), 0)
+    if (Math.abs(sum - total_amount) > 0.02) {
+      return NextResponse.json(
+        { error: `Custom split amounts (${sum.toFixed(2)}) must equal total (${total_amount.toFixed(2)})` },
+        { status: 422 }
+      )
+    }
+    resolvedSplits = splits.map(s => ({ member_id: s.member_id, amount: s.amount! }))
+  }
+
+  const expenseDate = date ?? new Date().toISOString().split('T')[0]
+
+  const [expense] = await sql`
+    INSERT INTO expenses (group_id, description, total_amount, currency, paid_by_member_id, split_type, created_by_member_id, date)
+    VALUES (${group.id}, ${description}, ${total_amount}, ${group.currency}, ${paid_by_member_id}, ${split_type}, ${currentMember.id}, ${expenseDate})
     RETURNING id
   `
 
@@ -79,5 +106,6 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     `
   }
 
-  return NextResponse.json(await formatExpense(expense.id as number), { status: 201 })
+  const result = await getExpenseWithSplits(expense.id as number)
+  return NextResponse.json(result, { status: 201 })
 }

@@ -1,30 +1,31 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { AppContext, Expense } from '@/types'
+import { useAppContext } from '@/components/AppProvider'
+import type { Expense } from '@/types'
 
-function memberName(m: { first_name: string; last_name: string | null }) {
-  return m.last_name ? `${m.first_name} ${m.last_name}` : m.first_name
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function ExpensesPage({ ctx }: { ctx: AppContext }) {
+export function ExpensesPage() {
   const router = useRouter()
-  const { chatId } = ctx
+  const { chatId, group, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/groups/${chatId}/expenses?page=${p}`, {
-        headers: { 'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData ?? '' },
-      })
+      const res = await fetch(`/api/groups/${chatId}/expenses?page=${p}`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setExpenses(data.items)
@@ -34,132 +35,153 @@ export function ExpensesPage({ ctx }: { ctx: AppContext }) {
     } finally {
       setLoading(false)
     }
-  }, [chatId])
+  }, [chatId, apiHeaders])
 
-  useEffect(() => {
-    fetchExpenses(page)
-  }, [fetchExpenses, page])
+  useEffect(() => { fetchExpenses(page) }, [fetchExpenses, page])
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Delete this expense?')) return
-    try {
-      await fetch(`/api/groups/${chatId}/expenses/${id}`, {
-        method: 'DELETE',
-        headers: { 'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData ?? '' },
-      })
-      fetchExpenses(page)
-    } catch (e) {
-      alert(String(e))
+  const handleDelete = (id: number) => {
+    const tg = window.Telegram?.WebApp
+    const doDelete = async () => {
+      setDeletingId(id)
+      try {
+        await fetch(`/api/groups/${chatId}/expenses/${id}`, { method: 'DELETE', headers: apiHeaders })
+        fetchExpenses(page)
+      } catch (e) {
+        alert(String(e))
+      } finally {
+        setDeletingId(null)
+      }
+    }
+
+    if (tg) {
+      tg.showConfirm('Delete this expense?', confirmed => { if (confirmed) doDelete() })
+    } else if (confirm('Delete this expense?')) {
+      doDelete()
     }
   }
+
+  const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
 
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Expenses</h1>
+    <div className="p-4">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
+          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {group.currency} · {total} expense{total !== 1 ? 's' : ''}
+          </p>
+        </div>
         <button
-          onClick={() => router.push('/add')}
-          style={{
-            background: 'var(--tg-theme-button-color, #2481cc)',
-            color: 'var(--tg-theme-button-text-color, #fff)',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '0.5rem 1rem',
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
+          onClick={() => navigate('/add')}
+          className="tg-btn"
+          style={{ width: 'auto', padding: '8px 16px', borderRadius: '20px', fontSize: '15px' }}
         >
           + Add
         </button>
       </div>
 
-      {loading && <p style={{ color: 'var(--tg-theme-hint-color, #999)', textAlign: 'center' }}>Loading…</p>}
-      {error && <p style={{ color: '#e53e3e', textAlign: 'center' }}>{error}</p>}
-
-      {!loading && !error && expenses.length === 0 && (
-        <p style={{ color: 'var(--tg-theme-hint-color, #999)', textAlign: 'center', marginTop: '2rem' }}>
-          No expenses yet. Tap + Add to create one.
-        </p>
+      {loading && (
+        <div className="flex justify-center py-12">
+          <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
+        </div>
       )}
 
-      <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {error && (
+        <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && expenses.length === 0 && (
+        <div className="flex flex-col items-center py-16 gap-3">
+          <div className="text-5xl">🧾</div>
+          <p className="font-medium">No expenses yet</p>
+          <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Tap + Add to record your first expense
+          </p>
+        </div>
+      )}
+
+      {/* Expense list */}
+      <div className="flex flex-col gap-2">
         {expenses.map(exp => (
-          <li
+          <div
             key={exp.id}
-            style={{
-              background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-              borderRadius: '10px',
-              padding: '0.75rem 1rem',
-            }}
+            className="tg-section"
+            style={{ borderRadius: '12px' }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1, minWidth: 0, marginRight: '0.5rem' }}>
-                <p style={{ fontWeight: 600, marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {exp.description}
+            <div className="flex items-start gap-3 p-3">
+              {/* Left: info */}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-base truncate">{exp.description}</p>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                  Paid by {exp.paid_by_name ?? '?'}
                 </p>
-                <p style={{ fontSize: '0.85rem', color: 'var(--tg-theme-hint-color, #999)' }}>
-                  {exp.currency} {exp.total_amount.toFixed(2)} · paid by {memberName(exp.paid_by)}
-                </p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--tg-theme-hint-color, #999)', marginTop: '0.2rem' }}>
-                  {new Date(exp.created_at).toLocaleDateString()}
+                <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                  {formatDate(exp.date)}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                <button
-                  onClick={() => router.push(`/edit/${exp.id}`)}
-                  style={{
-                    background: 'none',
-                    border: '1px solid var(--tg-theme-hint-color, #ccc)',
-                    borderRadius: '6px',
-                    padding: '0.3rem 0.6rem',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    color: 'var(--tg-theme-text-color, #000)',
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(exp.id)}
-                  style={{
-                    background: 'none',
-                    border: '1px solid #e53e3e',
-                    borderRadius: '6px',
-                    padding: '0.3rem 0.6rem',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    color: '#e53e3e',
-                  }}
-                >
-                  Del
-                </button>
+
+              {/* Right: amount + actions */}
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                <p className="font-bold text-base">
+                  {group.currency} {Number(exp.total_amount).toFixed(2)}
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => navigate(`/edit/${exp.id}`)}
+                    className="text-xs px-2 py-1 rounded-lg"
+                    style={{
+                      background: 'var(--tg-theme-secondary-bg-color)',
+                      color: 'var(--tg-theme-link-color)',
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(exp.id)}
+                    disabled={deletingId === exp.id}
+                    className="text-xs px-2 py-1 rounded-lg"
+                    style={{
+                      background: 'var(--tg-theme-secondary-bg-color)',
+                      color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                      opacity: deletingId === exp.id ? 0.5 : 1,
+                    }}
+                  >
+                    {deletingId === exp.id ? '…' : 'Del'}
+                  </button>
+                </div>
               </div>
             </div>
-          </li>
+          </div>
         ))}
-      </ul>
+      </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+        <div className="flex justify-center items-center gap-6 mt-4 py-2">
           <button
             disabled={page <= 1}
             onClick={() => setPage(p => p - 1)}
-            style={{ padding: '0.4rem 0.8rem', cursor: page > 1 ? 'pointer' : 'not-allowed', opacity: page <= 1 ? 0.4 : 1 }}
+            className="text-2xl disabled:opacity-30"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            ←
+            ‹
           </button>
-          <span style={{ fontSize: '0.85rem', color: 'var(--tg-theme-hint-color, #999)' }}>
+          <span className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {page} / {totalPages}
           </span>
           <button
             disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
-            style={{ padding: '0.4rem 0.8rem', cursor: page < totalPages ? 'pointer' : 'not-allowed', opacity: page >= totalPages ? 0.4 : 1 }}
+            className="text-2xl disabled:opacity-30"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
           >
-            →
+            ›
           </button>
         </div>
       )}

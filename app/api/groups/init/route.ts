@@ -1,0 +1,47 @@
+import { NextResponse } from 'next/server'
+import { sql } from '@/lib/sql'
+import { getAuthUser } from '@/lib/auth'
+
+export async function POST(request: Request) {
+  const user = getAuthUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await request.json()
+  const { chatId, chatTitle, currency } = body as {
+    chatId: string
+    chatTitle: string
+    currency?: string
+  }
+
+  if (!chatId || !chatTitle) {
+    return NextResponse.json({ error: 'chatId and chatTitle are required' }, { status: 400 })
+  }
+
+  // Upsert group
+  await sql`
+    INSERT INTO groups (chat_id, title, currency)
+    VALUES (${BigInt(chatId)}, ${chatTitle}, ${currency ?? 'USD'})
+    ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title
+  `
+
+  const [group] = await sql`SELECT * FROM groups WHERE chat_id = ${BigInt(chatId)}`
+
+  // Upsert current user as member
+  await sql`
+    INSERT INTO members (group_id, telegram_user_id, first_name, last_name, username)
+    VALUES (${group.id}, ${user.id}, ${user.first_name}, ${user.last_name ?? null}, ${user.username ?? null})
+    ON CONFLICT (group_id, telegram_user_id) DO UPDATE
+      SET first_name = EXCLUDED.first_name,
+          last_name  = EXCLUDED.last_name,
+          username   = EXCLUDED.username
+  `
+
+  const [member] = await sql`
+    SELECT * FROM members
+    WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}
+  `
+
+  return NextResponse.json({ group, member })
+}

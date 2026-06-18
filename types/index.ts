@@ -1,62 +1,76 @@
+export interface Group {
+  id: number
+  chat_id: string
+  title: string
+  currency: string
+  created_at: string
+}
+
 export interface Member {
   id: number
+  group_id: number
   telegram_user_id: string
   first_name: string
   last_name: string | null
   username: string | null
+  created_at: string
 }
 
-export interface Split {
+export interface ExpenseSplit {
+  id: number
+  expense_id: number
   member_id: number
-  first_name: string
-  last_name: string | null
-  username: string | null
   amount: number
+  member_name?: string
 }
 
 export interface Expense {
   id: number
+  group_id: number
   description: string
   total_amount: number
   currency: string
+  paid_by_member_id: number
   split_type: 'equal' | 'custom'
-  paid_by: Member
-  splits: Split[]
+  created_by_member_id: number
+  date: string
   created_at: string
-  updated_at: string
+  paid_by_name?: string
+  splits?: ExpenseSplit[]
 }
 
 export interface Settlement {
   id: number
-  from_member: Member
-  to_member: Member
-  amount: number
-  currency: string
-  note: string | null
-  settled_at: string
-}
-
-export interface SimplifiedTransaction {
+  group_id: number
   from_member_id: number
-  from_first_name: string
-  from_last_name: string | null
   to_member_id: number
-  to_first_name: string
-  to_last_name: string | null
+  amount: number
+  currency: string
+  created_at: string
+  from_name?: string
+  to_name?: string
+}
+
+export interface Balance {
+  member_id: number
+  member_name: string
+  net_amount: number
+  currency: string
+}
+
+export interface SimplifiedDebt {
+  from_member_id: number
+  from_name: string
+  to_member_id: number
+  to_name: string
   amount: number
   currency: string
 }
 
-export interface BalancesResponse {
-  by_currency: Record<string, {
-    net: Array<{ member_id: number; first_name: string; net_amount: number }>
-    simplified_transactions: SimplifiedTransaction[]
-  }>
-}
-
-export interface AppContext {
-  chatId: string
-  currentMember: Member
-  members: Member[]
-  refreshMembers: () => Promise<void>
+export interface TelegramUser {
+  id: number
+  first_name: string
+  last_name?: string
+  username?: string
+  language_code?: string
 }

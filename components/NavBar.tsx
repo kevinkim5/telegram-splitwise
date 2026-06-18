@@ -1,53 +1,55 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
+import { useAppContext } from '@/components/AppProvider'
 
 const tabs = [
-  { label: 'Expenses', path: '/' },
-  { label: 'Balances', path: '/balances' },
+  { label: 'Expenses', icon: '🧾', path: '/' },
+  { label: 'Balances', icon: '⚖️', path: '/balances' },
 ]
 
 export function NavBar() {
   const pathname = usePathname()
   const router = useRouter()
+  const { chatId } = useAppContext()
+
+  const navigate = (path: string) => {
+    router.push(`${path}?chatId=${chatId}`)
+  }
 
   return (
     <nav
+      className="fixed bottom-0 left-0 right-0 flex"
       style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '60px',
-        display: 'flex',
-        borderTop: '1px solid var(--tg-theme-hint-color, #ddd)',
-        background: 'var(--tg-theme-bg-color, #fff)',
+        height: '64px',
+        background: 'var(--tg-theme-bg-color)',
+        borderTop: '0.5px solid rgba(0,0,0,0.1)',
         zIndex: 100,
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       {tabs.map(tab => {
         const active = tab.path === '/'
           ? pathname === '/' || pathname.startsWith('/add') || pathname.startsWith('/edit')
-          : pathname === tab.path
+          : pathname.startsWith(tab.path)
 
         return (
           <button
             key={tab.path}
-            onClick={() => router.push(tab.path)}
+            onClick={() => navigate(tab.path)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 border-none cursor-pointer"
             style={{
-              flex: 1,
-              border: 'none',
               background: 'none',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              fontWeight: active ? 600 : 400,
-              color: active
-                ? 'var(--tg-theme-button-color, #2481cc)'
-                : 'var(--tg-theme-hint-color, #999)',
-              transition: 'color 0.15s',
+              color: active ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-hint-color)',
             }}
           >
-            {tab.label}
+            <span className="text-xl">{tab.icon}</span>
+            <span
+              className="text-xs"
+              style={{ fontWeight: active ? 600 : 400 }}
+            >
+              {tab.label}
+            </span>
           </button>
         )
       })}
