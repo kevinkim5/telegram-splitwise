@@ -10,10 +10,7 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-interface MyBalance {
-  amount: number
-  currency: string
-}
+type CurrencyBalance = { amount: number; currency: string }
 
 const AVATAR_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD',
@@ -100,7 +97,7 @@ export function ExpensesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [myBalance, setMyBalance] = useState<MyBalance | null>(null)
+  const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
 
   const fetchExpenses = useCallback(async (p: number) => {
@@ -124,9 +121,12 @@ export function ExpensesPage() {
       const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
       if (!res.ok) return
       const data = await res.json()
-      const mine = (data.balances as Array<{ member_id: number; net_amount: number }>)
-        .find(b => b.member_id === currentMember.id)
-      if (mine) setMyBalance({ amount: mine.net_amount, currency: data.currency as string })
+      const byCurrency = data.balances_by_currency as Record<string, Array<{ member_id: number; net_amount: number }>>
+      const lines = Object.entries(byCurrency).flatMap(([cur, bals]) => {
+        const mine = bals.find(b => b.member_id === currentMember.id)
+        return mine && Math.abs(mine.net_amount) > 0.005 ? [{ amount: mine.net_amount, currency: cur }] : []
+      })
+      setMyBalances(lines)
     } catch { /* ignore */ }
   }, [chatId, apiHeaders, currentMember.id])
 
@@ -160,18 +160,28 @@ export function ExpensesPage() {
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const balanceText = myBalance === null ? null
-    : myBalance.amount > 0.005
-      ? `You are owed ${myBalance.currency} ${myBalance.amount.toFixed(2)}`
-      : myBalance.amount < -0.005
-        ? `You owe ${myBalance.currency} ${Math.abs(myBalance.amount).toFixed(2)}`
-        : 'All settled up ✓'
+  const balanceText = myBalances === null ? null
+    : myBalances.length === 0 ? 'All settled up ✓'
+    : (() => {
+        const owed = myBalances.filter(b => b.amount > 0)
+        const owe = myBalances.filter(b => b.amount < 0)
+        if (owe.length === 0)
+          return 'You are owed ' + owed.map(b => `${b.currency} ${b.amount.toFixed(2)}`).join(' + ')
+        if (owed.length === 0)
+          return 'You owe ' + owe.map(b => `${b.currency} ${Math.abs(b.amount).toFixed(2)}`).join(' + ')
+        return [
+          ...owed.map(b => `You are owed ${b.currency} ${b.amount.toFixed(2)}`),
+          ...owe.map(b => `You owe ${b.currency} ${Math.abs(b.amount).toFixed(2)}`),
+        ].join(', ')
+      })()
 
-  const balanceColor = myBalance && myBalance.amount > 0.005
-    ? 'var(--tg-theme-button-color)'
-    : myBalance && myBalance.amount < -0.005
-      ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-      : 'var(--tg-theme-hint-color)'
+  const balanceColor = !myBalances || myBalances.length === 0
+    ? 'var(--tg-theme-hint-color)'
+    : myBalances.every(b => b.amount > 0)
+      ? 'var(--tg-theme-button-color)'
+      : myBalances.every(b => b.amount < 0)
+        ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+        : 'var(--tg-theme-hint-color)'
 
   return (
     <>
