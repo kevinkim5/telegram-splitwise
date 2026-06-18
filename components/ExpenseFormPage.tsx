@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import { CurrencyPicker } from '@/components/CurrencyPicker'
+import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
 import type { Expense } from '@/types'
 
 interface Props {
@@ -221,20 +221,22 @@ export function ExpenseFormPage({ editId }: Props) {
               type="button"
               onClick={() => setShowCurrencyPicker(true)}
               style={{
-                color: 'var(--tg-theme-link-color)',
-                fontSize: '16px',
+                color: 'var(--tg-theme-text-color)',
+                fontSize: '15px',
                 fontWeight: '600',
                 padding: '12px 10px 12px 16px',
                 flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
+                gap: '6px',
                 background: 'none',
                 border: 'none',
                 borderRight: '1px solid rgba(0,0,0,0.1)',
                 cursor: 'pointer',
               }}
             >
-              {expenseCurrency}
+              <span>{CURRENCIES.find(c => c.code === expenseCurrency)?.flag ?? ''}</span>
+              <span>{expenseCurrency}</span>
             </button>
             <input
               className="tg-input"

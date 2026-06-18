@@ -1,7 +1,7 @@
 'use client'
 
 // SGD first, then all others alphabetically by code
-const CURRENCIES = [
+export const CURRENCIES = [
   { code: 'SGD', flag: '🇸🇬', name: 'Singapore Dollar' },
   { code: 'CNY', flag: '🇨🇳', name: 'Chinese Yuan' },
   { code: 'EUR', flag: '🇪🇺', name: 'Euro' },
