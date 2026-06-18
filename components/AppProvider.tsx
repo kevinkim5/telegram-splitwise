@@ -23,6 +23,148 @@ export function useAppContext(): AppContextValue {
   return ctx
 }
 
+function ShimmerLine({ width }: { width: string }) {
+  return (
+    <div style={{
+      height: 9, borderRadius: 4, width,
+      background: 'linear-gradient(90deg, #d0d0d0 25%, #e8e8e8 50%, #d0d0d0 75%)',
+      backgroundSize: '300px 100%',
+      animation: 'shimmer 1.4s infinite linear',
+    }} />
+  )
+}
+
+function ReceiptLoader() {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '100dvh',
+      background: 'var(--tg-theme-bg-color)',
+    }}>
+      <style>{`
+        @keyframes printerFeed {
+          from { transform: translateY(-110px); }
+          to   { transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          from { background-position: -300px 0; }
+          to   { background-position:  300px 0; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Printer body */}
+      <div style={{
+        width: 180, height: 30, borderRadius: 10,
+        background: 'var(--tg-theme-secondary-bg-color)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', zIndex: 2, flexShrink: 0,
+      }}>
+        {/* slot */}
+        <div style={{
+          width: 110, height: 5, borderRadius: 3,
+          background: 'var(--tg-theme-bg-color)',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
+        }} />
+        {/* indicator light */}
+        <div style={{
+          position: 'absolute', right: 14, width: 6, height: 6,
+          borderRadius: '50%', background: '#34c759',
+          boxShadow: '0 0 6px #34c759',
+        }} />
+      </div>
+
+      {/* Receipt paper */}
+      <div style={{ width: 180, overflow: 'hidden', flexShrink: 0 }}>
+        <div style={{
+          background: '#fff', color: '#1c1c1e',
+          borderRadius: '0 0 4px 4px',
+          padding: '14px 16px 22px',
+          display: 'flex', flexDirection: 'column', gap: 7,
+          boxShadow: '0 10px 32px rgba(0,0,0,0.18)',
+          animation: 'printerFeed 0.7s cubic-bezier(0.22,1,0.36,1) 0.1s both',
+          position: 'relative',
+        }}>
+          {/* Torn edge */}
+          <div style={{
+            position: 'absolute', bottom: -8, left: 0, right: 0, height: 10,
+            background: 'radial-gradient(circle at 8px 0, var(--tg-theme-bg-color) 7px, transparent 7px) repeat-x, #fff',
+            backgroundSize: '16px 10px, 100% 10px',
+          }} />
+
+          {/* Header */}
+          <div style={{ textAlign: 'center', borderBottom: '1px dashed #ccc', paddingBottom: 8, marginBottom: 2 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+              Split Lah Pte. Ltd.
+            </div>
+            <div style={{ fontSize: 8, color: '#999', marginTop: 2 }}>No chope, no peace.</div>
+          </div>
+
+          {/* Line items */}
+          {[
+            ['Laksa (extra cockles)', '$12.50'],
+            ['Teh tarik, one more round', '$3.80'],
+          ].map(([label, val]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 9, color: '#555', flex: 1 }}>{label}</span>
+              <span style={{ fontSize: 9, fontWeight: 600, flexShrink: 0 }}>{val}</span>
+            </div>
+          ))}
+
+          {/* Shimmer rows */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <ShimmerLine width="80px" />
+            <ShimmerLine width="36px" />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <ShimmerLine width="65px" />
+            <ShimmerLine width="40px" />
+          </div>
+
+          {/* Divider */}
+          <div style={{ borderTop: '1px dashed #ccc', margin: '2px 0' }} />
+
+          {/* Footer small print */}
+          <div style={{ fontSize: 7, color: '#bbb', textAlign: 'center', lineHeight: 1.5 }}>
+            No GST • No service charge • Shiok right?
+          </div>
+
+          {/* Total */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Owe how much?
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#2481cc' }}>
+              $—
+              <span style={{
+                display: 'inline-block', width: 2, height: 12, background: '#2481cc',
+                marginLeft: 1, verticalAlign: 'middle',
+                animation: 'blink 0.8s step-end infinite',
+              }} />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Status text */}
+      <p style={{
+        marginTop: 24, fontSize: 13, color: 'var(--tg-theme-hint-color)',
+        animation: 'fadeIn 0.5s ease 0.6s both',
+      }}>
+        Calculating your split…
+      </p>
+    </div>
+  )
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -132,12 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   if (!ctx) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-3">
-        <div className="text-3xl">💰</div>
-        <p style={{ color: 'var(--tg-theme-hint-color)' }} className="text-sm">Loading...</p>
-      </div>
-    )
+    return <ReceiptLoader />
   }
 
   return (
