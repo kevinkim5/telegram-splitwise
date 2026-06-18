@@ -183,19 +183,6 @@ function HomepageReceipt() {
         }
       `}</style>
 
-      {/* App icon */}
-      <div style={{
-        width: 72, height: 72, borderRadius: 20,
-        background: 'linear-gradient(135deg, #2481cc 0%, #34aadc 100%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 36,
-        boxShadow: '0 8px 24px rgba(36,129,204,0.35)',
-        marginBottom: 16,
-        animation: 'dropIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both',
-      }}>
-        💸
-      </div>
-
       {/* Receipt card */}
       <div style={{
         width: 200,
