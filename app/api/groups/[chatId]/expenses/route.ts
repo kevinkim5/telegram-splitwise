@@ -33,13 +33,19 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
+  const [me] = await sql`SELECT id FROM members WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}`
+  const myMemberId = (me?.id as number) ?? 0
+
   const [{ count }] = await sql`
     SELECT COUNT(*) FROM expenses WHERE group_id = ${group.id} AND deleted_at IS NULL
   `
   const expenses = await sql`
-    SELECT e.*, m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name
+    SELECT e.*,
+           m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name,
+           es_me.amount AS my_split_amount
     FROM expenses e
     JOIN members m ON m.id = e.paid_by_member_id
+    LEFT JOIN expense_splits es_me ON es_me.expense_id = e.id AND es_me.member_id = ${myMemberId}
     WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
     ORDER BY e.date DESC, e.created_at DESC
     LIMIT ${limit} OFFSET ${offset}

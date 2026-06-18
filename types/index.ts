@@ -37,6 +37,7 @@ export interface Expense {
   category?: string
   created_at: string
   paid_by_name?: string
+  my_split_amount?: number
   splits?: ExpenseSplit[]
 }
 

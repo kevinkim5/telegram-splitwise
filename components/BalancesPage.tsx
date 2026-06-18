@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import type { Balance, SimplifiedDebt } from '@/types'
+import type { SimplifiedDebt } from '@/types'
+import type { NamedBalance } from '@/lib/balances'
 
 interface BalancesData {
-  currency: string
-  balances: Balance[]
+  balances: NamedBalance[]
+  balances_by_currency: Record<string, NamedBalance[]>
   simplified_debts: SimplifiedDebt[]
 }
 
@@ -28,13 +29,9 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return }
     setSubmitting(true)
-    try {
-      await onConfirm(amt)
-    } catch (err) {
-      setError(String(err))
-    } finally {
-      setSubmitting(false)
-    }
+    try { await onConfirm(amt) }
+    catch (err) { setError(String(err)) }
+    finally { setSubmitting(false) }
   }
 
   return (
@@ -43,58 +40,31 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div
-        className="w-full rounded-t-2xl p-5 flex flex-col gap-4"
-        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}
-      >
+      <div className="w-full rounded-t-2xl p-5 flex flex-col gap-4"
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}>
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold">Record Payment</h2>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}
-          >
+          <button onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}>
             ×
           </button>
         </div>
-
         <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
-
-        {error && (
-          <p className="text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{error}</p>
-        )}
-
+        {error && <p className="text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
             <p className="tg-label">Amount ({debt.currency})</p>
             <div className="tg-section">
-              <input
-                className="tg-input text-lg font-semibold"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.01"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                autoFocus
-              />
+              <input className="tg-input text-lg font-semibold" type="number" inputMode="decimal"
+                step="0.01" min="0.01" value={amount} onChange={e => setAmount(e.target.value)} autoFocus />
             </div>
           </div>
-
           <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-3 rounded-xl text-sm font-medium"
-              style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
-            >
+            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-medium"
+              style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}>
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 tg-btn"
-              style={{ opacity: submitting ? 0.7 : 1 }}
-            >
+            <button type="submit" disabled={submitting} className="flex-1 tg-btn" style={{ opacity: submitting ? 0.7 : 1 }}>
               {submitting ? 'Recording…' : 'Record Payment'}
             </button>
           </div>
@@ -106,11 +76,12 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
 
 export function BalancesPage() {
   const router = useRouter()
-  const { chatId, group, currentMember, apiHeaders } = useAppContext()
+  const { chatId, currentMember, apiHeaders } = useAppContext()
   const [data, setData] = useState<BalancesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [settleDebt, setSettleDebt] = useState<{ debt: SimplifiedDebt; label: string } | null>(null)
+  const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
   const loadBalances = useCallback(async () => {
     setLoading(true)
@@ -132,11 +103,7 @@ export function BalancesPage() {
     const res = await fetch(`/api/groups/${chatId}/settlements`, {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({
-        from_member_id: debt.from_member_id,
-        to_member_id: debt.to_member_id,
-        amount,
-      }),
+      body: JSON.stringify({ from_member_id: debt.from_member_id, to_member_id: debt.to_member_id, amount }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({})) as { error?: string }
@@ -147,30 +114,59 @@ export function BalancesPage() {
     loadBalances()
   }
 
-  const myBalance = data?.balances.find(b => b.member_id === currentMember.id)
-  const otherBalances = data?.balances.filter(b => b.member_id !== currentMember.id) ?? []
+  const toggleMember = (id: number) => {
+    setExpandedMembers(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
-  // Debts involving me
+  // My debts from simplified_debts
   const myDebts = data?.simplified_debts.filter(
     d => d.from_member_id === currentMember.id || d.to_member_id === currentMember.id
   ) ?? []
-  const otherDebts = data?.simplified_debts.filter(
-    d => d.from_member_id !== currentMember.id && d.to_member_id !== currentMember.id
-  ) ?? []
 
-  const myNetAmt = myBalance?.net_amount ?? 0
-  const myNetText = myNetAmt > 0.005
-    ? `You are owed ${data?.currency} ${myNetAmt.toFixed(2)}`
-    : myNetAmt < -0.005
-      ? `You owe ${data?.currency} ${Math.abs(myNetAmt).toFixed(2)}`
-      : 'All settled up ✓'
-  const myNetColor = myNetAmt > 0.005
-    ? 'var(--tg-theme-button-color)'
-    : myNetAmt < -0.005
-      ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-      : 'var(--tg-theme-hint-color)'
+  // My net per currency from balances_by_currency
+  const myCurrencyLines: { currency: string; net: number }[] = data
+    ? Object.entries(data.balances_by_currency).flatMap(([cur, bals]) => {
+        const mine = bals.find(b => b.member_id === currentMember.id)
+        return mine && Math.abs(mine.net_amount) > 0.005
+          ? [{ currency: cur, net: mine.net_amount }]
+          : []
+      })
+    : []
 
-  const allSettled = data && data.simplified_debts.length === 0 && data.balances.every(b => Math.abs(b.net_amount) < 0.01)
+  // Other members (not me)
+  const otherMemberIds = data
+    ? [...new Set(data.balances.filter(b => b.member_id !== currentMember.id).map(b => b.member_id))]
+    : []
+
+  const allSettled = data
+    && data.simplified_debts.length === 0
+    && Object.values(data.balances_by_currency).every(bals =>
+        bals.every(b => Math.abs(b.net_amount) < 0.01)
+      )
+
+  // Per-currency lines for a given member
+  const memberCurrencyLines = (memberId: number) =>
+    data
+      ? Object.entries(data.balances_by_currency).flatMap(([cur, bals]) => {
+          const b = bals.find(x => x.member_id === memberId)
+          return b && Math.abs(b.net_amount) > 0.005 ? [{ currency: cur, net: b.net_amount }] : []
+        })
+      : []
+
+  // Simplified debts for a given member (not involving me)
+  const memberDebts = (memberId: number) =>
+    (data?.simplified_debts ?? []).filter(
+      d => (d.from_member_id === memberId || d.to_member_id === memberId)
+        && d.from_member_id !== currentMember.id
+        && d.to_member_id !== currentMember.id
+    )
+
+  const memberName = (id: number) =>
+    data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
   return (
     <div className="p-4 pb-8">
@@ -183,7 +179,7 @@ export function BalancesPage() {
         >
           ← Back
         </button>
-        <h1 className="font-bold text-lg">{group.title}</h1>
+        <h1 className="font-bold text-lg">Balances</h1>
       </div>
 
       {loading && (
@@ -191,7 +187,6 @@ export function BalancesPage() {
           <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
         </div>
       )}
-
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
           {error}
@@ -213,34 +208,36 @@ export function BalancesPage() {
           <div>
             <p className="tg-label mb-2">You</p>
             <div className="tg-section">
-              {/* Your net balance summary */}
-              <div className="tg-list-item flex justify-between items-center"
-                style={{ borderBottom: myDebts.length > 0 ? undefined : 'none' }}>
-                <span className="text-sm font-medium">
+              {/* Your net per currency */}
+              <div className="tg-list-item" style={{ borderBottom: myDebts.length > 0 ? undefined : 'none' }}>
+                <p className="text-sm font-medium mb-1">
                   {currentMember.first_name}{currentMember.last_name ? ` ${currentMember.last_name}` : ''}
-                </span>
-                <span className="text-sm font-bold" style={{ color: myNetColor }}>
-                  {myNetText}
-                </span>
+                </p>
+                {myCurrencyLines.length === 0 ? (
+                  <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>All settled up ✓</p>
+                ) : (
+                  myCurrencyLines.map(({ currency, net }) => (
+                    <p key={currency} className="text-xs font-medium" style={{
+                      color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                    }}>
+                      {net > 0
+                        ? `You are owed ${currency} ${net.toFixed(2)}`
+                        : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
+                    </p>
+                  ))
+                )}
               </div>
 
               {/* Debts involving you */}
               {myDebts.map((debt, idx) => {
                 const iOwe = debt.from_member_id === currentMember.id
                 const other = iOwe ? debt.to_name : debt.from_name
-                const label = iOwe
-                  ? `You owe ${other}`
-                  : `${other} owes you`
-                const settleLabel = iOwe
-                  ? `You pay ${other}`
-                  : `${other} pays you`
+                const label = iOwe ? `You owe ${other}` : `${other} owes you`
+                const settleLabel = iOwe ? `You pay ${other}` : `${other} pays you`
                 const isLast = idx === myDebts.length - 1
                 return (
-                  <div
-                    key={idx}
-                    className="tg-list-item flex items-center justify-between gap-3"
-                    style={{ borderBottom: isLast ? 'none' : undefined }}
-                  >
+                  <div key={idx} className="tg-list-item flex items-center justify-between gap-3"
+                    style={{ borderBottom: isLast ? 'none' : undefined }}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
                       <p className="text-sm font-bold" style={{
@@ -254,12 +251,7 @@ export function BalancesPage() {
                     <button
                       onClick={() => setSettleDebt({ debt, label: settleLabel })}
                       className="py-1.5 px-3 rounded-xl text-xs font-medium flex-shrink-0"
-                      style={{
-                        background: 'var(--tg-theme-button-color)',
-                        color: 'var(--tg-theme-button-text-color)',
-                        border: 'none',
-                        cursor: 'pointer',
-                      }}
+                      style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)', border: 'none', cursor: 'pointer' }}
                     >
                       Settle
                     </button>
@@ -269,47 +261,75 @@ export function BalancesPage() {
             </div>
           </div>
 
-          {/* OTHERS section */}
-          {otherBalances.length > 0 && (
+          {/* OTHERS section — collapsible rows */}
+          {otherMemberIds.length > 0 && (
             <div>
               <p className="tg-label mb-2">Others</p>
               <div className="tg-section">
-                {otherBalances.map((b, idx) => {
-                  const isPos = b.net_amount > 0.005
-                  const isNeg = b.net_amount < -0.005
-                  // Debts between others
-                  const theirDebts = otherDebts.filter(
-                    d => d.from_member_id === b.member_id || d.to_member_id === b.member_id
-                  )
-                  const isLast = idx === otherBalances.length - 1
+                {otherMemberIds.map((memberId, idx) => {
+                  const name = memberName(memberId)
+                  const lines = memberCurrencyLines(memberId)
+                  const debts = memberDebts(memberId)
+                  const expanded = expandedMembers.has(memberId)
+                  const isLast = idx === otherMemberIds.length - 1
+                  const hasDetails = lines.length > 0 || debts.length > 0
+
                   return (
-                    <div
-                      key={b.member_id}
-                      className="tg-list-item"
-                      style={{ borderBottom: isLast ? 'none' : undefined }}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">{b.member_name}</span>
-                        <span
-                          className="text-sm font-bold"
-                          style={{
-                            color: isPos ? 'var(--tg-theme-button-color)'
-                              : isNeg ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-                              : 'var(--tg-theme-hint-color)',
-                          }}
-                        >
-                          {isPos ? '+' : ''}{b.net_amount.toFixed(2)} {data.currency}
+                    <div key={memberId} style={{ borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)' }}>
+                      {/* Collapsible header row */}
+                      <button
+                        onClick={() => hasDetails && toggleMember(memberId)}
+                        className="w-full flex items-center justify-between gap-3"
+                        style={{
+                          padding: '12px 16px',
+                          background: 'none',
+                          border: 'none',
+                          cursor: hasDetails ? 'pointer' : 'default',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span className="text-sm font-medium">{name}</span>
+                        <span className="flex items-center gap-2">
+                          {lines.length === 0 ? (
+                            <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
+                          ) : lines.map(({ currency, net }) => (
+                            <span key={currency} className="text-xs font-bold" style={{
+                              color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                            }}>
+                              {net > 0 ? '+' : ''}{net.toFixed(2)} {currency}
+                            </span>
+                          ))}
+                          {hasDetails && (
+                            <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '12px' }}>
+                              {expanded ? '▲' : '▼'}
+                            </span>
+                          )}
                         </span>
-                      </div>
-                      {theirDebts.map((d, di) => {
-                        const theyOwe = d.from_member_id === b.member_id
-                        const other = theyOwe ? d.to_name : d.from_name
-                        return (
-                          <p key={di} className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                            {theyOwe ? `Owes ${other}` : `${other} owes them`} {d.currency} {d.amount.toFixed(2)}
-                          </p>
-                        )
-                      })}
+                      </button>
+
+                      {/* Expanded debt details */}
+                      {expanded && (
+                        <div style={{ padding: '0 16px 12px', borderTop: '0.5px solid rgba(0,0,0,0.06)' }}>
+                          {debts.map((d, di) => {
+                            const theyOwe = d.from_member_id === memberId
+                            const other = theyOwe ? d.to_name : d.from_name
+                            return (
+                              <p key={di} className="text-xs py-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                                {theyOwe ? `${name} owes ${other}` : `${other} owes ${name}`}
+                                {' '}
+                                <span className="font-semibold" style={{ color: 'var(--tg-theme-text-color)' }}>
+                                  {d.currency} {d.amount.toFixed(2)}
+                                </span>
+                              </p>
+                            )
+                          })}
+                          {debts.length === 0 && (
+                            <p className="text-xs py-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                              No debts with others
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

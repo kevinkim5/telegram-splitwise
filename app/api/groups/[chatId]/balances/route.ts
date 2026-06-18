@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
+import type { SimplifiedDebt } from '@/types'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
@@ -11,18 +12,27 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-  const currency = group.currency as string
   const members = await sql`
     SELECT id, first_name, last_name FROM members WHERE group_id = ${group.id}
   `
+  const memberNameMap = new Map(members.map(m => [
+    m.id as number,
+    `${m.first_name}${m.last_name ? ' ' + m.last_name : ''}`,
+  ]))
+  const memberIds = members.map(m => m.id as number)
 
-  // Net balance per member: positive = owed money, negative = owes money
-  const netBalance = new Map<number, number>()
-  for (const m of members) netBalance.set(m.id as number, 0)
+  // Track net balance per (currency, member): positive = owed money, negative = owes
+  const netByCurrency = new Map<string, Map<number, number>>()
 
-  // From expenses: payer gains what others owe them
+  const getOrInit = (currency: string) => {
+    if (!netByCurrency.has(currency)) {
+      netByCurrency.set(currency, new Map(memberIds.map(id => [id, 0])))
+    }
+    return netByCurrency.get(currency)!
+  }
+
   const splits = await sql`
-    SELECT e.paid_by_member_id, es.member_id, es.amount
+    SELECT e.paid_by_member_id, e.currency, es.member_id, es.amount
     FROM expenses e
     JOIN expense_splits es ON es.expense_id = e.id
     WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
@@ -31,40 +41,56 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     const payer = r.paid_by_member_id as number
     const splitter = r.member_id as number
     const amount = parseFloat(r.amount as string)
-
-    // Payer gets credit for what others owe
+    const cur = r.currency as string
     if (payer !== splitter) {
-      netBalance.set(payer, (netBalance.get(payer) ?? 0) + amount)
-      netBalance.set(splitter, (netBalance.get(splitter) ?? 0) - amount)
+      const map = getOrInit(cur)
+      map.set(payer, (map.get(payer) ?? 0) + amount)
+      map.set(splitter, (map.get(splitter) ?? 0) - amount)
     }
   }
 
-  // From settlements: from_member paid to_member, so from_member's debt decreases
   const settlements = await sql`
-    SELECT from_member_id, to_member_id, amount FROM settlements
+    SELECT from_member_id, to_member_id, amount, currency FROM settlements
     WHERE group_id = ${group.id} AND deleted_at IS NULL
   `
   for (const r of settlements) {
     const from = r.from_member_id as number
     const to = r.to_member_id as number
     const amount = parseFloat(r.amount as string)
-    netBalance.set(from, (netBalance.get(from) ?? 0) + amount)
-    netBalance.set(to, (netBalance.get(to) ?? 0) - amount)
+    const cur = r.currency as string
+    const map = getOrInit(cur)
+    map.set(from, (map.get(from) ?? 0) + amount)
+    map.set(to, (map.get(to) ?? 0) - amount)
   }
 
-  const memberMap = new Map(members.map(m => [
-    m.id as number,
-    `${m.first_name}${m.last_name ? ' ' + m.last_name : ''}`,
-  ]))
+  // Build per-currency balances and simplified debts
+  const balances_by_currency: Record<string, NamedBalance[]> = {}
+  const simplified_debts: SimplifiedDebt[] = []
 
-  const balances: NamedBalance[] = [...netBalance.entries()].map(([memberId, netAmount]) => ({
-    member_id: memberId,
-    member_name: memberMap.get(memberId) ?? 'Unknown',
-    net_amount: Math.round(netAmount * 100) / 100,
-    currency,
-  }))
+  for (const [cur, memberMap] of netByCurrency.entries()) {
+    const currencyBalances: NamedBalance[] = [...memberMap.entries()]
+      .map(([memberId, netAmount]) => ({
+        member_id: memberId,
+        member_name: memberNameMap.get(memberId) ?? 'Unknown',
+        net_amount: Math.round(netAmount * 100) / 100,
+        currency: cur,
+      }))
+    balances_by_currency[cur] = currencyBalances
+    simplified_debts.push(...simplifyDebts(currencyBalances))
+  }
 
-  const simplified_debts = simplifyDebts(balances)
+  // Flat balances array for the header summary (all currencies, deduplicated by member)
+  const flatBalances: NamedBalance[] = memberIds.map(memberId => {
+    const netAcross = [...netByCurrency.values()].reduce(
+      (sum, map) => sum + (map.get(memberId) ?? 0), 0
+    )
+    return {
+      member_id: memberId,
+      member_name: memberNameMap.get(memberId) ?? 'Unknown',
+      net_amount: Math.round(netAcross * 100) / 100,
+      currency: group.currency as string,
+    }
+  })
 
-  return NextResponse.json({ currency, balances, simplified_debts })
+  return NextResponse.json({ balances: flatBalances, balances_by_currency, simplified_debts })
 }

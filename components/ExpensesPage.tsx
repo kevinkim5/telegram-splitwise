@@ -225,7 +225,22 @@ export function ExpensesPage() {
 
       {/* Expense list */}
       <div className="flex flex-col gap-2">
-        {expenses.map(exp => (
+        {expenses.map(exp => {
+          const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
+          const isPayer = exp.paid_by_member_id === currentMember.id
+          let myLabel: string | null = null
+          let myLabelColor = 'var(--tg-theme-hint-color)'
+          if (myAmt !== null) {
+            const total = Number(exp.total_amount)
+            if (isPayer && total - myAmt > 0.005) {
+              myLabel = `You lent ${exp.currency} ${(total - myAmt).toFixed(2)}`
+              myLabelColor = 'var(--tg-theme-button-color)'
+            } else if (!isPayer && myAmt > 0.005) {
+              myLabel = `You borrowed ${exp.currency} ${myAmt.toFixed(2)}`
+              myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
+            }
+          }
+          return (
           <div
             key={exp.id}
             className="tg-section"
@@ -250,6 +265,11 @@ export function ExpensesPage() {
                 <p className="font-bold text-base">
                   {exp.currency} {Number(exp.total_amount).toFixed(2)}
                 </p>
+                {myLabel && (
+                  <p className="text-xs font-medium" style={{ color: myLabelColor }}>
+                    {myLabel}
+                  </p>
+                )}
                 <div className="flex gap-1">
                   <button
                     onClick={() => navigate(`/edit/${exp.id}`)}
@@ -277,7 +297,8 @@ export function ExpensesPage() {
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Pagination */}
