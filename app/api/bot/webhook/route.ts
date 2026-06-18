@@ -40,7 +40,7 @@ async function handleMessage(message: {
           username   = EXCLUDED.username
   `
 
-  if (text === '/start' || text?.startsWith('/start ')) {
+  if (text && /^\/start(@\w+)?$/.test(text.split(' ')[0])) {
     const chatTitle = encodeURIComponent(chat.title ?? chat.first_name ?? 'Chat')
     const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
 
