@@ -357,7 +357,7 @@ export function ExpenseFormPage({ editId }: Props) {
                       onChange={e => setCustomAmounts(prev => ({ ...prev, [m.id]: e.target.value }))}
                       onClick={e => e.stopPropagation()}
                       placeholder="0.00"
-                      className="text-right text-sm"
+                      className="text-right"
                       style={{
                         width: '80px',
                         padding: '4px 8px',
@@ -365,6 +365,7 @@ export function ExpenseFormPage({ editId }: Props) {
                         border: '1px solid var(--tg-theme-hint-color)',
                         background: 'var(--tg-theme-secondary-bg-color)',
                         color: 'var(--tg-theme-text-color)',
+                        fontSize: '16px',
                       }}
                     />
                   )}

@@ -10,10 +10,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { chatId, chatTitle, currency } = body as {
+  const { chatId, chatTitle, currency, photo_url } = body as {
     chatId: string
     chatTitle: string
     currency?: string
+    photo_url?: string | null
   }
 
   if (!chatId || !chatTitle) {
@@ -26,23 +27,24 @@ export async function POST(request: Request) {
   const [existing] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   const is_new_group = !existing
 
-  // Upsert group — only set currency on insert, not on update (preserve user's setting)
+  // Upsert group — don't overwrite title on conflict (webhook sets the authoritative group name)
   await sql`
     INSERT INTO groups (chat_id, title, currency)
     VALUES (${BigInt(chatId)}, ${chatTitle}, ${currency ?? 'SGD'})
-    ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title
+    ON CONFLICT (chat_id) DO NOTHING
   `
 
   const [group] = await sql`SELECT * FROM groups WHERE chat_id = ${BigInt(chatId)}`
 
-  // Upsert current user as member
+  // Upsert current user as member (including photo_url)
   await sql`
-    INSERT INTO members (group_id, telegram_user_id, first_name, last_name, username)
-    VALUES (${group.id}, ${user.id}, ${user.first_name}, ${user.last_name ?? null}, ${user.username ?? null})
+    INSERT INTO members (group_id, telegram_user_id, first_name, last_name, username, photo_url)
+    VALUES (${group.id}, ${user.id}, ${user.first_name}, ${user.last_name ?? null}, ${user.username ?? null}, ${photo_url ?? null})
     ON CONFLICT (group_id, telegram_user_id) DO UPDATE
       SET first_name = EXCLUDED.first_name,
           last_name  = EXCLUDED.last_name,
-          username   = EXCLUDED.username
+          username   = EXCLUDED.username,
+          photo_url  = EXCLUDED.photo_url
   `
 
   const [member] = await sql`

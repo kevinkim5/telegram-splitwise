@@ -12,7 +12,7 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const members = await sql`
-    SELECT id, group_id, telegram_user_id, first_name, last_name, username, created_at
+    SELECT id, group_id, telegram_user_id, first_name, last_name, username, photo_url, created_at
     FROM members
     WHERE group_id = ${group.id}
     ORDER BY first_name

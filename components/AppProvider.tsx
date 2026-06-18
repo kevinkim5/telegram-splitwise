@@ -57,12 +57,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       'X-Telegram-Init-Data': initData,
     }
 
+    const photo_url = tg?.initDataUnsafe?.user?.photo_url ?? null
+
     const init = async (currency?: string) => {
       try {
         const res = await fetch('/api/groups/init', {
           method: 'POST',
           headers: apiHeaders,
-          body: JSON.stringify({ chatId, chatTitle, currency }),
+          body: JSON.stringify({ chatId, chatTitle, currency, photo_url }),
         })
         if (!res.ok) {
           const err = await res.json()

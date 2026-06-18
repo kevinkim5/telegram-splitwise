@@ -39,6 +39,7 @@ export async function ensureSchema() {
     )
   `
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(50)`
+  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS photo_url TEXT`
   await sql`
     CREATE TABLE IF NOT EXISTS expense_splits (
       id         SERIAL PRIMARY KEY,

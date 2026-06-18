@@ -15,6 +15,34 @@ interface MyBalance {
   currency: string
 }
 
+const AVATAR_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD',
+  '#F39C12', '#1ABC9C', '#9B59B6', '#E67E22', '#2ECC71',
+]
+
+function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name: string; photo_url?: string | null }; size?: number }) {
+  const color = AVATAR_COLORS[member.id % AVATAR_COLORS.length]
+  if (member.photo_url) {
+    return (
+      <img
+        src={member.photo_url}
+        alt={member.first_name}
+        width={size}
+        height={size}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    )
+  }
+  return (
+    <div
+      className="flex items-center justify-center text-sm font-bold flex-shrink-0"
+      style={{ width: size, height: size, borderRadius: '50%', background: color, color: '#fff', fontSize: size * 0.4 }}
+    >
+      {member.first_name[0].toUpperCase()}
+    </div>
+  )
+}
+
 function MembersSheet({ onClose }: { onClose: () => void }) {
   const { members } = useAppContext()
   return (
@@ -44,12 +72,7 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
                 className="tg-list-item flex items-center gap-3"
                 style={{ borderBottom: idx === members.length - 1 ? 'none' : undefined }}
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}
-                >
-                  {m.first_name[0]}
-                </div>
+                <MemberAvatar member={m} size={36} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
                     {m.first_name}{m.last_name ? ` ${m.last_name}` : ''}
