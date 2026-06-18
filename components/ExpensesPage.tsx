@@ -15,6 +15,58 @@ interface MyBalance {
   currency: string
 }
 
+function MembersSheet({ onClose }: { onClose: () => void }) {
+  const { members } = useAppContext()
+  return (
+    <div
+      className="fixed inset-0 flex items-end justify-center z-50"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="w-full rounded-t-2xl flex flex-col"
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}
+      >
+        <div className="flex justify-between items-center p-4 pb-3">
+          <h2 className="text-lg font-bold">Group Members</h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}
+          >
+            ×
+          </button>
+        </div>
+        <div className="overflow-y-auto px-4 pb-6">
+          <div className="tg-section">
+            {members.map((m, idx) => (
+              <div
+                key={m.id}
+                className="tg-list-item flex items-center gap-3"
+                style={{ borderBottom: idx === members.length - 1 ? 'none' : undefined }}
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                  style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}
+                >
+                  {m.first_name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {m.first_name}{m.last_name ? ` ${m.last_name}` : ''}
+                  </p>
+                  {m.username && (
+                    <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>@{m.username}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ExpensesPage() {
   const router = useRouter()
   const { chatId, group, currentMember, apiHeaders } = useAppContext()
@@ -26,6 +78,7 @@ export function ExpensesPage() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [myBalance, setMyBalance] = useState<MyBalance | null>(null)
+  const [showMembers, setShowMembers] = useState(false)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -98,10 +151,11 @@ export function ExpensesPage() {
       : 'var(--tg-theme-hint-color)'
 
   return (
+    <>
     <div className="p-4">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <div>
+      {/* Top row: title + balance + members icon */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0 pr-3">
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
           {balanceText && (
             <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>
@@ -110,9 +164,38 @@ export function ExpensesPage() {
           )}
         </div>
         <button
+          onClick={() => setShowMembers(true)}
+          className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full"
+          style={{
+            background: 'var(--tg-theme-secondary-bg-color)',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '18px',
+          }}
+          aria-label="Group members"
+        >
+          👥
+        </button>
+      </div>
+
+      {/* Action buttons row */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => navigate('/balances')}
+          className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+          style={{
+            background: 'var(--tg-theme-secondary-bg-color)',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--tg-theme-text-color)',
+          }}
+        >
+          ⚖️ Balances
+        </button>
+        <button
           onClick={() => navigate('/add')}
-          className="tg-btn"
-          style={{ width: 'auto', padding: '8px 16px', borderRadius: '20px', fontSize: '15px' }}
+          className="flex-1 tg-btn py-2.5 rounded-xl text-sm font-medium"
+          style={{ width: 'auto' }}
         >
           + Add
         </button>
@@ -222,5 +305,8 @@ export function ExpensesPage() {
         </div>
       )}
     </div>
+
+    {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}
+    </>
   )
 }

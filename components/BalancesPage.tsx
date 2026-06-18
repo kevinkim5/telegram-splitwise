@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import type { Balance, SimplifiedDebt } from '@/types'
 
@@ -110,6 +111,7 @@ function SettleModal({ debt, onClose, onConfirm }: SettleModalProps) {
 }
 
 export function BalancesPage() {
+  const router = useRouter()
   const { chatId, group, apiHeaders } = useAppContext()
   const [data, setData] = useState<BalancesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -155,9 +157,18 @@ export function BalancesPage() {
 
   return (
     <div className="p-4">
-      <div className="mb-4">
-        <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-        <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Balances · {group.currency}</p>
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={() => router.push(`/?chatId=${chatId}`)}
+          className="text-sm font-medium"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+        >
+          ← Back
+        </button>
+        <div>
+          <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
+          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Balances · {group.currency}</p>
+        </div>
       </div>
 
       {loading && (

@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { Group, Member } from '@/types'
-import { NavBar } from '@/components/NavBar'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
 
 interface AppContextValue {
@@ -142,10 +141,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppCtx.Provider value={ctx}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: '64px' }}>
+        <div className="flex-1 overflow-y-auto">
           {children}
         </div>
-        <NavBar />
       </div>
 
       {showCurrencyPicker && (
