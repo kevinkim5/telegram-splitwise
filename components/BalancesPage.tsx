@@ -157,12 +157,10 @@ export function BalancesPage() {
         })
       : []
 
-  // Simplified debts for a given member (not involving me)
+  // All simplified debts involving a given member
   const memberDebts = (memberId: number) =>
     (data?.simplified_debts ?? []).filter(
-      d => (d.from_member_id === memberId || d.to_member_id === memberId)
-        && d.from_member_id !== currentMember.id
-        && d.to_member_id !== currentMember.id
+      d => d.from_member_id === memberId || d.to_member_id === memberId
     )
 
   const memberName = (id: number) =>
