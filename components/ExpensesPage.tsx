@@ -566,19 +566,27 @@ export function ExpensesPage() {
             </p>
           )}
         </div>
-        <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-          <button
-            onClick={() => setShowMembers(true)}
-            className="flex items-center justify-center w-9 h-9 rounded-full"
-            style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '18px' }}
-            aria-label="Group members"
-          >
-            👥
-          </button>
-          <p style={{ fontSize: '10px', color: 'var(--tg-theme-hint-color)', lineHeight: 1 }}>
-            {members.length} people
-          </p>
-        </div>
+        <button
+          onClick={() => setShowMembers(true)}
+          className="flex items-center"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          aria-label="Group members"
+        >
+          {members.slice(0, 3).map((m, i) => (
+            <div
+              key={m.id}
+              style={{
+                marginRight: i < Math.min(members.length, 3) - 1 ? -8 : 0,
+                borderRadius: '50%',
+                border: '2px solid var(--tg-theme-bg-color)',
+                lineHeight: 0,
+                flexShrink: 0,
+              }}
+            >
+              <MemberAvatar member={m} size={26} />
+            </div>
+          ))}
+        </button>
       </div>
 
       <div className="flex gap-2">
@@ -640,6 +648,12 @@ export function ExpensesPage() {
                   onClick={() => openSettlementDetail(s)}
                 >
                   <div className="flex items-center gap-3 p-3">
+                    <div
+                      className="flex items-center justify-center flex-shrink-0"
+                      style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '20px' }}
+                    >
+                      ✓
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
                         {s.from_name} paid {s.to_name}{' '}
@@ -681,21 +695,23 @@ export function ExpensesPage() {
                 myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
               }
             }
+            const notInvolved = myVerbLabel === null
             return (
               <div
                 key={`e-${exp.id}`}
                 className="tg-section"
-                style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)' }}
+                style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1 }}
                 onClick={() => openExpenseDetail(exp)}
               >
-                <div className="flex items-start gap-3 p-3">
+                <div className="flex items-center gap-3 p-3">
+                  <div
+                    className="flex items-center justify-center flex-shrink-0"
+                    style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '22px' }}
+                  >
+                    {exp.category ?? '🧾'}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-base truncate">{exp.description}</p>
-                    {exp.category && (
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                        {exp.category}
-                      </p>
-                    )}
                     <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
                       {exp.paid_by_name ?? '?'} paid {exp.currency} {expTotal.toFixed(2)} · {formatDate(exp.date)}
                     </p>
