@@ -195,7 +195,11 @@ export function ExpensesPage() {
 
   return (
     <>
-    <div className="p-4">
+    {/* Sticky header: title, balance, action buttons */}
+    <div
+      className="sticky top-0 z-10 px-4 pt-4 pb-3"
+      style={{ background: 'var(--tg-theme-bg-color)' }}
+    >
       {/* Top row: title + balance + members icon */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
@@ -222,7 +226,7 @@ export function ExpensesPage() {
       </div>
 
       {/* Action buttons row */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2">
         <button
           onClick={() => navigate('/balances')}
           className="flex-1 py-2.5 rounded-xl text-sm font-medium"
@@ -243,7 +247,10 @@ export function ExpensesPage() {
           + Add
         </button>
       </div>
+    </div>
 
+    {/* Scrollable list area */}
+    <div className="px-4 pb-8">
       {loading && (
         <div className="flex justify-center py-12">
           <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
@@ -256,7 +263,7 @@ export function ExpensesPage() {
         </div>
       )}
 
-      {!loading && !error && expenses.length === 0 && (
+      {!loading && !error && expenses.length === 0 && settlements.length === 0 && (
         <div className="flex flex-col items-center py-16 gap-3">
           <div className="text-5xl">🧾</div>
           <p className="font-medium">No expenses yet</p>
