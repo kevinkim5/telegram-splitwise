@@ -3,6 +3,7 @@ import { sql } from '@/lib/sql'
 
 const BOT_TOKEN = process.env.BOT_TOKEN!
 const WEBAPP_URL = process.env.WEBAPP_URL!
+const TELEGRAM_APP_URL = process.env.TELEGRAM_APP_URL // e.g. https://t.me/kevin_tele_splitwise_bot/split
 
 async function callTelegram(method: string, body: object) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -44,26 +45,23 @@ async function handleMessage(message: {
 
   if (text && /^\/start(@\w+)?$/.test(text.split(' ')[0])) {
     const chatTitle = encodeURIComponent(chat.title ?? chat.first_name ?? 'Chat')
-    const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
-    console.log(`/start in chat ${chat.id} (${chat.type}), webAppUrl: ${webAppUrl}`)
-
     const isGroup = chat.type === 'group' || chat.type === 'supergroup'
+    console.log(`/start in chat ${chat.id} (${chat.type})`)
 
-    if (isGroup) {
-      // web_app inline buttons don't work in groups — set a persistent menu button instead
-      await callTelegram('setChatMenuButton', {
-        chat_id: chat.id,
-        menu_button: {
-          type: 'web_app',
-          text: '💰 Splitwise',
-          web_app: { url: webAppUrl },
-        },
-      })
+    if (isGroup && TELEGRAM_APP_URL) {
+      // Use t.me app link — Telegram opens it as a proper Mini App with initData populated
       await callTelegram('sendMessage', {
         chat_id: chat.id,
-        text: '💰 Splitwise is ready! Tap the button next to the message input to open it.',
+        text: '💰 Tap the button below to open Splitwise.',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '💰 Open Splitwise', url: `${TELEGRAM_APP_URL}?startapp=${chat.id}` },
+          ]],
+        },
       })
     } else {
+      // Private chat: web_app inline button works here
+      const webAppUrl = `${WEBAPP_URL}?chatId=${chat.id}&chatTitle=${chatTitle}`
       await callTelegram('sendMessage', {
         chat_id: chat.id,
         text: '💰 Open Splitwise to manage your group expenses.',
