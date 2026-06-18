@@ -62,9 +62,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   if (!currentMember) return NextResponse.json({ error: 'Member not found in group' }, { status: 403 })
 
   const body = await request.json()
-  const { description, total_amount, paid_by_member_id, split_type, splits, date, category } = body as {
+  const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = body as {
     description: string
     total_amount: number
+    currency?: string
     paid_by_member_id: number
     split_type: 'equal' | 'custom'
     splits: { member_id: number; amount?: number }[]
@@ -96,7 +97,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
 
   const [expense] = await sql`
     INSERT INTO expenses (group_id, description, total_amount, currency, paid_by_member_id, split_type, created_by_member_id, date, category)
-    VALUES (${group.id}, ${description}, ${total_amount}, ${group.currency}, ${paid_by_member_id}, ${split_type}, ${currentMember.id}, ${expenseDate}, ${category ?? null})
+    VALUES (${group.id}, ${description}, ${total_amount}, ${currency ?? group.currency}, ${paid_by_member_id}, ${split_type}, ${currentMember.id}, ${expenseDate}, ${category ?? null})
     RETURNING id
   `
 

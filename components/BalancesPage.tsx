@@ -13,11 +13,12 @@ interface BalancesData {
 
 interface SettleModalProps {
   debt: SimplifiedDebt
+  label: string
   onClose: () => void
   onConfirm: (amount: number) => Promise<void>
 }
 
-function SettleModal({ debt, onClose, onConfirm }: SettleModalProps) {
+function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
   const [amount, setAmount] = useState(debt.amount.toFixed(2))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,16 +39,13 @@ function SettleModal({ debt, onClose, onConfirm }: SettleModalProps) {
 
   return (
     <div
-      className="fixed inset-0 flex items-end justify-center z-50 pb-safe"
+      className="fixed inset-0 flex items-end justify-center z-50"
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
         className="w-full rounded-t-2xl p-5 flex flex-col gap-4"
-        style={{
-          background: 'var(--tg-theme-bg-color)',
-          maxHeight: '70vh',
-        }}
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}
       >
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-bold">Record Payment</h2>
@@ -59,11 +57,7 @@ function SettleModal({ debt, onClose, onConfirm }: SettleModalProps) {
           </button>
         </div>
 
-        <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          <strong style={{ color: 'var(--tg-theme-text-color)' }}>{debt.from_name}</strong>
-          {' pays '}
-          <strong style={{ color: 'var(--tg-theme-text-color)' }}>{debt.to_name}</strong>
-        </p>
+        <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
 
         {error && (
           <p className="text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{error}</p>
@@ -112,11 +106,11 @@ function SettleModal({ debt, onClose, onConfirm }: SettleModalProps) {
 
 export function BalancesPage() {
   const router = useRouter()
-  const { chatId, group, apiHeaders } = useAppContext()
+  const { chatId, group, currentMember, apiHeaders } = useAppContext()
   const [data, setData] = useState<BalancesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [settleDebt, setSettleDebt] = useState<SimplifiedDebt | null>(null)
+  const [settleDebt, setSettleDebt] = useState<{ debt: SimplifiedDebt; label: string } | null>(null)
 
   const loadBalances = useCallback(async () => {
     setLoading(true)
@@ -153,11 +147,35 @@ export function BalancesPage() {
     loadBalances()
   }
 
+  const myBalance = data?.balances.find(b => b.member_id === currentMember.id)
+  const otherBalances = data?.balances.filter(b => b.member_id !== currentMember.id) ?? []
+
+  // Debts involving me
+  const myDebts = data?.simplified_debts.filter(
+    d => d.from_member_id === currentMember.id || d.to_member_id === currentMember.id
+  ) ?? []
+  const otherDebts = data?.simplified_debts.filter(
+    d => d.from_member_id !== currentMember.id && d.to_member_id !== currentMember.id
+  ) ?? []
+
+  const myNetAmt = myBalance?.net_amount ?? 0
+  const myNetText = myNetAmt > 0.005
+    ? `You are owed ${data?.currency} ${myNetAmt.toFixed(2)}`
+    : myNetAmt < -0.005
+      ? `You owe ${data?.currency} ${Math.abs(myNetAmt).toFixed(2)}`
+      : 'All settled up ✓'
+  const myNetColor = myNetAmt > 0.005
+    ? 'var(--tg-theme-button-color)'
+    : myNetAmt < -0.005
+      ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+      : 'var(--tg-theme-hint-color)'
+
   const allSettled = data && data.simplified_debts.length === 0 && data.balances.every(b => Math.abs(b.net_amount) < 0.01)
 
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="p-4 pb-8">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-5">
         <button
           onClick={() => router.push(`/?chatId=${chatId}`)}
           className="text-sm font-medium"
@@ -165,10 +183,7 @@ export function BalancesPage() {
         >
           ← Back
         </button>
-        <div>
-          <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Balances · {group.currency}</p>
-        </div>
+        <h1 className="font-bold text-lg">{group.title}</h1>
       </div>
 
       {loading && (
@@ -193,75 +208,111 @@ export function BalancesPage() {
 
       {data && !allSettled && (
         <div className="flex flex-col gap-5">
-          {/* Net Balances */}
-          {data.balances.length > 0 && (
+
+          {/* YOU section */}
+          <div>
+            <p className="tg-label mb-2">You</p>
+            <div className="tg-section">
+              {/* Your net balance summary */}
+              <div className="tg-list-item flex justify-between items-center"
+                style={{ borderBottom: myDebts.length > 0 ? undefined : 'none' }}>
+                <span className="text-sm font-medium">
+                  {currentMember.first_name}{currentMember.last_name ? ` ${currentMember.last_name}` : ''}
+                </span>
+                <span className="text-sm font-bold" style={{ color: myNetColor }}>
+                  {myNetText}
+                </span>
+              </div>
+
+              {/* Debts involving you */}
+              {myDebts.map((debt, idx) => {
+                const iOwe = debt.from_member_id === currentMember.id
+                const other = iOwe ? debt.to_name : debt.from_name
+                const label = iOwe
+                  ? `You owe ${other}`
+                  : `${other} owes you`
+                const settleLabel = iOwe
+                  ? `You pay ${other}`
+                  : `${other} pays you`
+                const isLast = idx === myDebts.length - 1
+                return (
+                  <div
+                    key={idx}
+                    className="tg-list-item flex items-center justify-between gap-3"
+                    style={{ borderBottom: isLast ? 'none' : undefined }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
+                      <p className="text-sm font-bold" style={{
+                        color: iOwe
+                          ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+                          : 'var(--tg-theme-button-color)',
+                      }}>
+                        {debt.currency} {debt.amount.toFixed(2)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSettleDebt({ debt, label: settleLabel })}
+                      className="py-1.5 px-3 rounded-xl text-xs font-medium flex-shrink-0"
+                      style={{
+                        background: 'var(--tg-theme-button-color)',
+                        color: 'var(--tg-theme-button-text-color)',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Settle
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* OTHERS section */}
+          {otherBalances.length > 0 && (
             <div>
-              <p className="tg-label mb-2">Net Balances</p>
+              <p className="tg-label mb-2">Others</p>
               <div className="tg-section">
-                {data.balances.map((b, idx) => {
+                {otherBalances.map((b, idx) => {
                   const isPos = b.net_amount > 0.005
                   const isNeg = b.net_amount < -0.005
-                  const isLast = idx === data.balances.length - 1
+                  // Debts between others
+                  const theirDebts = otherDebts.filter(
+                    d => d.from_member_id === b.member_id || d.to_member_id === b.member_id
+                  )
+                  const isLast = idx === otherBalances.length - 1
                   return (
                     <div
                       key={b.member_id}
-                      className="tg-list-item flex justify-between items-center"
+                      className="tg-list-item"
                       style={{ borderBottom: isLast ? 'none' : undefined }}
                     >
-                      <span className="text-sm font-medium">{b.member_name}</span>
-                      <span
-                        className="text-sm font-bold"
-                        style={{
-                          color: isPos
-                            ? '#34c759'
-                            : isNeg
-                            ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-                            : 'var(--tg-theme-hint-color)',
-                        }}
-                      >
-                        {isPos ? '+' : ''}{b.net_amount.toFixed(2)} {group.currency}
-                      </span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">{b.member_name}</span>
+                        <span
+                          className="text-sm font-bold"
+                          style={{
+                            color: isPos ? 'var(--tg-theme-button-color)'
+                              : isNeg ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+                              : 'var(--tg-theme-hint-color)',
+                          }}
+                        >
+                          {isPos ? '+' : ''}{b.net_amount.toFixed(2)} {data.currency}
+                        </span>
+                      </div>
+                      {theirDebts.map((d, di) => {
+                        const theyOwe = d.from_member_id === b.member_id
+                        const other = theyOwe ? d.to_name : d.from_name
+                        return (
+                          <p key={di} className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                            {theyOwe ? `Owes ${other}` : `${other} owes them`} {d.currency} {d.amount.toFixed(2)}
+                          </p>
+                        )
+                      })}
                     </div>
                   )
                 })}
-              </div>
-            </div>
-          )}
-
-          {/* Simplified debts */}
-          {data.simplified_debts.length > 0 && (
-            <div>
-              <p className="tg-label mb-2">Who Pays Whom</p>
-              <div className="flex flex-col gap-2">
-                {data.simplified_debts.map((debt, idx) => (
-                  <div key={idx} className="tg-section p-4 flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <p className="text-sm">
-                          <span className="font-semibold">{debt.from_name}</span>
-                          <span style={{ color: 'var(--tg-theme-hint-color)' }}> owes </span>
-                          <span className="font-semibold">{debt.to_name}</span>
-                        </p>
-                        <p className="text-base font-bold mt-0.5" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-                          {debt.currency} {debt.amount.toFixed(2)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setSettleDebt(debt)}
-                        className="py-2 px-3 rounded-xl text-sm font-medium"
-                        style={{
-                          background: 'var(--tg-theme-button-color)',
-                          color: 'var(--tg-theme-button-text-color)',
-                          border: 'none',
-                          cursor: 'pointer',
-                          flexShrink: 0,
-                        }}
-                      >
-                        Settle
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -270,9 +321,10 @@ export function BalancesPage() {
 
       {settleDebt && (
         <SettleModal
-          debt={settleDebt}
+          debt={settleDebt.debt}
+          label={settleDebt.label}
           onClose={() => setSettleDebt(null)}
-          onConfirm={amount => handleSettle(settleDebt, amount)}
+          onConfirm={amount => handleSettle(settleDebt.debt, amount)}
         />
       )}
     </div>

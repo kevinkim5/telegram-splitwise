@@ -25,7 +25,7 @@ const CATEGORIES = [
 
 export function ExpenseFormPage({ editId }: Props) {
   const router = useRouter()
-  const { chatId, group, members, currentMember, apiHeaders, refreshGroup } = useAppContext()
+  const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
   const isEdit = !!editId
 
   const [description, setDescription] = useState('')
@@ -36,6 +36,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [selectedMembers, setSelectedMembers] = useState<number[]>(members.map(m => m.id))
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({})
   const [category, setCategory] = useState<string>('')
+  const [expenseCurrency, setExpenseCurrency] = useState<string>('SGD')
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +55,7 @@ export function ExpenseFormPage({ editId }: Props) {
         setPaidBy(exp.paid_by_member_id)
         setSplitType(exp.split_type)
         setCategory(exp.category ?? '')
+        setExpenseCurrency(exp.currency ?? 'SGD')
         const ids = (exp.splits ?? []).map(s => s.member_id)
         setSelectedMembers(ids.length ? ids : members.map(m => m.id))
         if (exp.split_type === 'custom') {
@@ -85,16 +87,9 @@ export function ExpenseFormPage({ editId }: Props) {
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
 
-  const handleCurrencySelect = async (currency: string) => {
-    try {
-      await fetch(`/api/groups/${chatId}/settings`, {
-        method: 'PUT',
-        headers: apiHeaders,
-        body: JSON.stringify({ currency }),
-      })
-      await refreshGroup()
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    } catch { /* ignore */ }
+  const handleCurrencySelect = (currency: string) => {
+    setExpenseCurrency(currency)
+    window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
     setShowCurrencyPicker(false)
   }
 
@@ -119,6 +114,7 @@ export function ExpenseFormPage({ editId }: Props) {
     const body = {
       description,
       total_amount: totalAmt,
+      currency: expenseCurrency,
       paid_by_member_id: paidBy,
       split_type: splitType,
       splits,
@@ -238,7 +234,7 @@ export function ExpenseFormPage({ editId }: Props) {
                 cursor: 'pointer',
               }}
             >
-              {group.currency}
+              {expenseCurrency}
             </button>
             <input
               className="tg-input"
@@ -344,7 +340,7 @@ export function ExpenseFormPage({ editId }: Props) {
                   {/* Equal: show per-person amount */}
                   {splitType === 'equal' && checked && perPerson && (
                     <span className="text-sm font-medium" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                      {group.currency} {perPerson}
+                      {expenseCurrency} {perPerson}
                     </span>
                   )}
 
@@ -383,7 +379,7 @@ export function ExpenseFormPage({ editId }: Props) {
                   ? 'var(--tg-theme-hint-color)'
                   : 'var(--tg-theme-destructive-text-color, #ff3b30)',
               }}>
-                Split total: {group.currency} {customSum.toFixed(2)} / {totalAmt.toFixed(2)}
+                Split total: {expenseCurrency} {customSum.toFixed(2)} / {totalAmt.toFixed(2)}
                 {Math.abs(customSum - totalAmt) < 0.02 ? ' ✓' : ` (${(totalAmt - customSum).toFixed(2)} remaining)`}
               </p>
             </div>

@@ -1,20 +1,21 @@
 'use client'
 
+// SGD first, then all others alphabetically by code
 const CURRENCIES = [
-  { code: 'SGD', name: 'Singapore Dollar' },
-  { code: 'USD', name: 'US Dollar' },
-  { code: 'EUR', name: 'Euro' },
-  { code: 'JPY', name: 'Japanese Yen' },
-  { code: 'KRW', name: 'South Korean Won' },
-  { code: 'CNY', name: 'Chinese Yuan' },
-  { code: 'HKD', name: 'Hong Kong Dollar' },
-  { code: 'THB', name: 'Thai Baht' },
-  { code: 'MYR', name: 'Malaysian Ringgit' },
-  { code: 'IDR', name: 'Indonesian Rupiah' },
-  { code: 'PHP', name: 'Philippine Peso' },
-  { code: 'VND', name: 'Vietnamese Dong' },
-  { code: 'TWD', name: 'Taiwan Dollar' },
-  { code: 'INR', name: 'Indian Rupee' },
+  { code: 'SGD', flag: '🇸🇬', name: 'Singapore Dollar' },
+  { code: 'CNY', flag: '🇨🇳', name: 'Chinese Yuan' },
+  { code: 'EUR', flag: '🇪🇺', name: 'Euro' },
+  { code: 'HKD', flag: '🇭🇰', name: 'Hong Kong Dollar' },
+  { code: 'IDR', flag: '🇮🇩', name: 'Indonesian Rupiah' },
+  { code: 'INR', flag: '🇮🇳', name: 'Indian Rupee' },
+  { code: 'JPY', flag: '🇯🇵', name: 'Japanese Yen' },
+  { code: 'KRW', flag: '🇰🇷', name: 'South Korean Won' },
+  { code: 'MYR', flag: '🇲🇾', name: 'Malaysian Ringgit' },
+  { code: 'PHP', flag: '🇵🇭', name: 'Philippine Peso' },
+  { code: 'THB', flag: '🇹🇭', name: 'Thai Baht' },
+  { code: 'TWD', flag: '🇹🇼', name: 'Taiwan Dollar' },
+  { code: 'USD', flag: '🇺🇸', name: 'US Dollar' },
+  { code: 'VND', flag: '🇻🇳', name: 'Vietnamese Dong' },
 ]
 
 interface Props {
@@ -33,10 +34,7 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
     >
       <div
         className="w-full rounded-t-2xl flex flex-col"
-        style={{
-          background: 'var(--tg-theme-bg-color)',
-          maxHeight: '80dvh',
-        }}
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '80dvh' }}
       >
         {/* Header */}
         <div className="flex justify-between items-center p-4 pb-3">
@@ -77,9 +75,12 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
                     borderBottom: isLast ? 'none' : undefined,
                   }}
                 >
-                  <span className="text-sm">
-                    <span className="font-semibold">{c.code}</span>
-                    <span style={{ color: 'var(--tg-theme-hint-color)' }}> — {c.name}</span>
+                  <span className="text-sm flex items-center gap-2">
+                    <span className="text-lg">{c.flag}</span>
+                    <span>
+                      <span className="font-semibold">{c.code}</span>
+                      <span style={{ color: 'var(--tg-theme-hint-color)' }}> — {c.name}</span>
+                    </span>
                   </span>
                   {isSelected && (
                     <span style={{ color: 'var(--tg-theme-button-color)' }} className="text-lg">✓</span>
