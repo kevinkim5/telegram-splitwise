@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import type { Expense, Settlement } from '@/types'
+import type { Expense, ExpenseSplit, Settlement } from '@/types'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -40,12 +40,44 @@ function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name:
   )
 }
 
-function ActionSheet({
-  actions,
+type DetailState =
+  | { kind: 'expense'; item: Expense; splits: ExpenseSplit[] | null }
+  | { kind: 'settlement'; item: Settlement }
+
+function PencilIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/>
+      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  )
+}
+
+function DetailPanel({
+  detail,
   onClose,
+  onEdit,
+  onDeleteExpense,
+  onDeleteSettlement,
+  currentMemberId,
 }: {
-  actions: Array<{ label: string; onClick: () => void; destructive?: boolean }>
+  detail: DetailState
   onClose: () => void
+  onEdit: (id: number) => void
+  onDeleteExpense: (id: number) => void
+  onDeleteSettlement: (id: number) => void
+  currentMemberId: number
 }) {
   return (
     <div
@@ -53,35 +85,119 @@ function ActionSheet({
       style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full p-4 flex flex-col gap-2">
-        <div className="tg-section">
-          {actions.map((action, i) => (
-            <button
-              key={i}
-              onClick={() => { action.onClick(); onClose() }}
-              className="w-full text-center text-base font-medium py-3.5"
-              style={{
-                background: 'none',
-                border: 'none',
-                borderBottom: i < actions.length - 1 ? '0.5px solid rgba(0,0,0,0.08)' : 'none',
-                cursor: 'pointer',
-                color: action.destructive
-                  ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-                  : 'var(--tg-theme-text-color)',
-              }}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-        <div className="tg-section">
+      <div
+        className="w-full rounded-t-2xl flex flex-col overflow-hidden"
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '85dvh' }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+          style={{ borderBottom: '0.5px solid rgba(0,0,0,0.08)' }}
+        >
           <button
             onClick={onClose}
-            className="w-full text-center text-base font-semibold py-3.5"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: '15px', fontWeight: 500, padding: '4px 0' }}
           >
-            Cancel
+            ← Back
           </button>
+          <span style={{ fontSize: '17px', fontWeight: 600 }}>
+            {detail.kind === 'expense' ? 'Expense' : 'Settlement'}
+          </span>
+          <div className="flex items-center gap-2">
+            {detail.kind === 'expense' && (
+              <button
+                onClick={() => onEdit(detail.item.id)}
+                className="flex items-center justify-center w-8 h-8 rounded-full"
+                style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
+                aria-label="Edit"
+              >
+                <PencilIcon />
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (detail.kind === 'expense') onDeleteExpense(detail.item.id)
+                else onDeleteSettlement(detail.item.id)
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-full"
+              style={{ background: 'rgba(255,59,48,0.1)', border: 'none', cursor: 'pointer', color: '#ff3b30' }}
+              aria-label="Delete"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-5">
+          {detail.kind === 'expense' ? (
+            <>
+              {/* Hero */}
+              <div className="text-center mb-6">
+                {detail.item.category && (
+                  <div style={{ fontSize: '44px', marginBottom: '10px' }}>{detail.item.category}</div>
+                )}
+                <p style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>{detail.item.description}</p>
+                <p style={{ fontSize: '30px', fontWeight: 300, color: 'var(--tg-theme-button-color)', marginBottom: '5px' }}>
+                  {detail.item.currency} {Number(detail.item.total_amount).toFixed(2)}
+                </p>
+                <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>
+                  {detail.item.paid_by_name} paid · {formatDate(detail.item.date)}
+                </p>
+              </div>
+
+              {/* Split breakdown */}
+              <p className="tg-label mb-2">Split</p>
+              <div className="tg-section">
+                {detail.splits === null ? (
+                  <div className="flex justify-center py-5">
+                    <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
+                  </div>
+                ) : detail.splits.map((split, i) => {
+                  const isMe = split.member_id === currentMemberId
+                  const isPayer = split.member_id === detail.item.paid_by_member_id
+                  const isLast = i === detail.splits!.length - 1
+                  return (
+                    <div
+                      key={split.id ?? i}
+                      className="flex items-center justify-between"
+                      style={{
+                        padding: '11px 16px',
+                        borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
+                        background: isMe ? 'rgba(36,129,204,0.04)' : undefined,
+                      }}
+                    >
+                      <p className="text-sm" style={{ fontWeight: isMe ? 600 : 400 }}>
+                        {isMe ? 'You' : split.member_name}
+                        {isPayer && (
+                          <span style={{ fontSize: '11px', color: 'var(--tg-theme-hint-color)', marginLeft: '6px' }}>paid</span>
+                        )}
+                      </p>
+                      <p className="text-sm font-semibold" style={{
+                        color: isPayer ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-text-color)',
+                      }}>
+                        {detail.item.currency} {Number(split.amount).toFixed(2)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            /* Settlement detail */
+            <div className="text-center py-6">
+              <div style={{ fontSize: '44px', marginBottom: '12px' }}>💸</div>
+              <p style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>
+                {detail.item.from_name} paid {detail.item.to_name}
+              </p>
+              <p style={{ fontSize: '30px', fontWeight: 300, color: '#34c759', marginBottom: '5px' }}>
+                {detail.item.currency} {Number(detail.item.amount).toFixed(2)}
+              </p>
+              <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>
+                Settlement · {formatDate(detail.item.created_at)}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -145,11 +261,9 @@ export function ExpensesPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [deletingSettlementId, setDeletingSettlementId] = useState<number | null>(null)
   const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
-  const [actionSheet, setActionSheet] = useState<{ kind: 'expense'; id: number } | { kind: 'settlement'; id: number } | null>(null)
+  const [detail, setDetail] = useState<DetailState | null>(null)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -193,21 +307,18 @@ export function ExpensesPage() {
   useEffect(() => { fetchBalance() }, [fetchBalance])
   useEffect(() => { fetchSettlements() }, [fetchSettlements])
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: number, onSuccess?: () => void) => {
     const tg = window.Telegram?.WebApp
     const doDelete = async () => {
-      setDeletingId(id)
       try {
         await fetch(`/api/groups/${chatId}/expenses/${id}`, { method: 'DELETE', headers: apiHeaders })
         fetchExpenses(page)
         fetchBalance()
+        onSuccess?.()
       } catch (e) {
         alert(String(e))
-      } finally {
-        setDeletingId(null)
       }
     }
-
     if (tg) {
       tg.showConfirm('Delete this expense?', confirmed => { if (confirmed) doDelete() })
     } else if (confirm('Delete this expense?')) {
@@ -215,18 +326,16 @@ export function ExpensesPage() {
     }
   }
 
-  const handleDeleteSettlement = (id: number) => {
+  const handleDeleteSettlement = (id: number, onSuccess?: () => void) => {
     const tg = window.Telegram?.WebApp
     const doDelete = async () => {
-      setDeletingSettlementId(id)
       try {
         await fetch(`/api/groups/${chatId}/settlements/${id}`, { method: 'DELETE', headers: apiHeaders })
         fetchSettlements()
         fetchBalance()
+        onSuccess?.()
       } catch (e) {
         alert(String(e))
-      } finally {
-        setDeletingSettlementId(null)
       }
     }
     if (tg) {
@@ -234,6 +343,24 @@ export function ExpensesPage() {
     } else if (confirm('Delete this payment record?')) {
       doDelete()
     }
+  }
+
+  const openExpenseDetail = (exp: Expense) => {
+    setDetail({ kind: 'expense', item: exp, splits: null })
+    fetch(`/api/groups/${chatId}/expenses/${exp.id}`, { headers: apiHeaders })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setDetail(prev =>
+          prev?.kind === 'expense' && prev.item.id === exp.id
+            ? { ...prev, splits: data.splits ?? [] }
+            : prev
+        )
+      })
+      .catch(() => {})
+  }
+
+  const openSettlementDetail = (s: Settlement) => {
+    setDetail({ kind: 'settlement', item: s })
   }
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
@@ -267,12 +394,11 @@ export function ExpensesPage() {
   return (
     <>
     <div className="flex flex-col h-full">
-    {/* Fixed header: title, balance, action buttons */}
+    {/* Fixed header */}
     <div
       className="flex-shrink-0 px-4 pt-4 pb-3"
       style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 rgba(0,0,0,0.08)' }}
     >
-      {/* Top row: title + balance + members icon */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
@@ -286,12 +412,7 @@ export function ExpensesPage() {
           <button
             onClick={() => setShowMembers(true)}
             className="flex items-center justify-center w-9 h-9 rounded-full"
-            style={{
-              background: 'var(--tg-theme-secondary-bg-color)',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '18px',
-            }}
+            style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '18px' }}
             aria-label="Group members"
           >
             👥
@@ -302,17 +423,11 @@ export function ExpensesPage() {
         </div>
       </div>
 
-      {/* Action buttons row */}
       <div className="flex gap-2">
         <button
           onClick={() => navigate('/balances')}
           className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-          style={{
-            background: 'var(--tg-theme-section-bg-color)',
-            border: '1px solid rgba(0,0,0,0.12)',
-            cursor: 'pointer',
-            color: 'var(--tg-theme-text-color)',
-          }}
+          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
           ⚖️ Balances
         </button>
@@ -326,7 +441,7 @@ export function ExpensesPage() {
       </div>
     </div>
 
-    {/* Scrollable list area */}
+    {/* Scrollable list */}
     <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
       {loading && (
         <div className="flex justify-center py-12">
@@ -350,7 +465,6 @@ export function ExpensesPage() {
         </div>
       )}
 
-      {/* Merged expense + settlement list, sorted by date desc */}
       <div className="flex flex-col gap-2">
         {[
           ...expenses.map(e => ({ kind: 'expense' as const, date: new Date(e.date).getTime(), data: e })),
@@ -361,7 +475,12 @@ export function ExpensesPage() {
             if (item.kind === 'settlement') {
               const s = item.data
               return (
-                <div key={`s-${s.id}`} className="tg-section" style={{ borderRadius: '12px' }}>
+                <div
+                  key={`s-${s.id}`}
+                  className="tg-section"
+                  style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)' }}
+                  onClick={() => openSettlementDetail(s)}
+                >
                   <div className="flex items-center gap-3 p-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
@@ -379,14 +498,7 @@ export function ExpensesPage() {
                       >
                         Paid
                       </span>
-                      <button
-                        onClick={() => setActionSheet({ kind: 'settlement', id: s.id })}
-                        className="flex items-center justify-center w-7 h-7 rounded-full"
-                        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '16px', letterSpacing: '-1px', color: 'var(--tg-theme-hint-color)' }}
-                        aria-label="More options"
-                      >
-                        ···
-                      </button>
+                      <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
                     </div>
                   </div>
                 </div>
@@ -396,14 +508,14 @@ export function ExpensesPage() {
             const exp = item.data
             const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
             const isPayer = exp.paid_by_member_id === currentMember.id
-            const total = Number(exp.total_amount)
+            const expTotal = Number(exp.total_amount)
             let myVerbLabel: string | null = null
             let myAmtDisplay: string | null = null
             let myLabelColor = 'var(--tg-theme-hint-color)'
             if (myAmt !== null) {
-              if (isPayer && total - myAmt > 0.005) {
+              if (isPayer && expTotal - myAmt > 0.005) {
                 myVerbLabel = 'You lent'
-                myAmtDisplay = `${exp.currency} ${(total - myAmt).toFixed(2)}`
+                myAmtDisplay = `${exp.currency} ${(expTotal - myAmt).toFixed(2)}`
                 myLabelColor = 'var(--tg-theme-button-color)'
               } else if (!isPayer && myAmt > 0.005) {
                 myVerbLabel = 'You borrowed'
@@ -412,9 +524,13 @@ export function ExpensesPage() {
               }
             }
             return (
-              <div key={`e-${exp.id}`} className="tg-section" style={{ borderRadius: '12px' }}>
+              <div
+                key={`e-${exp.id}`}
+                className="tg-section"
+                style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)' }}
+                onClick={() => openExpenseDetail(exp)}
+              >
                 <div className="flex items-start gap-3 p-3">
-                  {/* Left: info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-base truncate">{exp.description}</p>
                     {exp.category && (
@@ -423,12 +539,11 @@ export function ExpensesPage() {
                       </p>
                     )}
                     <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                      {exp.paid_by_name ?? '?'} paid {exp.currency} {total.toFixed(2)} · {formatDate(exp.date)}
+                      {exp.paid_by_name ?? '?'} paid {exp.currency} {expTotal.toFixed(2)} · {formatDate(exp.date)}
                     </p>
                   </div>
 
-                  {/* Right: personal amount + actions */}
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
                     {myVerbLabel ? (
                       <div className="flex flex-col items-end gap-0.5">
                         <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
@@ -437,14 +552,7 @@ export function ExpensesPage() {
                     ) : (
                       <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
                     )}
-                    <button
-                      onClick={() => setActionSheet({ kind: 'expense', id: exp.id })}
-                      className="flex items-center justify-center w-7 h-7 rounded-full"
-                      style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', fontSize: '16px', letterSpacing: '-1px', color: 'var(--tg-theme-hint-color)' }}
-                      aria-label="More options"
-                    >
-                      ···
-                    </button>
+                    <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
                   </div>
                 </div>
               </div>
@@ -452,7 +560,6 @@ export function ExpensesPage() {
           })}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-6 mt-4 py-2">
           <button
@@ -482,18 +589,14 @@ export function ExpensesPage() {
 
     {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}
 
-    {actionSheet && (
-      <ActionSheet
-        onClose={() => setActionSheet(null)}
-        actions={actionSheet.kind === 'expense'
-          ? [
-              { label: 'Edit', onClick: () => navigate(`/edit/${actionSheet.id}`) },
-              { label: 'Delete', destructive: true, onClick: () => handleDelete(actionSheet.id) },
-            ]
-          : [
-              { label: 'Delete', destructive: true, onClick: () => handleDeleteSettlement(actionSheet.id) },
-            ]
-        }
+    {detail && (
+      <DetailPanel
+        detail={detail}
+        onClose={() => setDetail(null)}
+        onEdit={id => navigate(`/edit/${id}`)}
+        onDeleteExpense={id => handleDelete(id, () => setDetail(null))}
+        onDeleteSettlement={id => handleDeleteSettlement(id, () => setDetail(null))}
+        currentMemberId={currentMember.id}
       />
     )}
     </>
