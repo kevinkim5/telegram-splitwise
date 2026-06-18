@@ -90,7 +90,7 @@ function ReceiptLoader() {
           padding: '14px 16px 22px',
           display: 'flex', flexDirection: 'column', gap: 7,
           boxShadow: '0 10px 32px rgba(0,0,0,0.18)',
-          animation: 'printerFeed 0.7s cubic-bezier(0.22,1,0.36,1) 0.1s both',
+          animation: 'printerFeed 2s cubic-bezier(0.4,0,0.2,1) 0.1s both',
           position: 'relative',
         }}>
           {/* Torn edge */}
@@ -157,7 +157,7 @@ function ReceiptLoader() {
       {/* Status text */}
       <p style={{
         marginTop: 24, fontSize: 13, color: 'var(--tg-theme-hint-color)',
-        animation: 'fadeIn 0.5s ease 0.6s both',
+        animation: 'fadeIn 0.5s ease 1.8s both',
       }}>
         Calculating your split…
       </p>
