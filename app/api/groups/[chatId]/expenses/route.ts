@@ -86,8 +86,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   let resolvedSplits: { member_id: number; amount: number }[]
 
   if (split_type === 'equal') {
-    const share = Math.round((total_amount / splits.length) * 100) / 100
-    resolvedSplits = splits.map(s => ({ member_id: s.member_id, amount: share }))
+    const n = splits.length
+    const share = Math.round((total_amount / n) * 100) / 100
+    const last = Math.round((total_amount - share * (n - 1)) * 100) / 100
+    resolvedSplits = splits.map((s, i) => ({ member_id: s.member_id, amount: i === n - 1 ? last : share }))
   } else {
     const sum = splits.reduce((a, s) => a + (s.amount ?? 0), 0)
     if (Math.abs(sum - total_amount) > 0.02) {

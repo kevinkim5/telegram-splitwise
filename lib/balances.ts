@@ -16,7 +16,7 @@ export function simplifyDebts(balances: NamedBalance[]): SimplifiedDebt[] {
     .filter(b => b.net_amount < -0.005)
     .map(b => ({ ...b, net_amount: Math.round(Math.abs(b.net_amount) * 100) / 100 }))
 
-  // Sort descending so pop() yields the largest
+  // Sort ascending so pop() yields the largest
   creditors.sort((a, b) => a.net_amount - b.net_amount)
   debtors.sort((a, b) => a.net_amount - b.net_amount)
 
