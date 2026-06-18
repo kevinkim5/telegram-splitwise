@@ -33,10 +33,12 @@ export async function ensureSchema() {
       split_type           VARCHAR(20) NOT NULL DEFAULT 'equal' CHECK(split_type IN ('equal', 'custom')),
       created_by_member_id INTEGER NOT NULL REFERENCES members(id),
       date                 DATE NOT NULL DEFAULT CURRENT_DATE,
+      category             VARCHAR(50),
       created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       deleted_at           TIMESTAMPTZ
     )
   `
+  await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(50)`
   await sql`
     CREATE TABLE IF NOT EXISTS expense_splits (
       id         SERIAL PRIMARY KEY,

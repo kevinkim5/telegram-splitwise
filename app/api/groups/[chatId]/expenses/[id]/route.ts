@@ -58,13 +58,14 @@ export async function PUT(
   if (!existing) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
 
   const body = await request.json()
-  const { description, total_amount, paid_by_member_id, split_type, splits, date } = body as {
+  const { description, total_amount, paid_by_member_id, split_type, splits, date, category } = body as {
     description: string
     total_amount: number
     paid_by_member_id: number
     split_type: 'equal' | 'custom'
     splits: { member_id: number; amount?: number }[]
     date?: string
+    category?: string
   }
 
   if (!description || !total_amount || !paid_by_member_id || !splits?.length) {
@@ -95,7 +96,8 @@ export async function PUT(
         total_amount = ${total_amount},
         paid_by_member_id = ${paid_by_member_id},
         split_type = ${split_type},
-        date = ${expenseDate}
+        date = ${expenseDate},
+        category = ${category ?? null}
     WHERE id = ${parseInt(id)}
   `
 

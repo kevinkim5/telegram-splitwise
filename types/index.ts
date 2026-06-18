@@ -34,6 +34,7 @@ export interface Expense {
   split_type: 'equal' | 'custom'
   created_by_member_id: number
   date: string
+  category?: string
   created_at: string
   paid_by_name?: string
   splits?: ExpenseSplit[]

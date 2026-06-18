@@ -1,33 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-
 const CURRENCIES = [
+  { code: 'SGD', name: 'Singapore Dollar' },
   { code: 'USD', name: 'US Dollar' },
   { code: 'EUR', name: 'Euro' },
-  { code: 'GBP', name: 'British Pound' },
   { code: 'JPY', name: 'Japanese Yen' },
-  { code: 'CAD', name: 'Canadian Dollar' },
-  { code: 'AUD', name: 'Australian Dollar' },
-  { code: 'CHF', name: 'Swiss Franc' },
-  { code: 'SGD', name: 'Singapore Dollar' },
-  { code: 'HKD', name: 'Hong Kong Dollar' },
   { code: 'KRW', name: 'South Korean Won' },
   { code: 'CNY', name: 'Chinese Yuan' },
-  { code: 'INR', name: 'Indian Rupee' },
-  { code: 'MYR', name: 'Malaysian Ringgit' },
+  { code: 'HKD', name: 'Hong Kong Dollar' },
   { code: 'THB', name: 'Thai Baht' },
+  { code: 'MYR', name: 'Malaysian Ringgit' },
   { code: 'IDR', name: 'Indonesian Rupiah' },
   { code: 'PHP', name: 'Philippine Peso' },
   { code: 'VND', name: 'Vietnamese Dong' },
-  { code: 'BRL', name: 'Brazilian Real' },
-  { code: 'MXN', name: 'Mexican Peso' },
-  { code: 'NZD', name: 'New Zealand Dollar' },
-  { code: 'SEK', name: 'Swedish Krona' },
-  { code: 'NOK', name: 'Norwegian Krone' },
-  { code: 'DKK', name: 'Danish Krone' },
-  { code: 'AED', name: 'UAE Dirham' },
-  { code: 'SAR', name: 'Saudi Riyal' },
+  { code: 'TWD', name: 'Taiwan Dollar' },
+  { code: 'INR', name: 'Indian Rupee' },
 ]
 
 interface Props {
@@ -38,14 +25,6 @@ interface Props {
 }
 
 export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Props) {
-  const [search, setSearch] = useState('')
-
-  const filtered = CURRENCIES.filter(
-    c =>
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      c.name.toLowerCase().includes(search.toLowerCase())
-  )
-
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
@@ -60,7 +39,7 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
         }}
       >
         {/* Header */}
-        <div className="flex justify-between items-center p-4 pb-2">
+        <div className="flex justify-between items-center p-4 pb-3">
           <div>
             <h2 className="text-lg font-bold">
               {isFirstTime ? 'Set Group Currency' : 'Change Currency'}
@@ -81,25 +60,12 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
           )}
         </div>
 
-        {/* Search */}
-        <div className="px-4 pb-3">
-          <div className="tg-section">
-            <input
-              className="tg-input"
-              placeholder="Search currency…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              autoFocus={false}
-            />
-          </div>
-        </div>
-
         {/* List */}
         <div className="overflow-y-auto flex-1 px-4 pb-6">
           <div className="tg-section">
-            {filtered.map((c, idx) => {
+            {CURRENCIES.map((c, idx) => {
               const isSelected = c.code === current
-              const isLast = idx === filtered.length - 1
+              const isLast = idx === CURRENCIES.length - 1
               return (
                 <button
                   key={c.code}
@@ -121,11 +87,6 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
                 </button>
               )
             })}
-            {filtered.length === 0 && (
-              <div className="p-4 text-center text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                No currencies found
-              </div>
-            )}
           </div>
         </div>
       </div>

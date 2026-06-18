@@ -10,9 +10,14 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+interface MyBalance {
+  amount: number
+  currency: string
+}
+
 export function ExpensesPage() {
   const router = useRouter()
-  const { chatId, group, apiHeaders } = useAppContext()
+  const { chatId, group, currentMember, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [total, setTotal] = useState(0)
@@ -20,6 +25,7 @@ export function ExpensesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [myBalance, setMyBalance] = useState<MyBalance | null>(null)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -37,7 +43,19 @@ export function ExpensesPage() {
     }
   }, [chatId, apiHeaders])
 
+  const fetchBalance = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
+      if (!res.ok) return
+      const data = await res.json()
+      const mine = (data.balances as Array<{ member_id: number; net_amount: number }>)
+        .find(b => b.member_id === currentMember.id)
+      if (mine) setMyBalance({ amount: mine.net_amount, currency: data.currency as string })
+    } catch { /* ignore */ }
+  }, [chatId, apiHeaders, currentMember.id])
+
   useEffect(() => { fetchExpenses(page) }, [fetchExpenses, page])
+  useEffect(() => { fetchBalance() }, [fetchBalance])
 
   const handleDelete = (id: number) => {
     const tg = window.Telegram?.WebApp
@@ -46,6 +64,7 @@ export function ExpensesPage() {
       try {
         await fetch(`/api/groups/${chatId}/expenses/${id}`, { method: 'DELETE', headers: apiHeaders })
         fetchExpenses(page)
+        fetchBalance()
       } catch (e) {
         alert(String(e))
       } finally {
@@ -65,15 +84,30 @@ export function ExpensesPage() {
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
+  const balanceText = myBalance === null ? null
+    : myBalance.amount > 0.005
+      ? `You are owed ${myBalance.currency} ${myBalance.amount.toFixed(2)}`
+      : myBalance.amount < -0.005
+        ? `You owe ${myBalance.currency} ${Math.abs(myBalance.amount).toFixed(2)}`
+        : 'All settled up ✓'
+
+  const balanceColor = myBalance && myBalance.amount > 0.005
+    ? 'var(--tg-theme-button-color)'
+    : myBalance && myBalance.amount < -0.005
+      ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
+      : 'var(--tg-theme-hint-color)'
+
   return (
     <div className="p-4">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {group.currency} · {total} expense{total !== 1 ? 's' : ''}
-          </p>
+          {balanceText && (
+            <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>
+              {balanceText}
+            </p>
+          )}
         </div>
         <button
           onClick={() => navigate('/add')}
@@ -118,11 +152,13 @@ export function ExpensesPage() {
               {/* Left: info */}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-base truncate">{exp.description}</p>
-                <p className="text-sm mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  Paid by {exp.paid_by_name ?? '?'}
-                </p>
+                {exp.category && (
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                    {exp.category}
+                  </p>
+                )}
                 <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {formatDate(exp.date)}
+                  Paid by {exp.paid_by_name ?? '?'} · {formatDate(exp.date)}
                 </p>
               </div>
 

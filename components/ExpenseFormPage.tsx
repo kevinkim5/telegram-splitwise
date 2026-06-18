@@ -10,6 +10,19 @@ interface Props {
   editId?: string
 }
 
+const CATEGORIES = [
+  '🍜 Food',
+  '🍺 Drinks',
+  '🏨 Stay',
+  '✈️ Flights',
+  '🚌 Transport',
+  '🚕 Taxi',
+  '🎡 Activities',
+  '🛒 Shopping',
+  '💊 Medical',
+  '📦 Other',
+]
+
 export function ExpenseFormPage({ editId }: Props) {
   const router = useRouter()
   const { chatId, group, members, currentMember, apiHeaders, refreshGroup } = useAppContext()
@@ -22,6 +35,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal')
   const [selectedMembers, setSelectedMembers] = useState<number[]>(members.map(m => m.id))
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({})
+  const [category, setCategory] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
@@ -39,6 +53,7 @@ export function ExpenseFormPage({ editId }: Props) {
         setDate(exp.date ? exp.date.split('T')[0] : new Date().toISOString().split('T')[0])
         setPaidBy(exp.paid_by_member_id)
         setSplitType(exp.split_type)
+        setCategory(exp.category ?? '')
         const ids = (exp.splits ?? []).map(s => s.member_id)
         setSelectedMembers(ids.length ? ids : members.map(m => m.id))
         if (exp.split_type === 'custom') {
@@ -61,13 +76,11 @@ export function ExpenseFormPage({ editId }: Props) {
     )
   }
 
-  // Live calculation of per-person split for equal mode
   const totalAmt = parseFloat(amount) || 0
   const perPerson = selectedMembers.length > 0 && totalAmt > 0
     ? (totalAmt / selectedMembers.length).toFixed(2)
     : null
 
-  // Custom amounts sum
   const customSum = selectedMembers.reduce((sum, id) => sum + (parseFloat(customAmounts[id] ?? '0') || 0), 0)
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
@@ -110,6 +123,7 @@ export function ExpenseFormPage({ editId }: Props) {
       split_type: splitType,
       splits,
       date,
+      category: category || null,
     }
 
     setSubmitting(true)
@@ -176,55 +190,82 @@ export function ExpenseFormPage({ editId }: Props) {
           </div>
         </div>
 
-        {/* Amount + Date */}
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <p className="tg-label">Amount</p>
-            <div className="tg-section" style={{ display: 'flex', alignItems: 'stretch' }}>
+        {/* Category */}
+        <div>
+          <p className="tg-label">Category</p>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.map(cat => (
               <button
+                key={cat}
                 type="button"
-                onClick={() => setShowCurrencyPicker(true)}
+                onClick={() => setCategory(prev => prev === cat ? '' : cat)}
+                className="text-sm px-3 py-1.5 rounded-full"
                 style={{
-                  color: 'var(--tg-theme-link-color)',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  padding: '12px 10px 12px 16px',
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: 'none',
                   border: 'none',
-                  borderRight: '1px solid rgba(0,0,0,0.1)',
                   cursor: 'pointer',
+                  background: category === cat
+                    ? 'var(--tg-theme-button-color)'
+                    : 'var(--tg-theme-section-bg-color)',
+                  color: category === cat
+                    ? 'var(--tg-theme-button-text-color)'
+                    : 'var(--tg-theme-text-color)',
                 }}
               >
-                {group.currency}
+                {cat}
               </button>
-              <input
-                className="tg-input"
-                style={{ paddingLeft: '10px' }}
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0.01"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                required
-                placeholder="0.00"
-              />
-            </div>
+            ))}
           </div>
-          <div className="flex-1">
-            <p className="tg-label">Date</p>
-            <div className="tg-section">
-              <input
-                className="tg-input"
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                required
-              />
-            </div>
+        </div>
+
+        {/* Amount + Currency */}
+        <div>
+          <p className="tg-label">Amount</p>
+          <div className="tg-section" style={{ display: 'flex', alignItems: 'stretch' }}>
+            <button
+              type="button"
+              onClick={() => setShowCurrencyPicker(true)}
+              style={{
+                color: 'var(--tg-theme-link-color)',
+                fontSize: '16px',
+                fontWeight: '600',
+                padding: '12px 10px 12px 16px',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                background: 'none',
+                border: 'none',
+                borderRight: '1px solid rgba(0,0,0,0.1)',
+                cursor: 'pointer',
+              }}
+            >
+              {group.currency}
+            </button>
+            <input
+              className="tg-input"
+              style={{ paddingLeft: '10px' }}
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              required
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+
+        {/* Date */}
+        <div>
+          <p className="tg-label">Date</p>
+          <div className="tg-section">
+            <input
+              className="tg-input"
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              required
+            />
           </div>
         </div>
 
