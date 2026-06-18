@@ -184,8 +184,8 @@ export function ExpensesPage() {
           onClick={() => navigate('/balances')}
           className="flex-1 py-2.5 rounded-xl text-sm font-medium"
           style={{
-            background: 'var(--tg-theme-secondary-bg-color)',
-            border: 'none',
+            background: 'var(--tg-theme-section-bg-color)',
+            border: '1px solid rgba(0,0,0,0.12)',
             cursor: 'pointer',
             color: 'var(--tg-theme-text-color)',
           }}
