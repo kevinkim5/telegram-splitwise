@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import type { Expense, ExpenseSplit, Settlement } from '@/types'
+import type { Expense, ExpenseSplit, Member, Settlement } from '@/types'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -66,19 +66,67 @@ function TrashIcon() {
 
 function DetailPanel({
   detail,
+  members,
   onClose,
   onEdit,
   onDeleteExpense,
   onDeleteSettlement,
+  onUpdateSettlement,
   currentMemberId,
 }: {
   detail: DetailState
+  members: Member[]
   onClose: () => void
   onEdit: (id: number) => void
   onDeleteExpense: (id: number) => void
   onDeleteSettlement: (id: number) => void
+  onUpdateSettlement: (id: number, data: { from_member_id: number; to_member_id: number; amount: number; currency: string }) => Promise<void>
   currentMemberId: number
 }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editFrom, setEditFrom] = useState(0)
+  const [editTo, setEditTo] = useState(0)
+  const [editAmount, setEditAmount] = useState('')
+  const [editCurrency, setEditCurrency] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+
+  const memberName = (m: Member) => `${m.first_name}${m.last_name ? ` ${m.last_name}` : ''}`
+
+  const startEditing = () => {
+    if (detail.kind !== 'settlement') return
+    setEditFrom(detail.item.from_member_id)
+    setEditTo(detail.item.to_member_id)
+    setEditAmount(Number(detail.item.amount).toFixed(2))
+    setEditCurrency(detail.item.currency)
+    setEditError(null)
+    setIsEditing(true)
+  }
+
+  const handleSave = async () => {
+    if (detail.kind !== 'settlement') return
+    const amt = parseFloat(editAmount)
+    if (isNaN(amt) || amt <= 0) { setEditError('Enter a valid amount'); return }
+    if (editFrom === editTo) { setEditError('From and To must be different people'); return }
+    if (!editCurrency.trim()) { setEditError('Enter a currency code'); return }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await onUpdateSettlement(detail.item.id, {
+        from_member_id: editFrom,
+        to_member_id: editTo,
+        amount: amt,
+        currency: editCurrency.trim().toUpperCase(),
+      })
+      setIsEditing(false)
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    } catch (err) {
+      setEditError(String(err))
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
@@ -94,45 +142,74 @@ function DetailPanel({
           className="flex items-center justify-between px-4 py-3 flex-shrink-0"
           style={{ borderBottom: '0.5px solid rgba(0,0,0,0.08)' }}
         >
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: '15px', fontWeight: 500, padding: '4px 0' }}
-          >
-            ← Back
-          </button>
-          <span style={{ fontSize: '17px', fontWeight: 600 }}>
-            {detail.kind === 'expense' ? 'Expense' : 'Settlement'}
-          </span>
-          <div className="flex items-center gap-2">
-            {detail.kind === 'expense' && (
+          {isEditing ? (
+            <>
               <button
-                onClick={() => onEdit(detail.item.id)}
-                className="flex items-center justify-center w-8 h-8 rounded-full"
-                style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
-                aria-label="Edit"
+                onClick={() => setIsEditing(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: '15px', fontWeight: 500, padding: '4px 0' }}
               >
-                <PencilIcon />
+                Cancel
               </button>
-            )}
-            <button
-              onClick={() => {
-                if (detail.kind === 'expense') onDeleteExpense(detail.item.id)
-                else onDeleteSettlement(detail.item.id)
-              }}
-              className="flex items-center justify-center w-8 h-8 rounded-full"
-              style={{ background: 'rgba(255,59,48,0.1)', border: 'none', cursor: 'pointer', color: '#ff3b30' }}
-              aria-label="Delete"
-            >
-              <TrashIcon />
-            </button>
-          </div>
+              <span style={{ fontSize: '17px', fontWeight: 600 }}>Edit Settlement</span>
+              <button
+                onClick={handleSave}
+                disabled={editSaving}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: '15px', fontWeight: 600, padding: '4px 0', opacity: editSaving ? 0.5 : 1 }}
+              >
+                {editSaving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: '15px', fontWeight: 500, padding: '4px 0' }}
+              >
+                ← Back
+              </button>
+              <span style={{ fontSize: '17px', fontWeight: 600 }}>
+                {detail.kind === 'expense' ? 'Expense' : 'Settlement'}
+              </span>
+              <div className="flex items-center gap-2">
+                {detail.kind === 'expense' ? (
+                  <button
+                    onClick={() => onEdit(detail.item.id)}
+                    className="flex items-center justify-center w-8 h-8 rounded-full"
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
+                    aria-label="Edit"
+                  >
+                    <PencilIcon />
+                  </button>
+                ) : (
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center justify-center w-8 h-8 rounded-full"
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
+                    aria-label="Edit"
+                  >
+                    <PencilIcon />
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (detail.kind === 'expense') onDeleteExpense(detail.item.id)
+                    else onDeleteSettlement(detail.item.id)
+                  }}
+                  className="flex items-center justify-center w-8 h-8 rounded-full"
+                  style={{ background: 'rgba(255,59,48,0.1)', border: 'none', cursor: 'pointer', color: '#ff3b30' }}
+                  aria-label="Delete"
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-5">
           {detail.kind === 'expense' ? (
             <>
-              {/* Hero */}
               <div className="text-center mb-6">
                 {detail.item.category && (
                   <div style={{ fontSize: '44px', marginBottom: '10px' }}>{detail.item.category}</div>
@@ -146,7 +223,6 @@ function DetailPanel({
                 </p>
               </div>
 
-              {/* Split breakdown */}
               <p className="tg-label mb-2">Split</p>
               <div className="tg-section">
                 {detail.splits === null ? (
@@ -183,8 +259,71 @@ function DetailPanel({
                 })}
               </div>
             </>
+          ) : isEditing ? (
+            /* Settlement edit form */
+            <div className="flex flex-col gap-4">
+              {editError && (
+                <p className="text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{editError}</p>
+              )}
+              <div>
+                <p className="tg-label mb-2">From (who paid)</p>
+                <div className="tg-section">
+                  <select
+                    className="tg-input"
+                    value={editFrom}
+                    onChange={e => setEditFrom(Number(e.target.value))}
+                  >
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>{memberName(m)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <p className="tg-label mb-2">To (who received)</p>
+                <div className="tg-section">
+                  <select
+                    className="tg-input"
+                    value={editTo}
+                    onChange={e => setEditTo(Number(e.target.value))}
+                  >
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>{memberName(m)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <p className="tg-label mb-2">Amount ({editCurrency || '—'})</p>
+                <div className="tg-section">
+                  <input
+                    className="tg-input text-lg font-semibold"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0.01"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="tg-label mb-2">Currency</p>
+                <div className="tg-section">
+                  <input
+                    className="tg-input"
+                    type="text"
+                    maxLength={3}
+                    value={editCurrency}
+                    onChange={e => setEditCurrency(e.target.value.toUpperCase())}
+                    placeholder="e.g. SGD"
+                  />
+                </div>
+              </div>
+            </div>
           ) : (
-            /* Settlement detail */
+            /* Settlement view */
             <div className="text-center py-6">
               <div style={{ fontSize: '44px', marginBottom: '12px' }}>💸</div>
               <p style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>
@@ -343,6 +482,25 @@ export function ExpensesPage() {
     } else if (confirm('Delete this payment record?')) {
       doDelete()
     }
+  }
+
+  const handleUpdateSettlement = async (
+    id: number,
+    data: { from_member_id: number; to_member_id: number; amount: number; currency: string }
+  ) => {
+    const res = await fetch(`/api/groups/${chatId}/settlements/${id}`, {
+      method: 'PUT',
+      headers: apiHeaders,
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(d.error ?? `HTTP ${res.status}`)
+    }
+    const updated = await res.json() as Settlement
+    setSettlements(prev => prev.map(s => s.id === id ? updated : s))
+    setDetail(prev => prev?.kind === 'settlement' && prev.item.id === id ? { kind: 'settlement', item: updated } : prev)
+    fetchBalance()
   }
 
   const openExpenseDetail = (exp: Expense) => {
@@ -592,10 +750,12 @@ export function ExpensesPage() {
     {detail && (
       <DetailPanel
         detail={detail}
+        members={members}
         onClose={() => setDetail(null)}
         onEdit={id => navigate(`/edit/${id}`)}
         onDeleteExpense={id => handleDelete(id, () => setDetail(null))}
         onDeleteSettlement={id => handleDeleteSettlement(id, () => setDetail(null))}
+        onUpdateSettlement={handleUpdateSettlement}
         currentMemberId={currentMember.id}
       />
     )}
