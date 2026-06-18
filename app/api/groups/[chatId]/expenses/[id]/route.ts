@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { computeEqualSplits } from '@/lib/splits'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -76,10 +77,7 @@ export async function PUT(
   let resolvedSplits: { member_id: number; amount: number }[]
 
   if (split_type === 'equal') {
-    const n = splits.length
-    const share = Math.round((total_amount / n) * 100) / 100
-    const last = Math.round((total_amount - share * (n - 1)) * 100) / 100
-    resolvedSplits = splits.map((s, i) => ({ member_id: s.member_id, amount: i === n - 1 ? last : share }))
+    resolvedSplits = computeEqualSplits(total_amount, splits.map(s => s.member_id))
   } else {
     const sum = splits.reduce((a, s) => a + (s.amount ?? 0), 0)
     if (Math.abs(sum - total_amount) > 0.02) {
