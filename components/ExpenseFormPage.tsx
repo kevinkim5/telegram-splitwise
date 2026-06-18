@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { CurrencyPicker } from '@/components/CurrencyPicker'
 import type { Expense } from '@/types'
 
 interface Props {
@@ -11,8 +12,9 @@ interface Props {
 
 export function ExpenseFormPage({ editId }: Props) {
   const router = useRouter()
-  const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
+  const { chatId, group, members, currentMember, apiHeaders, refreshGroup } = useAppContext()
   const isEdit = !!editId
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
 
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -69,6 +71,19 @@ export function ExpenseFormPage({ editId }: Props) {
   const customSum = selectedMembers.reduce((sum, id) => sum + (parseFloat(customAmounts[id] ?? '0') || 0), 0)
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
+
+  const handleCurrencySelect = async (currency: string) => {
+    try {
+      await fetch(`/api/groups/${chatId}/settings`, {
+        method: 'PUT',
+        headers: apiHeaders,
+        body: JSON.stringify({ currency }),
+      })
+      await refreshGroup()
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    } catch { /* ignore */ }
+    setShowCurrencyPicker(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -164,10 +179,28 @@ export function ExpenseFormPage({ editId }: Props) {
         {/* Amount + Date */}
         <div className="flex gap-3">
           <div className="flex-1">
-            <p className="tg-label">Amount ({group.currency})</p>
-            <div className="tg-section">
+            <p className="tg-label">Amount</p>
+            <div className="tg-section flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowCurrencyPicker(true)}
+                className="text-sm font-semibold px-2 flex-shrink-0"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--tg-theme-link-color)',
+                  borderRight: '1px solid var(--tg-theme-hint-color)',
+                  marginRight: '8px',
+                  paddingRight: '8px',
+                  lineHeight: '1',
+                }}
+              >
+                {group.currency}
+              </button>
               <input
                 className="tg-input"
+                style={{ padding: 0 }}
                 type="number"
                 inputMode="decimal"
                 step="0.01"
@@ -323,6 +356,14 @@ export function ExpenseFormPage({ editId }: Props) {
           {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Expense'}
         </button>
       </form>
+
+      {showCurrencyPicker && (
+        <CurrencyPicker
+          current={group.currency}
+          onSelect={handleCurrencySelect}
+          onClose={() => setShowCurrencyPicker(false)}
+        />
+      )}
     </div>
   )
 }

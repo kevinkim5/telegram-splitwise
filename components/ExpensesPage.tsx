@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
-import { CurrencyPicker } from '@/components/CurrencyPicker'
 import type { Expense } from '@/types'
 
 function formatDate(dateStr: string) {
@@ -13,7 +12,7 @@ function formatDate(dateStr: string) {
 
 export function ExpensesPage() {
   const router = useRouter()
-  const { chatId, group, apiHeaders, refreshGroup } = useAppContext()
+  const { chatId, group, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [total, setTotal] = useState(0)
@@ -21,7 +20,6 @@ export function ExpensesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -64,44 +62,18 @@ export function ExpensesPage() {
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
 
-  const handleCurrencySelect = async (currency: string) => {
-    try {
-      await fetch(`/api/groups/${chatId}/settings`, {
-        method: 'PUT',
-        headers: apiHeaders,
-        body: JSON.stringify({ currency }),
-      })
-      await refreshGroup()
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    } catch {
-      // ignore
-    }
-    setShowCurrencyPicker(false)
-  }
-
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <>
     <div className="p-4">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          <button
-            onClick={() => setShowCurrencyPicker(true)}
-            className="text-xs mt-0.5 flex items-center gap-1"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--tg-theme-link-color)',
-              padding: 0,
-            }}
-          >
-            {group.currency} · {total} expense{total !== 1 ? 's' : ''} ✎
-          </button>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {group.currency} · {total} expense{total !== 1 ? 's' : ''}
+          </p>
         </div>
         <button
           onClick={() => navigate('/add')}
@@ -214,14 +186,5 @@ export function ExpensesPage() {
         </div>
       )}
     </div>
-
-    {showCurrencyPicker && (
-      <CurrencyPicker
-        current={group.currency}
-        onSelect={handleCurrencySelect}
-        onClose={() => setShowCurrencyPicker(false)}
-      />
-    )}
-    </>
   )
 }
