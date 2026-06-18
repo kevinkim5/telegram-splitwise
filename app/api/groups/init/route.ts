@@ -19,7 +19,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'chatId and chatTitle are required' }, { status: 400 })
   }
 
-  // Upsert group
+  // Check if group already exists
+  const [existing] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const is_new_group = !existing
+
+  // Upsert group — only set currency on insert, not on update (preserve user's setting)
   await sql`
     INSERT INTO groups (chat_id, title, currency)
     VALUES (${BigInt(chatId)}, ${chatTitle}, ${currency ?? 'USD'})
@@ -43,5 +47,5 @@ export async function POST(request: Request) {
     WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}
   `
 
-  return NextResponse.json({ group, member })
+  return NextResponse.json({ group, member, is_new_group })
 }
