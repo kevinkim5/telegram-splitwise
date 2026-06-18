@@ -165,6 +165,103 @@ function ReceiptLoader() {
   )
 }
 
+function HomepageReceipt() {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '100dvh',
+      background: 'var(--tg-theme-bg-color)',
+    }}>
+      <style>{`
+        @keyframes dropIn {
+          from { transform: translateY(-24px); opacity: 0; }
+          to   { transform: translateY(0);     opacity: 1; }
+        }
+        @keyframes fadeUp {
+          from { transform: translateY(10px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+      `}</style>
+
+      {/* App icon */}
+      <div style={{
+        width: 72, height: 72, borderRadius: 20,
+        background: 'linear-gradient(135deg, #2481cc 0%, #34aadc 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 36,
+        boxShadow: '0 8px 24px rgba(36,129,204,0.35)',
+        marginBottom: 16,
+        animation: 'dropIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both',
+      }}>
+        💸
+      </div>
+
+      {/* Receipt card */}
+      <div style={{
+        width: 200,
+        background: '#fff', color: '#1c1c1e',
+        borderRadius: '6px 6px 4px 4px',
+        padding: '16px 18px 24px',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+        position: 'relative',
+        animation: 'dropIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.05s both',
+      }}>
+        {/* Torn bottom edge */}
+        <div style={{
+          position: 'absolute', bottom: -8, left: 0, right: 0, height: 10,
+          background: 'radial-gradient(circle at 8px 0, var(--tg-theme-bg-color) 7px, transparent 7px) repeat-x, #fff',
+          backgroundSize: '16px 10px, 100% 10px',
+        }} />
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', borderBottom: '1px dashed #ccc', paddingBottom: 10, marginBottom: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+            Split Lah Pte. Ltd.
+          </div>
+          <div style={{ fontSize: 9, color: '#aaa', marginTop: 3 }}>Kiasu? Split fair fair.</div>
+        </div>
+
+        {/* Feature list */}
+        {[
+          ['Track expenses', '✓'],
+          ['Split the bill', '✓'],
+          ['Settle debts', '✓'],
+          ['Blur like sotong?', 'We help'],
+        ].map(([label, val]) => (
+          <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 10, color: '#555' }}>{label}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#34c759' }}>{val}</span>
+          </div>
+        ))}
+
+        <div style={{ borderTop: '1px dashed #ccc', margin: '2px 0' }} />
+
+        {/* CTA */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 9, color: '#bbb', marginBottom: 6 }}>
+            No GST • No service charge • Shiok right?
+          </div>
+          <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Bo jio? Cannot lah.
+          </div>
+        </div>
+      </div>
+
+      {/* Instruction */}
+      <div style={{
+        marginTop: 28, maxWidth: 220, textAlign: 'center',
+        animation: 'fadeUp 0.4s ease 0.3s both',
+      }}>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Open from a group chat</p>
+        <p style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.5 }}>
+          Send <strong>/start</strong> to the bot inside your Telegram group, then tap the button it sends.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -264,13 +361,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center gap-4">
-        <div className="text-4xl">💰</div>
-        <h1 className="text-lg font-semibold">Split</h1>
-        <p style={{ color: 'var(--tg-theme-hint-color)' }} className="text-sm">{error}</p>
-      </div>
-    )
+    return <HomepageReceipt />
   }
 
   if (!ctx) {
