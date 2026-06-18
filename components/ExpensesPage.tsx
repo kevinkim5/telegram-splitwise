@@ -217,9 +217,10 @@ export function ExpensesPage() {
 
   return (
     <>
-    {/* Sticky header: title, balance, action buttons */}
+    <div className="flex flex-col h-full">
+    {/* Fixed header: title, balance, action buttons */}
     <div
-      className="sticky top-0 z-10 px-4 pt-4 pb-3"
+      className="flex-shrink-0 px-4 pt-4 pb-3"
       style={{ background: 'var(--tg-theme-bg-color)' }}
     >
       {/* Top row: title + balance + members icon */}
@@ -277,7 +278,7 @@ export function ExpensesPage() {
     </div>
 
     {/* Scrollable list area */}
-    <div className="px-4 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-8">
       {loading && (
         <div className="flex justify-center py-12">
           <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
@@ -443,6 +444,8 @@ export function ExpensesPage() {
           </button>
         </div>
       )}
+    </div>
+
     </div>
 
     {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}

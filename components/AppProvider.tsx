@@ -142,8 +142,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="flex flex-col min-h-screen">
-        <div className="flex-1 overflow-y-auto">
+      <div className="flex flex-col h-full">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {children}
         </div>
       </div>

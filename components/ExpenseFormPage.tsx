@@ -152,7 +152,7 @@ export function ExpenseFormPage({ editId }: Props) {
   }
 
   return (
-    <div className="p-4 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
