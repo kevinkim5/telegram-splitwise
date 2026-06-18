@@ -265,3 +265,164 @@ describe('end-to-end: 4 people even contributions → zero debts', () => {
     expect(simplifyDebts(toNamedBalances(r, 'SGD', NAMES))).toHaveLength(0)
   })
 })
+
+// ─── Settlement editing ───────────────────────────────────────────────────
+
+describe('settlement editing: correcting mistakes', () => {
+  // Alice paid $50 for 2 people; Bob owes $50.
+  const splits2: SplitRow[] = [
+    { paid_by_member_id: ALICE, currency: 'SGD', member_id: ALICE, amount: 50 },
+    { paid_by_member_id: ALICE, currency: 'SGD', member_id: BOB,   amount: 50 },
+  ]
+
+  it('over-payment: editing down to correct amount clears the debt', () => {
+    // Bob accidentally records $60 (over-payment)
+    const rWrong = computeNetBalances([ALICE, BOB], splits2, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 60, currency: 'SGD' },
+    ])
+    expect(net(rWrong, 'SGD', ALICE)).toBe(-10) // Alice is now in the hole
+    expect(net(rWrong, 'SGD', BOB)).toBe(10)
+
+    // Edit: correct to $50
+    const rFixed = computeNetBalances([ALICE, BOB], splits2, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 50, currency: 'SGD' },
+    ])
+    expect(net(rFixed, 'SGD', ALICE)).toBe(0)
+    expect(net(rFixed, 'SGD', BOB)).toBe(0)
+    expect(simplifyDebts(toNamedBalances(rFixed, 'SGD', NAMES))).toHaveLength(0)
+  })
+
+  it('under-payment: residual debt equals the shortfall after edit', () => {
+    // Bob records $30 (should be $50)
+    const rWrong = computeNetBalances([ALICE, BOB], splits2, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 30, currency: 'SGD' },
+    ])
+    expect(net(rWrong, 'SGD', ALICE)).toBe(20)
+    expect(net(rWrong, 'SGD', BOB)).toBe(-20)
+
+    // Edit: correct to $50
+    const rFixed = computeNetBalances([ALICE, BOB], splits2, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 50, currency: 'SGD' },
+    ])
+    expect(net(rFixed, 'SGD', ALICE)).toBe(0)
+    expect(net(rFixed, 'SGD', BOB)).toBe(0)
+  })
+
+  it('wrong direction: from/to swap doubles the apparent debt', () => {
+    // Alice paid $60 for a 3-way split → Alice +40, Bob -20, Carol -20
+    const splits3: SplitRow[] = [
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: ALICE, amount: 20 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: BOB,   amount: 20 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: CAROL, amount: 20 },
+    ]
+    const members = [ALICE, BOB, CAROL]
+
+    // Bob records in wrong direction (Alice→Bob instead of Bob→Alice)
+    const rWrong = computeNetBalances(members, splits3, [
+      { from_member_id: ALICE, to_member_id: BOB, amount: 20, currency: 'SGD' },
+    ])
+    expect(net(rWrong, 'SGD', ALICE)).toBe(60)  // +40 + 20 (made things worse)
+    expect(net(rWrong, 'SGD', BOB)).toBe(-40)   // -20 - 20
+
+    // Edit: correct direction (Bob→Alice)
+    const rFixed = computeNetBalances(members, splits3, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 20, currency: 'SGD' },
+    ])
+    expect(net(rFixed, 'SGD', ALICE)).toBe(20)
+    expect(net(rFixed, 'SGD', BOB)).toBe(0)
+    expect(net(rFixed, 'SGD', CAROL)).toBe(-20)
+
+    const debts = simplifyDebts(toNamedBalances(rFixed, 'SGD', NAMES))
+    expect(debts).toHaveLength(1)
+    expect(debts[0]).toMatchObject({ from_member_id: CAROL, to_member_id: ALICE, amount: 20 })
+  })
+
+  it('wrong currency: SGD debt persists when settlement is recorded in EUR', () => {
+    const splits: SplitRow[] = [
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: BOB, amount: 30 },
+    ]
+
+    // Bob records in wrong currency
+    const rWrong = computeNetBalances([ALICE, BOB], splits, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 30, currency: 'EUR' },
+    ])
+    expect(net(rWrong, 'SGD', ALICE)).toBe(30)  // SGD debt untouched
+    expect(net(rWrong, 'SGD', BOB)).toBe(-30)
+    expect(net(rWrong, 'EUR', BOB)).toBe(30)    // spurious EUR entry
+
+    // Edit: correct to SGD
+    const rFixed = computeNetBalances([ALICE, BOB], splits, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 30, currency: 'SGD' },
+    ])
+    expect(net(rFixed, 'SGD', ALICE)).toBe(0)
+    expect(net(rFixed, 'SGD', BOB)).toBe(0)
+    expect(rFixed.has('EUR')).toBe(false)
+    expect(simplifyDebts(toNamedBalances(rFixed, 'SGD', NAMES))).toHaveLength(0)
+  })
+
+  it('end-to-end: typo in settlement amount corrected → fully settled', () => {
+    // Alice paid $90 for 3-way split
+    const splits: SplitRow[] = [
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: ALICE, amount: 30 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: BOB,   amount: 30 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: CAROL, amount: 30 },
+    ]
+    const members = [ALICE, BOB, CAROL]
+
+    // Bob types $20 (typo — should be $30)
+    const r1 = computeNetBalances(members, splits, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 20, currency: 'SGD' },
+    ])
+    const debts1 = simplifyDebts(toNamedBalances(r1, 'SGD', NAMES))
+    expect(debts1.find(d => d.from_member_id === BOB)?.amount).toBe(10)
+    expect(debts1.find(d => d.from_member_id === CAROL)?.amount).toBe(30)
+
+    // Bob edits to $30 (correct)
+    const r2 = computeNetBalances(members, splits, [
+      { from_member_id: BOB, to_member_id: ALICE, amount: 30, currency: 'SGD' },
+    ])
+    const debts2 = simplifyDebts(toNamedBalances(r2, 'SGD', NAMES))
+    expect(debts2).toHaveLength(1)
+    expect(debts2[0]).toMatchObject({ from_member_id: CAROL, to_member_id: ALICE, amount: 30 })
+
+    // Carol settles too → everyone at zero
+    const r3 = computeNetBalances(members, splits, [
+      { from_member_id: BOB,   to_member_id: ALICE, amount: 30, currency: 'SGD' },
+      { from_member_id: CAROL, to_member_id: ALICE, amount: 30, currency: 'SGD' },
+    ])
+    members.forEach(m => expect(net(r3, 'SGD', m)).toBe(0))
+    expect(simplifyDebts(toNamedBalances(r3, 'SGD', NAMES))).toHaveLength(0)
+  })
+
+  it('editing amount on a multi-person debt only affects the corrected settlement', () => {
+    // Alice paid $90 (3-way); Bob paid $60 (3-way)
+    // Net from splits: Alice +40, Bob +10, Carol -50
+    // (Alice: +30 Bob-share +30 Carol-share -20 Alice-owes-Bob = +40)
+    // (Bob: -30 owes-Alice +20 Carol-share +20 Carol-share = +10)
+    // (Carol: -30 owes-Alice -20 owes-Bob = -50)
+    const splits: SplitRow[] = [
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: ALICE, amount: 30 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: BOB,   amount: 30 },
+      { paid_by_member_id: ALICE, currency: 'SGD', member_id: CAROL, amount: 30 },
+      { paid_by_member_id: BOB,   currency: 'SGD', member_id: ALICE, amount: 20 },
+      { paid_by_member_id: BOB,   currency: 'SGD', member_id: BOB,   amount: 20 },
+      { paid_by_member_id: BOB,   currency: 'SGD', member_id: CAROL, amount: 20 },
+    ]
+
+    // Carol pays Alice $20 (typo — simplifyDebts would say Carol→Alice $40)
+    const r1 = computeNetBalances([ALICE, BOB, CAROL], splits, [
+      { from_member_id: CAROL, to_member_id: ALICE, amount: 20, currency: 'SGD' },
+    ])
+    expect(net(r1, 'SGD', ALICE)).toBe(20)  // 40-20
+    expect(net(r1, 'SGD', BOB)).toBe(10)    // Bob unaffected
+    expect(net(r1, 'SGD', CAROL)).toBe(-30) // -50+20
+
+    // Carol edits to $40 (correct amount owed to Alice per simplifyDebts)
+    const r2 = computeNetBalances([ALICE, BOB, CAROL], splits, [
+      { from_member_id: CAROL, to_member_id: ALICE, amount: 40, currency: 'SGD' },
+    ])
+    expect(net(r2, 'SGD', ALICE)).toBe(0)   // Alice fully settled
+    expect(net(r2, 'SGD', BOB)).toBe(10)    // Bob still owed by Carol, unaffected
+    expect(net(r2, 'SGD', CAROL)).toBe(-10) // Carol still owes Bob $10
+  })
+})
