@@ -125,7 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center gap-4">
         <div className="text-4xl">💰</div>
-        <h1 className="text-lg font-semibold">Splitwise</h1>
+        <h1 className="text-lg font-semibold">Split</h1>
         <p style={{ color: 'var(--tg-theme-hint-color)' }} className="text-sm">{error}</p>
       </div>
     )
