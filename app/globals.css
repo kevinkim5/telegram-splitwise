@@ -18,6 +18,8 @@
   --separator: rgba(0, 0, 0, 0.08);
   --separator-strong: rgba(0, 0, 0, 0.12);
   --overlay: rgba(0, 0, 0, 0.45);
+  --color-success: #15803d;   /* 5.0:1 on white ✅ */
+  --color-accent: #1d6faa;    /* 5.4:1 on white ✅ */
 }
 
 /* ── Noir dark — driven by Telegram's colorScheme via data-scheme on <body> ─ */
@@ -36,6 +38,8 @@ body[data-scheme="dark"] {
   --separator: rgba(255, 255, 255, 0.1);
   --separator-strong: rgba(255, 255, 255, 0.15);
   --overlay: rgba(0, 0, 0, 0.65);
+  --color-success: #4ade80;   /* 10.6:1 on #141414 ✅ */
+  --color-accent: #60a5fa;    /* 6.8:1 on #141414 ✅ */
 }
 
 /* System-level dark fallback (when opened outside Telegram in dark mode) */
@@ -55,6 +59,8 @@ body[data-scheme="dark"] {
     --separator: rgba(255, 255, 255, 0.1);
     --separator-strong: rgba(255, 255, 255, 0.15);
     --overlay: rgba(0, 0, 0, 0.65);
+    --color-success: #4ade80;
+    --color-accent: #60a5fa;
   }
 }
 

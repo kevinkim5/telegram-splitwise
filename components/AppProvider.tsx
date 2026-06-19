@@ -77,8 +77,8 @@ function ReceiptLoader() {
         {/* indicator light */}
         <div style={{
           position: 'absolute', right: 14, width: 6, height: 6,
-          borderRadius: '50%', background: '#34c759',
-          boxShadow: '0 0 6px #34c759',
+          borderRadius: '50%', background: 'var(--color-success)',
+          boxShadow: '0 0 6px var(--color-success)',
         }} />
       </div>
 
@@ -142,10 +142,10 @@ function ReceiptLoader() {
             <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Owe how much?
             </span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#2481cc' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-accent)' }}>
               $—
               <span style={{
-                display: 'inline-block', width: 2, height: 12, background: '#2481cc',
+                display: 'inline-block', width: 2, height: 12, background: 'var(--color-accent)',
                 marginLeft: 1, verticalAlign: 'middle',
                 animation: 'blink 0.8s step-end infinite',
               }} />
@@ -218,7 +218,7 @@ function HomepageReceipt() {
         ].map(([label, val]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <span style={{ fontSize: 10, color: '#555' }}>{label}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#34c759' }}>{val}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-success)' }}>{val}</span>
           </div>
         ))}
 

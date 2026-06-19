@@ -175,7 +175,7 @@ function DetailPanel({
                   <button
                     onClick={() => onEdit(detail.item.id)}
                     className="flex items-center justify-center w-8 h-8 rounded-full"
-                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: 'var(--color-accent)' }}
                     aria-label="Edit"
                   >
                     <PencilIcon />
@@ -184,7 +184,7 @@ function DetailPanel({
                   <button
                     onClick={startEditing}
                     className="flex items-center justify-center w-8 h-8 rounded-full"
-                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: 'var(--color-accent)' }}
                     aria-label="Edit"
                   >
                     <PencilIcon />
@@ -329,7 +329,7 @@ function DetailPanel({
               <p style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>
                 {detail.item.from_name} paid {detail.item.to_name}
               </p>
-              <p style={{ fontSize: '30px', fontWeight: 300, color: '#34c759', marginBottom: '5px' }}>
+              <p style={{ fontSize: '30px', fontWeight: 300, color: 'var(--color-success)', marginBottom: '5px' }}>
                 {detail.item.currency} {Number(detail.item.amount).toFixed(2)}
               </p>
               <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>
@@ -678,7 +678,7 @@ export function ExpensesPage() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+                        style={{ background: 'rgba(52,199,89,0.15)', color: 'var(--color-success)' }}
                       >
                         Paid
                       </span>
