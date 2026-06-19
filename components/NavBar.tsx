@@ -23,7 +23,7 @@ export function NavBar() {
       style={{
         height: '64px',
         background: 'var(--tg-theme-bg-color)',
-        borderTop: '0.5px solid rgba(0,0,0,0.1)',
+        borderTop: '0.5px solid var(--separator)',
         zIndex: 100,
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}

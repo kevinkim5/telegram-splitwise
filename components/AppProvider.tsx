@@ -260,6 +260,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (tg) {
       tg.ready()
       tg.expand()
+      const applyScheme = () => {
+        document.body.dataset.scheme = tg.colorScheme ?? 'light'
+      }
+      applyScheme()
+      tg.onEvent('themeChanged', applyScheme)
     }
 
     const searchParams = new URLSearchParams(window.location.search)

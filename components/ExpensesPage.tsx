@@ -130,7 +130,7 @@ function DetailPanel({
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'rgba(0,0,0,0.4)' }}
+      style={{ background: 'var(--overlay)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
@@ -140,7 +140,7 @@ function DetailPanel({
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ borderBottom: '0.5px solid rgba(0,0,0,0.08)' }}
+          style={{ borderBottom: '0.5px solid var(--separator)' }}
         >
           {isEditing ? (
             <>
@@ -239,7 +239,7 @@ function DetailPanel({
                       className="flex items-center justify-between"
                       style={{
                         padding: '11px 16px',
-                        borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
+                        borderBottom: isLast ? 'none' : '0.5px solid var(--separator)',
                         background: isMe ? 'rgba(36,129,204,0.04)' : undefined,
                       }}
                     >
@@ -348,7 +348,7 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
+      style={{ background: 'var(--overlay)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
@@ -555,7 +555,7 @@ export function ExpensesPage() {
     {/* Fixed header */}
     <div
       className="flex-shrink-0 px-4 pt-4 pb-3"
-      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 rgba(0,0,0,0.08)' }}
+      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 var(--separator)' }}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
@@ -611,7 +611,7 @@ export function ExpensesPage() {
         <button
           onClick={() => navigate('/balances')}
           className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
+          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid var(--separator-strong)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
           ⚖️ Balances
         </button>

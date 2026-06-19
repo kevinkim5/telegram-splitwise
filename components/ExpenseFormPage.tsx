@@ -231,7 +231,7 @@ export function ExpenseFormPage({ editId }: Props) {
                 gap: '6px',
                 background: 'none',
                 border: 'none',
-                borderRight: '1px solid rgba(0,0,0,0.1)',
+                borderRight: '1px solid var(--separator)',
                 cursor: 'pointer',
               }}
             >
