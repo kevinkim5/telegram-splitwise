@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
+import { computeShareSplits } from '@/lib/splits'
 import type { Expense } from '@/types'
 
 interface Props {
@@ -32,9 +33,12 @@ export function ExpenseFormPage({ editId }: Props) {
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [paidBy, setPaidBy] = useState<number>(currentMember.id)
-  const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal')
+  const [splitType, setSplitType] = useState<'equal' | 'custom' | 'shares'>('equal')
   const [selectedMembers, setSelectedMembers] = useState<number[]>(members.map(m => m.id))
   const [customAmounts, setCustomAmounts] = useState<Record<number, string>>({})
+  const [shareAmounts, setShareAmounts] = useState<Record<number, number>>(
+    () => Object.fromEntries(members.map(m => [m.id, 1]))
+  )
   const [category, setCategory] = useState<string>('')
   const [expenseCurrency, setExpenseCurrency] = useState<string>('SGD')
   const [submitting, setSubmitting] = useState(false)
@@ -53,12 +57,13 @@ export function ExpenseFormPage({ editId }: Props) {
         setAmount(String(exp.total_amount))
         setDate(exp.date ? exp.date.split('T')[0] : new Date().toISOString().split('T')[0])
         setPaidBy(exp.paid_by_member_id)
-        setSplitType(exp.split_type)
+        // 'shares' was stored as 'custom'; load it as custom amounts
+        setSplitType(exp.split_type === 'shares' ? 'custom' : exp.split_type)
         setCategory(exp.category ?? '')
         setExpenseCurrency(exp.currency ?? 'SGD')
         const ids = (exp.splits ?? []).map(s => s.member_id)
         setSelectedMembers(ids.length ? ids : members.map(m => m.id))
-        if (exp.split_type === 'custom') {
+        if (exp.split_type === 'custom' || exp.split_type === 'shares') {
           const ca: Record<number, string> = {}
           ;(exp.splits ?? []).forEach(s => { ca[s.member_id] = String(s.amount) })
           setCustomAmounts(ca)
@@ -107,16 +112,32 @@ export function ExpenseFormPage({ editId }: Props) {
       }
     }
 
-    const splits = splitType === 'equal'
-      ? selectedMembers.map(id => ({ member_id: id }))
-      : selectedMembers.map(id => ({ member_id: id, amount: parseFloat(customAmounts[id] ?? '0') || 0 }))
+    if (splitType === 'shares') {
+      const invalid = selectedMembers.some(id => (shareAmounts[id] ?? 1) < 1)
+      if (invalid) { setError('Each person must have at least 1 share.'); return }
+    }
+
+    let splits: Array<{ member_id: number; amount?: number }>
+    let submitSplitType: 'equal' | 'custom'
+
+    if (splitType === 'equal') {
+      splits = selectedMembers.map(id => ({ member_id: id }))
+      submitSplitType = 'equal'
+    } else if (splitType === 'shares') {
+      const computed = computeShareSplits(totalAmt, selectedMembers.map(id => ({ member_id: id, shares: shareAmounts[id] ?? 1 })))
+      splits = computed
+      submitSplitType = 'custom'
+    } else {
+      splits = selectedMembers.map(id => ({ member_id: id, amount: parseFloat(customAmounts[id] ?? '0') || 0 }))
+      submitSplitType = 'custom'
+    }
 
     const body = {
       description,
       total_amount: totalAmt,
       currency: expenseCurrency,
       paid_by_member_id: paidBy,
-      split_type: splitType,
+      split_type: submitSplitType,
       splits,
       date,
       category: category || null,
@@ -290,7 +311,11 @@ export function ExpenseFormPage({ editId }: Props) {
         <div>
           <p className="tg-label">Split type</p>
           <div className="flex gap-2 mb-3">
-            {(['equal', 'custom'] as const).map(type => (
+            {([
+              ['equal', '⚖️ Equal'],
+              ['custom', '✏️ Custom'],
+              ['shares', '🔢 Shares'],
+            ] as const).map(([type, label]) => (
               <button
                 key={type}
                 type="button"
@@ -303,7 +328,7 @@ export function ExpenseFormPage({ editId }: Props) {
                   cursor: 'pointer',
                 }}
               >
-                {type === 'equal' ? '⚖️ Equal' : '✏️ Custom'}
+                {label}
               </button>
             ))}
           </div>
@@ -369,6 +394,49 @@ export function ExpenseFormPage({ editId }: Props) {
                       }}
                     />
                   )}
+
+                  {/* Shares: stepper */}
+                  {splitType === 'shares' && checked && (() => {
+                    const s = shareAmounts[m.id] ?? 1
+                    const totalShares = selectedMembers.reduce((sum, id) => sum + (shareAmounts[id] ?? 1), 0)
+                    const computed = totalShares > 0 && totalAmt > 0
+                      ? (totalAmt * s / totalShares).toFixed(2)
+                      : null
+                    return (
+                      <div className="flex flex-col items-end gap-0.5" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShareAmounts(prev => ({ ...prev, [m.id]: Math.max(1, (prev[m.id] ?? 1) - 1) }))}
+                            style={{
+                              width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                              background: 'var(--tg-theme-secondary-bg-color)',
+                              color: 'var(--tg-theme-text-color)',
+                              fontSize: '16px', fontWeight: 700,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >−</button>
+                          <span style={{ width: 24, textAlign: 'center', fontSize: '15px', fontWeight: 600 }}>{s}</span>
+                          <button
+                            type="button"
+                            onClick={() => setShareAmounts(prev => ({ ...prev, [m.id]: (prev[m.id] ?? 1) + 1 }))}
+                            style={{
+                              width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                              background: 'var(--tg-theme-secondary-bg-color)',
+                              color: 'var(--tg-theme-text-color)',
+                              fontSize: '16px', fontWeight: 700,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >+</button>
+                        </div>
+                        {computed && (
+                          <span style={{ fontSize: '11px', color: 'var(--tg-theme-hint-color)' }}>
+                            {expenseCurrency} {computed}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}
@@ -384,6 +452,15 @@ export function ExpenseFormPage({ editId }: Props) {
               }}>
                 Split total: {expenseCurrency} {customSum.toFixed(2)} / {totalAmt.toFixed(2)}
                 {Math.abs(customSum - totalAmt) < 0.02 ? ' ✓' : ` (${(totalAmt - customSum).toFixed(2)} remaining)`}
+              </p>
+            </div>
+          )}
+
+          {/* Shares summary */}
+          {splitType === 'shares' && (
+            <div className="mt-2 px-1">
+              <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                {selectedMembers.reduce((sum, id) => sum + (shareAmounts[id] ?? 1), 0)} total shares
               </p>
             </div>
           )}

@@ -32,7 +32,7 @@ export interface Expense {
   total_amount: number
   currency: string
   paid_by_member_id: number
-  split_type: 'equal' | 'custom'
+  split_type: 'equal' | 'custom' | 'shares'
   created_by_member_id: number
   date: string
   category?: string
