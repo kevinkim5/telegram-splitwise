@@ -10,6 +10,19 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function formatDateHeader(dateStr: string) {
+  const d = new Date(dateStr)
+  return {
+    date: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+    day: d.toLocaleDateString('en-US', { weekday: 'long' }),
+  }
+}
+
+function getDateKey(dateStr: string): string {
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
 type CurrencyBalance = { amount: number; currency: string }
 
 const AVATAR_COLORS = [
@@ -649,102 +662,128 @@ export function ExpensesPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        {[
-          ...expenses.map(e => ({ kind: 'expense' as const, date: new Date(e.date).getTime(), data: e })),
-          ...settlements.map(s => ({ kind: 'settlement' as const, date: new Date(s.created_at).getTime(), data: s })),
-        ]
-          .sort((a, b) => b.date - a.date)
-          .map(item => {
-            if (item.kind === 'settlement') {
-              const s = item.data
-              return (
-                <div
-                  key={`s-${s.id}`}
-                  className="tg-section"
-                  style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)' }}
-                  onClick={() => openSettlementDetail(s)}
-                >
-                  <div className="flex items-center gap-3 p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">
-                        {s.from_name} paid {s.to_name}{' '}
-                        <span className="font-bold">{s.currency} {Number(s.amount).toFixed(2)}</span>
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                        Settlement · {formatDate(s.created_at)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
-                      >
-                        Paid
-                      </span>
-                      <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            }
+      {(() => {
+        const allItems = [
+          ...expenses.map(e => ({ kind: 'expense' as const, ts: new Date(e.date).getTime(), dateStr: e.date, data: e })),
+          ...settlements.map(s => ({ kind: 'settlement' as const, ts: new Date(s.created_at).getTime(), dateStr: s.created_at, data: s })),
+        ].sort((a, b) => b.ts - a.ts)
 
-            const exp = item.data
-            const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
-            const isPayer = exp.paid_by_member_id === currentMember.id
-            const expTotal = Number(exp.total_amount)
-            let myVerbLabel: string | null = null
-            let myAmtDisplay: string | null = null
-            let myLabelColor = 'var(--tg-theme-hint-color)'
-            if (myAmt !== null) {
-              if (isPayer && expTotal - myAmt > 0.005) {
-                myVerbLabel = 'You lent'
-                myAmtDisplay = `${exp.currency} ${(expTotal - myAmt).toFixed(2)}`
-                myLabelColor = 'var(--tg-theme-button-color)'
-              } else if (!isPayer && myAmt > 0.005) {
-                myVerbLabel = 'You borrowed'
-                myAmtDisplay = `${exp.currency} ${myAmt.toFixed(2)}`
-                myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
-              }
-            }
-            const notInvolved = myVerbLabel === null
-            return (
-              <div
-                key={`e-${exp.id}`}
-                className="tg-section"
-                style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1 }}
-                onClick={() => openExpenseDetail(exp)}
-              >
-                <div className="flex items-center gap-3 p-3">
-                  <div
-                    className="flex items-center justify-center flex-shrink-0"
-                    style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '22px' }}
-                  >
-                    {exp.category ? exp.category.split(' ')[0] : '🧾'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-base truncate">{exp.description}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                      {exp.paid_by_name ?? '?'} paid {exp.currency} {expTotal.toFixed(2)} · {formatDate(exp.date)}
-                    </p>
-                  </div>
+        type ListItem = typeof allItems[number]
+        const groups: Array<{ key: string; dateStr: string; items: ListItem[] }> = []
+        for (const item of allItems) {
+          const key = getDateKey(item.dateStr)
+          const last = groups[groups.length - 1]
+          if (last && last.key === key) { last.items.push(item) }
+          else { groups.push({ key, dateStr: item.dateStr, items: [item] }) }
+        }
 
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    {myVerbLabel ? (
-                      <div className="flex flex-col items-end gap-0.5">
-                        <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
-                        <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
-                      </div>
-                    ) : (
-                      <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
-                    )}
-                    <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
-                  </div>
-                </div>
+        return groups.map((group, gi) => {
+          const { date, day } = formatDateHeader(group.dateStr)
+          return (
+            <div key={group.key} style={{ marginBottom: gi < groups.length - 1 ? 12 : 0 }}>
+              {/* Date header */}
+              <div className="flex items-center gap-2 px-1" style={{ paddingTop: gi === 0 ? 8 : 16, paddingBottom: 8 }}>
+                <div style={{
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                  background: 'var(--tg-theme-hint-color)', opacity: 0.5,
+                }} />
+                <span style={{ fontSize: '13px', fontWeight: 700 }}>{date}</span>
+                <span style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>{day}</span>
               </div>
-            )
-          })}
-      </div>
+
+              {/* Items */}
+              <div className="flex flex-col gap-2">
+                {group.items.map(item => {
+                  if (item.kind === 'settlement') {
+                    const s = item.data
+                    return (
+                      <div
+                        key={`s-${s.id}`}
+                        className="tg-section"
+                        style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)' }}
+                        onClick={() => openSettlementDetail(s)}
+                      >
+                        <div className="flex items-center gap-3 p-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">
+                              {s.from_name} paid {s.to_name}{' '}
+                              <span className="font-bold">{s.currency} {Number(s.amount).toFixed(2)}</span>
+                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>Settlement</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span
+                              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                              style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+                            >
+                              Paid
+                            </span>
+                            <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const exp = item.data
+                  const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
+                  const isPayer = exp.paid_by_member_id === currentMember.id
+                  const expTotal = Number(exp.total_amount)
+                  let myVerbLabel: string | null = null
+                  let myAmtDisplay: string | null = null
+                  let myLabelColor = 'var(--tg-theme-hint-color)'
+                  if (myAmt !== null) {
+                    if (isPayer && expTotal - myAmt > 0.005) {
+                      myVerbLabel = 'You lent'
+                      myAmtDisplay = `${exp.currency} ${(expTotal - myAmt).toFixed(2)}`
+                      myLabelColor = 'var(--tg-theme-button-color)'
+                    } else if (!isPayer && myAmt > 0.005) {
+                      myVerbLabel = 'You borrowed'
+                      myAmtDisplay = `${exp.currency} ${myAmt.toFixed(2)}`
+                      myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
+                    }
+                  }
+                  const notInvolved = myVerbLabel === null
+                  return (
+                    <div
+                      key={`e-${exp.id}`}
+                      className="tg-section"
+                      style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1 }}
+                      onClick={() => openExpenseDetail(exp)}
+                    >
+                      <div className="flex items-center gap-3 p-3">
+                        <div
+                          className="flex items-center justify-center flex-shrink-0"
+                          style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--tg-theme-secondary-bg-color)', fontSize: '22px' }}
+                        >
+                          {exp.category ? exp.category.split(' ')[0] : '🧾'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-base truncate">{exp.description}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                            {exp.paid_by_name ?? '?'} paid {exp.currency} {expTotal.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {myVerbLabel ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <p className="text-xs" style={{ color: myLabelColor }}>{myVerbLabel}</p>
+                              <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
+                          )}
+                          <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
+      })()}
 
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-6 mt-4 py-2">
