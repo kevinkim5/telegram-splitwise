@@ -1,25 +1,8 @@
 import { sql } from '@/lib/sql'
+import { signOut } from '@/auth'
 import Link from 'next/link'
 
-function Unauthorized() {
-  return (
-    <div style={{ padding: '3rem', fontFamily: 'system-ui, sans-serif', color: '#dc2626' }}>
-      <h1>401 Unauthorized</h1>
-      <p style={{ marginTop: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
-        Pass <code>?key=YOUR_ADMIN_SECRET</code> in the URL.
-      </p>
-    </div>
-  )
-}
-
-export default async function AdminPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ key?: string }>
-}) {
-  const { key } = await searchParams
-  if (!key || key !== process.env.ADMIN_SECRET) return <Unauthorized />
-
+export default async function AdminPage() {
   const groups = await sql`
     SELECT
       g.id, g.chat_id, g.title, g.currency,
@@ -38,9 +21,17 @@ export default async function AdminPage({
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif', maxWidth: '900px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-        Admin — Split Lah
-      </h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Admin — Split Lah</h1>
+        <form action={async () => {
+          'use server'
+          await signOut({ redirectTo: '/admin/login' })
+        }}>
+          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
+            Sign out
+          </button>
+        </form>
+      </div>
       <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>
         {groups.length} groups · {totalMembers} members · {totalExpenses} expenses
       </p>
@@ -60,7 +51,7 @@ export default async function AdminPage({
             <tr key={String(g.id)} style={{ borderBottom: '1px solid #f3f4f6' }}>
               <td style={{ padding: '0.625rem 0.75rem' }}>
                 <Link
-                  href={`/admin/${g.id}?key=${key}`}
+                  href={`/admin/${g.id}`}
                   style={{ fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}
                 >
                   {String(g.title)}

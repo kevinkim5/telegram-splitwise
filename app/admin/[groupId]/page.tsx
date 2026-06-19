@@ -1,14 +1,7 @@
 import { sql } from '@/lib/sql'
+import { signOut } from '@/auth'
 import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
-
-function Unauthorized() {
-  return (
-    <div style={{ padding: '3rem', fontFamily: 'system-ui, sans-serif', color: '#dc2626' }}>
-      <h1>401 Unauthorized</h1>
-    </div>
-  )
-}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -23,13 +16,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default async function AdminGroupPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ groupId: string }>
-  searchParams: Promise<{ key?: string }>
 }) {
-  const [{ key }, { groupId }] = await Promise.all([searchParams, params])
-  if (!key || key !== process.env.ADMIN_SECRET) return <Unauthorized />
+  const { groupId } = await params
 
   const [group] = await sql`SELECT * FROM groups WHERE id = ${parseInt(groupId)}`
   if (!group) {
@@ -64,7 +54,6 @@ export default async function AdminGroupPage({
     `,
   ])
 
-  // Compute net balances (same logic as the balances API)
   const memberIds = members.map(m => m.id as number)
   const memberNameMap = new Map(members.map(m => [
     m.id as number,
@@ -113,11 +102,21 @@ export default async function AdminGroupPage({
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif', maxWidth: '960px', margin: '0 auto' }}>
-      <Link href={`/admin?key=${key}`} style={{ fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none' }}>
-        ← All groups
-      </Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <Link href="/admin" style={{ fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none' }}>
+          ← All groups
+        </Link>
+        <form action={async () => {
+          'use server'
+          await signOut({ redirectTo: '/admin/login' })
+        }}>
+          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
+            Sign out
+          </button>
+        </form>
+      </div>
 
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: '1rem', marginBottom: '0.25rem' }}>
+      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
         {String(group.title)}
       </h1>
       <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>
