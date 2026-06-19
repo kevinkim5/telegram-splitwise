@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Noir light (fallback / non-Telegram) ─────────────────────────────────── */
-:root {
+/* ── Noir light — on body so it wins over Telegram SDK's html-level inline vars */
+body {
   --tg-theme-bg-color: #ffffff;
   --tg-theme-text-color: #0a0a0a;
   --tg-theme-hint-color: #6b6b6b;
