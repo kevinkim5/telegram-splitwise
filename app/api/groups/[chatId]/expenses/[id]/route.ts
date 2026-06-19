@@ -91,26 +91,26 @@ export async function PUT(
 
   const expenseDate = date ?? (existing.date as string)
 
-  await sql`
-    UPDATE expenses
-    SET description = ${description},
-        total_amount = ${total_amount},
-        currency = ${currency ?? (existing.currency as string)},
-        paid_by_member_id = ${paid_by_member_id},
-        split_type = ${split_type},
-        date = ${expenseDate},
-        category = ${category ?? null}
-    WHERE id = ${parseInt(id)}
-  `
+  const memberIds = resolvedSplits.map(s => s.member_id)
+  const amounts = resolvedSplits.map(s => s.amount)
+  const expId = parseInt(id)
 
-  // Replace all splits
-  await sql`DELETE FROM expense_splits WHERE expense_id = ${parseInt(id)}`
-  for (const s of resolvedSplits) {
-    await sql`
-      INSERT INTO expense_splits (expense_id, member_id, amount)
-      VALUES (${parseInt(id)}, ${s.member_id}, ${s.amount})
-    `
-  }
+  // Atomic: update expense + replace all splits in one transaction (single HTTP round trip to Neon)
+  await sql.transaction([
+    sql`UPDATE expenses
+        SET description = ${description},
+            total_amount = ${total_amount},
+            currency = ${currency ?? (existing.currency as string)},
+            paid_by_member_id = ${paid_by_member_id},
+            split_type = ${split_type},
+            date = ${expenseDate},
+            category = ${category ?? null}
+        WHERE id = ${expId}`,
+    sql`DELETE FROM expense_splits WHERE expense_id = ${expId}`,
+    sql`INSERT INTO expense_splits (expense_id, member_id, amount)
+        SELECT ${expId}, t.m, t.a
+        FROM unnest(${memberIds}::int[], ${amounts}::numeric[]) AS t(m, a)`,
+  ])
 
   const result = await getExpenseWithSplits(parseInt(id))
   return NextResponse.json(result)

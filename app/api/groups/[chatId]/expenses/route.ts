@@ -37,13 +37,11 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const [me] = await sql`SELECT id FROM members WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}`
   const myMemberId = (me?.id as number) ?? 0
 
-  const [{ count }] = await sql`
-    SELECT COUNT(*) FROM expenses WHERE group_id = ${group.id} AND deleted_at IS NULL
-  `
   const expenses = await sql`
     SELECT e.*,
            m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name,
-           es_me.amount AS my_split_amount
+           es_me.amount AS my_split_amount,
+           COUNT(*) OVER() AS total_count
     FROM expenses e
     JOIN members m ON m.id = e.paid_by_member_id
     LEFT JOIN expense_splits es_me ON es_me.expense_id = e.id AND es_me.member_id = ${myMemberId}
@@ -51,8 +49,9 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     ORDER BY e.date DESC, e.created_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `
+  const total = expenses.length > 0 ? parseInt(expenses[0].total_count as string) : 0
 
-  return NextResponse.json({ total: parseInt(count as string), page, items: expenses })
+  return NextResponse.json({ total, page, items: expenses })
 }
 
 export async function POST(request: Request, props: { params: Promise<{ chatId: string }> }) {
@@ -101,19 +100,23 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
 
   const expenseDate = date ?? new Date().toISOString().split('T')[0]
 
-  const [expense] = await sql`
-    INSERT INTO expenses (group_id, description, total_amount, currency, paid_by_member_id, split_type, created_by_member_id, date, category)
-    VALUES (${group.id}, ${description}, ${total_amount}, ${currency ?? group.currency}, ${paid_by_member_id}, ${split_type}, ${currentMember.id}, ${expenseDate}, ${category ?? null})
-    RETURNING id
+  const memberIds = resolvedSplits.map(s => s.member_id)
+  const amounts = resolvedSplits.map(s => s.amount)
+
+  // Single atomic query: insert expense + all splits via writable CTE
+  const [{ id: expenseId }] = await sql`
+    WITH new_exp AS (
+      INSERT INTO expenses (group_id, description, total_amount, currency, paid_by_member_id, split_type, created_by_member_id, date, category)
+      VALUES (${group.id}, ${description}, ${total_amount}, ${currency ?? group.currency}, ${paid_by_member_id}, ${split_type}, ${currentMember.id}, ${expenseDate}, ${category ?? null})
+      RETURNING id
+    ), _splits AS (
+      INSERT INTO expense_splits (expense_id, member_id, amount)
+      SELECT new_exp.id, t.m, t.a
+      FROM new_exp, unnest(${memberIds}::int[], ${amounts}::numeric[]) AS t(m, a)
+    )
+    SELECT id FROM new_exp
   `
 
-  for (const s of resolvedSplits) {
-    await sql`
-      INSERT INTO expense_splits (expense_id, member_id, amount)
-      VALUES (${expense.id}, ${s.member_id}, ${s.amount})
-    `
-  }
-
-  const result = await getExpenseWithSplits(expense.id as number)
+  const result = await getExpenseWithSplits(expenseId as number)
   return NextResponse.json(result, { status: 201 })
 }

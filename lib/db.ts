@@ -66,4 +66,9 @@ export async function ensureSchema() {
   await sql`CREATE INDEX IF NOT EXISTS idx_splits_member     ON expense_splits(member_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_settlements_group ON settlements(group_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_members_group     ON members(group_id)`
+  // Partial composite indexes: cover the deleted_at filter + sort in one index scan
+  await sql`CREATE INDEX IF NOT EXISTS idx_expenses_group_date
+    ON expenses(group_id, date DESC, created_at DESC) WHERE deleted_at IS NULL`
+  await sql`CREATE INDEX IF NOT EXISTS idx_settlements_group_date
+    ON settlements(group_id, created_at DESC) WHERE deleted_at IS NULL`
 }
