@@ -29,7 +29,7 @@ export function CurrencyPicker({ current, onSelect, onClose, isFirstTime }: Prop
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'var(--overlay)' }}
+      style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={e => { if (!isFirstTime && e.target === e.currentTarget) onClose() }}
     >
       <div

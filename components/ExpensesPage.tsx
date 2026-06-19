@@ -130,7 +130,7 @@ function DetailPanel({
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'var(--overlay)' }}
+      style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
@@ -140,7 +140,7 @@ function DetailPanel({
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ borderBottom: '0.5px solid var(--separator)' }}
+          style={{ borderBottom: '0.5px solid rgba(0,0,0,0.08)' }}
         >
           {isEditing ? (
             <>
@@ -175,7 +175,7 @@ function DetailPanel({
                   <button
                     onClick={() => onEdit(detail.item.id)}
                     className="flex items-center justify-center w-8 h-8 rounded-full"
-                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: 'var(--color-accent)' }}
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
                     aria-label="Edit"
                   >
                     <PencilIcon />
@@ -184,7 +184,7 @@ function DetailPanel({
                   <button
                     onClick={startEditing}
                     className="flex items-center justify-center w-8 h-8 rounded-full"
-                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: 'var(--color-accent)' }}
+                    style={{ background: 'rgba(36,129,204,0.12)', border: 'none', cursor: 'pointer', color: '#2481cc' }}
                     aria-label="Edit"
                   >
                     <PencilIcon />
@@ -239,7 +239,7 @@ function DetailPanel({
                       className="flex items-center justify-between"
                       style={{
                         padding: '11px 16px',
-                        borderBottom: isLast ? 'none' : '0.5px solid var(--separator)',
+                        borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
                         background: isMe ? 'rgba(36,129,204,0.04)' : undefined,
                       }}
                     >
@@ -329,7 +329,7 @@ function DetailPanel({
               <p style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>
                 {detail.item.from_name} paid {detail.item.to_name}
               </p>
-              <p style={{ fontSize: '30px', fontWeight: 300, color: 'var(--color-success)', marginBottom: '5px' }}>
+              <p style={{ fontSize: '30px', fontWeight: 300, color: '#34c759', marginBottom: '5px' }}>
                 {detail.item.currency} {Number(detail.item.amount).toFixed(2)}
               </p>
               <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>
@@ -348,7 +348,7 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'var(--overlay)' }}
+      style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
@@ -555,7 +555,7 @@ export function ExpensesPage() {
     {/* Fixed header */}
     <div
       className="flex-shrink-0 px-4 pt-4 pb-3"
-      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 var(--separator)' }}
+      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 rgba(0,0,0,0.08)' }}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
@@ -611,7 +611,7 @@ export function ExpensesPage() {
         <button
           onClick={() => navigate('/balances')}
           className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid var(--separator-strong)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
+          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
           ⚖️ Balances
         </button>
@@ -678,7 +678,7 @@ export function ExpensesPage() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(52,199,89,0.15)', color: 'var(--color-success)' }}
+                        style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
                       >
                         Paid
                       </span>

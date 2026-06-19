@@ -38,7 +38,7 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'var(--overlay)' }}
+      style={{ background: 'rgba(0,0,0,0.4)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="w-full rounded-t-2xl p-5 flex flex-col gap-4"
@@ -274,7 +274,7 @@ export function BalancesPage() {
                   const hasDetails = lines.length > 0 || debts.length > 0
 
                   return (
-                    <div key={memberId} style={{ borderBottom: isLast ? 'none' : '0.5px solid var(--separator)' }}>
+                    <div key={memberId} style={{ borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)' }}>
                       {/* Collapsible header row */}
                       <button
                         onClick={() => hasDetails && toggleMember(memberId)}
@@ -308,7 +308,7 @@ export function BalancesPage() {
 
                       {/* Expanded debt details */}
                       {expanded && (
-                        <div style={{ padding: '0 16px 12px', borderTop: '0.5px solid var(--separator)' }}>
+                        <div style={{ padding: '0 16px 12px', borderTop: '0.5px solid rgba(0,0,0,0.06)' }}>
                           {debts.map((d, di) => {
                             const theyOwe = d.from_member_id === memberId
                             const other = theyOwe ? d.to_name : d.from_name
