@@ -9,14 +9,6 @@ export default async function AdminPage() {
       (SELECT COUNT(*) FROM members     WHERE group_id = g.id)                          AS member_count,
       (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL)   AS expense_count,
       (SELECT COUNT(*) FROM settlements WHERE group_id = g.id AND deleted_at IS NULL)   AS settlement_count,
-      (
-        SELECT json_agg(json_build_object('currency', currency, 'total', total::text) ORDER BY currency)
-        FROM (
-          SELECT currency, SUM(total_amount) AS total
-          FROM expenses WHERE group_id = g.id AND deleted_at IS NULL
-          GROUP BY currency
-        ) t
-      ) AS totals_by_currency,
       NOT EXISTS (
         SELECT 1
         FROM (
@@ -66,46 +58,38 @@ export default async function AdminPage() {
 
       {/* Group cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {groups.map(g => {
-          const totals = (g.totals_by_currency ?? []) as Array<{ currency: string; total: string }>
-          const totalsStr = totals.map(t => `${t.currency} ${Number(t.total).toFixed(2)}`).join(' · ')
-
-          return (
-            <Link
-              key={String(g.id)}
-              href={`/admin/${g.id}`}
-              style={{ textDecoration: 'none', color: 'inherit' }}
-            >
-              <div style={{ background: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
-                  {g.is_settled ? (
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-                      Settled
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#dc2626', background: '#fef2f2', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-                      Outstanding
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.5rem' }}>
+        {groups.map(g => (
+          <Link
+            key={String(g.id)}
+            href={`/admin/${g.id}`}
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
+                {g.is_settled ? (
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
+                    Settled
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#dc2626', background: '#fef2f2', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
+                    Outstanding
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem', color: '#6b7280' }}>
+                <div style={{ display: 'flex', gap: '1rem' }}>
                   <span>{String(g.member_count)} members</span>
                   <span>{String(g.expense_count)} expenses</span>
                   <span>{String(g.settlement_count)} settlements</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '0.5rem' }}>
-                    {totalsStr || '—'}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', flexShrink: 0 }}>
-                    {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
+                <span style={{ flexShrink: 0, marginLeft: '0.5rem' }}>
+                  {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
               </div>
-            </Link>
-          )
-        })}
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   )
