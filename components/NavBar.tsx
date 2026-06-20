@@ -5,6 +5,7 @@ import { useAppContext } from '@/components/AppProvider'
 
 const tabs = [
   { label: 'Expenses', icon: '🧾', path: '/' },
+  { label: 'Totals', icon: '📊', path: '/totals' },
   { label: 'Balances', icon: '⚖️', path: '/balances' },
 ]
 

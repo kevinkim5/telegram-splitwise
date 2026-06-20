@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { Group, Member } from '@/types'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
+import { NavBar } from '@/components/NavBar'
 
 interface AppContextValue {
   chatId: string
@@ -368,6 +369,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {children}
         </div>
+        <NavBar />
       </div>
 
       {showCurrencyPicker && (

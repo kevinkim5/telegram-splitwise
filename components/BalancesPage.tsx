@@ -168,7 +168,7 @@ export function BalancesPage() {
     data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button

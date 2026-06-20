@@ -646,7 +646,7 @@ export function ExpensesPage() {
     </div>
 
     {/* Scrollable list */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24">
       {loading && (
         <div className="flex justify-center py-12">
           <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
