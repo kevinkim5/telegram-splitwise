@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { KeyboardOff } from 'lucide-react'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
@@ -47,6 +48,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
   const showSkeleton = useShowSkeleton(loading)
+  const [inputFocused, setInputFocused] = useState(false)
 
   useEffect(() => {
     if (!isEdit || !editId) return
@@ -217,7 +219,44 @@ export function ExpenseFormPage({ editId }: Props) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      {inputFocused && (
+        <button
+          type="button"
+          aria-label="Dismiss keyboard"
+          onMouseDown={e => {
+            e.preventDefault()
+            ;(document.activeElement as HTMLElement)?.blur()
+          }}
+          style={{
+            position: 'fixed',
+            bottom: '1.25rem',
+            right: '1.25rem',
+            zIndex: 1000,
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            border: 'none',
+            background: 'var(--tg-theme-button-color, #2481cc)',
+            cursor: 'pointer',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+          }}
+        >
+          <KeyboardOff size={20} color="var(--tg-theme-button-text-color, #fff)" />
+        </button>
+      )}
+
+      <form
+        onSubmit={handleSubmit}
+        onFocus={() => setInputFocused(true)}
+        onBlur={e => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setInputFocused(false)
+        }}
+        className="flex flex-col gap-5"
+      >
         {/* Description */}
         <div>
           <p className="tg-label">Description</p>
