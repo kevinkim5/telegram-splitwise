@@ -37,7 +37,7 @@ export default async function AdminGroupPage({
     return <div style={{ padding: '3rem' }}>Group not found.</div>
   }
 
-  const [members, expenseRows, settlementRows, splitRows] = await Promise.all([
+  const [members, expenseRows, settlementRows, splitRows, currencyTotals] = await Promise.all([
     sql`SELECT * FROM members WHERE group_id = ${group.id} ORDER BY first_name`,
     sql`
       SELECT
@@ -73,6 +73,13 @@ export default async function AdminGroupPage({
       FROM expenses e
       JOIN expense_splits es ON es.expense_id = e.id
       WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
+    `,
+    sql`
+      SELECT currency, SUM(total_amount) AS total
+      FROM expenses
+      WHERE group_id = ${group.id} AND deleted_at IS NULL
+      GROUP BY currency
+      ORDER BY currency
     `,
   ])
 
@@ -140,9 +147,20 @@ export default async function AdminGroupPage({
       <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>
         {String(group.title)}
       </h1>
-      <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.5rem' }}>
+      <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>
         {members.length} members · {expenseRows.length} expenses
       </p>
+      {currencyTotals.length > 0 && (
+        <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', marginBottom: '1.5rem' }}>
+          {currencyTotals.map((t, i) => (
+            <span key={String(t.currency)}>
+              {i > 0 && <span style={{ color: '#d1d5db', margin: '0 0.375rem' }}>·</span>}
+              {String(t.currency)} {Number(t.total).toFixed(2)}
+            </span>
+          ))}
+        </p>
+      )}
+      {currencyTotals.length === 0 && <div style={{ marginBottom: '1.5rem' }} />}
 
       {/* Balances */}
       <Section title="Outstanding Balances">
