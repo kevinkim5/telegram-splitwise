@@ -2,6 +2,8 @@ import { sql } from '@/lib/sql'
 import { signOut } from '@/auth'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminPage() {
   const groups = await sql`
     SELECT

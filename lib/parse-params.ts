@@ -1,7 +1,7 @@
 export function parseChatId(value: string): bigint | null {
   try {
     const n = BigInt(value)
-    return n !== 0n ? n : null  // 0 is invalid; negative is valid (Telegram group IDs)
+    return n !== BigInt(0) ? n : null  // 0 is invalid; negative is valid (Telegram group IDs)
   } catch {
     return null
   }

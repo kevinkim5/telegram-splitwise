@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
 import { ExpenseRow } from './ExpenseRow'
 
+export const dynamic = 'force-dynamic'
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: '1.75rem' }}>
