@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { getGroupMember } from '@/lib/group-member'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
 import type { SimplifiedDebt } from '@/types'
 
@@ -11,6 +12,9 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const { chatId } = await props.params
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const members = await sql`
     SELECT id, first_name, last_name FROM members WHERE group_id = ${group.id}

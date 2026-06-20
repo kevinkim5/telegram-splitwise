@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { getGroupMember } from '@/lib/group-member'
 import { computeEqualSplits } from '@/lib/splits'
 
 async function getExpenseWithSplits(expenseId: number) {
@@ -34,8 +35,9 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-  const [me] = await sql`SELECT id FROM members WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}`
-  const myMemberId = (me?.id as number) ?? 0
+  const me = await getGroupMember(group.id as number, user.id)
+  if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const myMemberId = me.id
 
   const expenses = await sql`
     SELECT e.*,
@@ -62,10 +64,8 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
-  const [currentMember] = await sql`
-    SELECT id FROM members WHERE group_id = ${group.id} AND telegram_user_id = ${user.id}
-  `
-  if (!currentMember) return NextResponse.json({ error: 'Member not found in group' }, { status: 403 })
+  const currentMember = await getGroupMember(group.id as number, user.id)
+  if (!currentMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await request.json()
   const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = body as {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { getGroupMember } from '@/lib/group-member'
 import { computeEqualSplits } from '@/lib/splits'
 
 async function getExpenseWithSplits(expenseId: number) {
@@ -33,6 +34,9 @@ export async function GET(
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const expense = await getExpenseWithSplits(parseInt(id))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!expense || (expense as any).group_id !== group.id) {
@@ -52,6 +56,9 @@ export async function PUT(
   const { chatId, id } = await props.params
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const [existing] = await sql`
     SELECT * FROM expenses WHERE id = ${parseInt(id)} AND group_id = ${group.id} AND deleted_at IS NULL
@@ -126,6 +133,9 @@ export async function DELETE(
   const { chatId, id } = await props.params
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const [existing] = await sql`
     SELECT id FROM expenses WHERE id = ${parseInt(id)} AND group_id = ${group.id} AND deleted_at IS NULL

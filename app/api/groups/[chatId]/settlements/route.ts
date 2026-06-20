@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { getGroupMember } from '@/lib/group-member'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
@@ -9,6 +10,9 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const { chatId } = await props.params
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const settlements = await sql`
     SELECT s.*,
@@ -30,6 +34,9 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const { chatId } = await props.params
   const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const member = await getGroupMember(group.id as number, user.id)
+  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { from_member_id, to_member_id, amount, currency } = await request.json() as {
     from_member_id: number
