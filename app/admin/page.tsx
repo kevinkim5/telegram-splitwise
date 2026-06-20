@@ -20,60 +20,54 @@ export default async function AdminPage() {
   const totalExpenses = groups.reduce((s, g) => s + Number(g.expense_count), 0)
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif', maxWidth: '900px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
+
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Admin — Split Lah</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Split Lah Admin</h1>
         <form action={async () => {
           'use server'
           await signOut({ redirectTo: '/admin/login' })
         }}>
-          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
+          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
             Sign out
           </button>
         </form>
       </div>
-      <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>
+      <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
         {groups.length} groups · {totalMembers} members · {totalExpenses} expenses
       </p>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-            {['Group', 'Currency', 'Members', 'Expenses', 'Settlements', 'Total Spend', 'Created'].map(h => (
-              <th key={h} style={{ textAlign: h === 'Group' || h === 'Currency' || h === 'Created' ? 'left' : 'right', padding: '0.5rem 0.75rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map(g => (
-            <tr key={String(g.id)} style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <td style={{ padding: '0.625rem 0.75rem' }}>
-                <Link
-                  href={`/admin/${g.id}`}
-                  style={{ fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}
-                >
-                  {String(g.title)}
-                </Link>
-                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '1px' }}>
-                  {String(g.chat_id)}
-                </div>
-              </td>
-              <td style={{ padding: '0.625rem 0.75rem' }}>{String(g.currency)}</td>
-              <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>{String(g.member_count)}</td>
-              <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>{String(g.expense_count)}</td>
-              <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>{String(g.settlement_count)}</td>
-              <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                {String(g.currency)} {Number(g.total_spend).toFixed(2)}
-              </td>
-              <td style={{ padding: '0.625rem 0.75rem', color: '#6b7280' }}>
-                {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Group cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {groups.map(g => (
+          <Link
+            key={String(g.id)}
+            href={`/admin/${g.id}`}
+            style={{ textDecoration: 'none', color: 'inherit' }}
+          >
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#6b7280', marginLeft: '0.5rem', flexShrink: 0 }}>{String(g.currency)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.5rem' }}>
+                <span>{String(g.member_count)} members</span>
+                <span>{String(g.expense_count)} expenses</span>
+                <span>{String(g.settlement_count)} settlements</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                  {String(g.currency)} {Number(g.total_spend).toFixed(2)} total
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                  {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }

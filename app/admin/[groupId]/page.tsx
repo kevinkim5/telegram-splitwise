@@ -5,12 +5,22 @@ import { simplifyDebts, type NamedBalance } from '@/lib/balances'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginBottom: '2.5rem' }}>
-      <h2 style={{ fontSize: '1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: '0.75rem' }}>
+    <section style={{ marginBottom: '1.75rem' }}>
+      <h2 style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b7280', marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
         {title}
       </h2>
-      {children}
+      <div style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+        {children}
+      </div>
     </section>
+  )
+}
+
+function Row({ children, last }: { children: React.ReactNode; last?: boolean }) {
+  return (
+    <div style={{ padding: '0.75rem 1rem', borderBottom: last ? 'none' : '0.5px solid #f3f4f6' }}>
+      {children}
+    </div>
   )
 }
 
@@ -23,7 +33,7 @@ export default async function AdminGroupPage({
 
   const [group] = await sql`SELECT * FROM groups WHERE id = ${parseInt(groupId)}`
   if (!group) {
-    return <div style={{ padding: '3rem', fontFamily: 'system-ui, sans-serif' }}>Group not found.</div>
+    return <div style={{ padding: '3rem' }}>Group not found.</div>
   }
 
   const [members, expenseRows, settlementRows, splitRows] = await Promise.all([
@@ -97,11 +107,10 @@ export default async function AdminGroupPage({
     return simplifyDebts(balances)
   })
 
-  const thStyle: React.CSSProperties = { textAlign: 'left', padding: '0.5rem 0.75rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb' }
-  const tdStyle: React.CSSProperties = { padding: '0.5rem 0.75rem', borderBottom: '1px solid #f3f4f6', fontSize: '0.875rem', verticalAlign: 'top' }
-
   return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif', maxWidth: '960px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
+
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
         <Link href="/admin" style={{ fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none' }}>
           ← All groups
@@ -110,142 +119,105 @@ export default async function AdminGroupPage({
           'use server'
           await signOut({ redirectTo: '/admin/login' })
         }}>
-          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
+          <button type="submit" style={{ fontSize: '0.8125rem', color: '#6b7280', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer' }}>
             Sign out
           </button>
         </form>
       </div>
 
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+      <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>
         {String(group.title)}
       </h1>
-      <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>
-        Chat ID: {String(group.chat_id)} · Currency: {String(group.currency)} · {members.length} members · {expenseRows.length} expenses shown
+      <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.5rem' }}>
+        {String(group.currency)} · {members.length} members · {expenseRows.length} expenses
       </p>
 
       {/* Balances */}
       <Section title="Outstanding Balances">
         {allDebts.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>All settled up ✓</p>
+          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>All settled up ✓</span></Row>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Owes</th>
-                <th style={thStyle}>To</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allDebts.map((d, i) => (
-                <tr key={i}>
-                  <td style={tdStyle}>{d.from_name}</td>
-                  <td style={tdStyle}>{d.to_name}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#dc2626' }}>
-                    {d.currency} {d.amount.toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          allDebts.map((d, i) => (
+            <Row key={i} last={i === allDebts.length - 1}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.875rem' }}>
+                  <span style={{ fontWeight: 500 }}>{d.from_name}</span>
+                  <span style={{ color: '#9ca3af' }}> owes </span>
+                  <span style={{ fontWeight: 500 }}>{d.to_name}</span>
+                </span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#dc2626', marginLeft: '0.75rem', flexShrink: 0 }}>
+                  {d.currency} {d.amount.toFixed(2)}
+                </span>
+              </div>
+            </Row>
+          ))
         )}
       </Section>
 
       {/* Members */}
       <Section title={`Members (${members.length})`}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Name</th>
-              <th style={thStyle}>Username</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Telegram ID</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Joined</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map(m => (
-              <tr key={String(m.id)}>
-                <td style={{ ...tdStyle, fontWeight: 500 }}>
-                  {String(m.first_name)}{m.last_name ? ` ${m.last_name}` : ''}
-                </td>
-                <td style={{ ...tdStyle, color: '#6b7280' }}>
-                  {m.username ? `@${m.username}` : '—'}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right', color: '#6b7280', fontFamily: 'monospace' }}>
-                  {String(m.telegram_user_id)}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right', color: '#6b7280' }}>
-                  {new Date(m.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {members.map((m, i) => (
+          <Row key={String(m.id)} last={i === members.length - 1}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                {String(m.first_name)}{m.last_name ? ` ${m.last_name}` : ''}
+              </span>
+              <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+                {m.username ? `@${m.username}` : '—'}
+              </span>
+            </div>
+          </Row>
+        ))}
       </Section>
 
       {/* Expenses */}
       <Section title={`Expenses (${expenseRows.length})`}>
         {expenseRows.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</p>
+          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</span></Row>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>Description</th>
-                <th style={thStyle}>Category</th>
-                <th style={thStyle}>Paid by</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {expenseRows.map(e => (
-                <tr key={String(e.id)}>
-                  <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>
-                    {new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>{String(e.description)}</td>
-                  <td style={{ ...tdStyle, color: '#6b7280' }}>{e.category ? String(e.category) : '—'}</td>
-                  <td style={{ ...tdStyle, color: '#6b7280' }}>{String(e.paid_by_name)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
-                    {String(e.currency)} {Number(e.total_amount).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          expenseRows.map((e, i) => (
+            <Row key={String(e.id)} last={i === expenseRows.length - 1}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0, marginRight: '0.75rem' }}>
+                  <div style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {String(e.description)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
+                    {String(e.paid_by_name)} · {new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {e.category ? ` · ${String(e.category)}` : ''}
+                  </div>
+                </div>
+                <span style={{ fontWeight: 600, fontSize: '0.875rem', flexShrink: 0 }}>
+                  {String(e.currency)} {Number(e.total_amount).toFixed(2)}
+                </span>
+              </div>
+            </Row>
+          ))
         )}
       </Section>
 
       {/* Settlements */}
       <Section title={`Settlements (${settlementRows.length})`}>
         {settlementRows.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>No settlements yet.</p>
+          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No settlements yet.</span></Row>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>From</th>
-                <th style={thStyle}>To</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settlementRows.map(s => (
-                <tr key={String(s.id)}>
-                  <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>
-                    {new Date(s.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td style={{ ...tdStyle }}>{String(s.from_name)}</td>
-                  <td style={{ ...tdStyle }}>{String(s.to_name)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>
-                    {String(s.currency)} {Number(s.amount).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          settlementRows.map((s, i) => (
+            <Row key={String(s.id)} last={i === settlementRows.length - 1}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.875rem' }}>
+                  <span style={{ fontWeight: 500 }}>{String(s.from_name)}</span>
+                  <span style={{ color: '#9ca3af' }}> paid </span>
+                  <span style={{ fontWeight: 500 }}>{String(s.to_name)}</span>
+                </span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#16a34a', marginLeft: '0.75rem', flexShrink: 0 }}>
+                  {String(s.currency)} {Number(s.amount).toFixed(2)}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
+                {new Date(s.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+            </Row>
+          ))
         )}
       </Section>
     </div>
