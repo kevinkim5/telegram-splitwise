@@ -239,9 +239,16 @@ function DetailPanel({
               <p className="tg-label mb-2">Split</p>
               <div className="tg-section">
                 {detail.splits === null ? (
-                  <div className="flex justify-center py-5">
-                    <p style={{ fontSize: '13px', color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
-                  </div>
+                  members.map((m, i) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between"
+                      style={{ padding: '11px 16px', borderBottom: i === members.length - 1 ? 'none' : '0.5px solid rgba(0,0,0,0.08)' }}
+                    >
+                      <div style={{ height: 12, width: '35%', borderRadius: 6, background: 'rgba(0,0,0,0.07)' }} />
+                      <div style={{ height: 12, width: '22%', borderRadius: 6, background: 'rgba(0,0,0,0.07)' }} />
+                    </div>
+                  ))
                 ) : detail.splits.map((split, i) => {
                   const isMe = split.member_id === currentMemberId
                   const isPayer = split.member_id === detail.item.paid_by_member_id
