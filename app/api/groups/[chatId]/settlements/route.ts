@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
+import { validateGroupMembers } from '@/lib/validate-group-members'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
@@ -51,6 +52,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   if (amount <= 0) return NextResponse.json({ error: 'amount must be positive' }, { status: 422 })
   if (from_member_id === to_member_id) {
     return NextResponse.json({ error: 'from and to must differ' }, { status: 422 })
+  }
+
+  if (!await validateGroupMembers(group.id as number, [from_member_id, to_member_id])) {
+    return NextResponse.json({ error: 'One or more member IDs do not belong to this group' }, { status: 422 })
   }
 
   const [settlement] = await sql`

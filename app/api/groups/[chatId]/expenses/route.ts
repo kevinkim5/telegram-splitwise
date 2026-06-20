@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
+import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 
 async function getExpenseWithSplits(expenseId: number) {
@@ -81,6 +82,11 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
 
   if (!description || !total_amount || !paid_by_member_id || !splits?.length) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  }
+
+  const allMemberIds = [paid_by_member_id, ...splits.map(s => s.member_id)]
+  if (!await validateGroupMembers(group.id as number, allMemberIds)) {
+    return NextResponse.json({ error: 'One or more member IDs do not belong to this group' }, { status: 422 })
   }
 
   let resolvedSplits: { member_id: number; amount: number }[]
