@@ -629,15 +629,22 @@ export function ExpensesPage() {
 
       <div className="flex gap-2">
         <button
+          onClick={() => navigate('/totals')}
+          className="flex-1 py-2 rounded-xl text-sm font-medium"
+          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
+        >
+          📊 Totals
+        </button>
+        <button
           onClick={() => navigate('/balances')}
-          className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+          className="flex-1 py-2 rounded-xl text-sm font-medium"
           style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
           ⚖️ Balances
         </button>
         <button
           onClick={() => navigate('/add')}
-          className="flex-1 tg-btn py-2.5 rounded-xl text-sm font-medium"
+          className="flex-1 tg-btn py-2 rounded-xl text-sm font-medium"
           style={{ width: 'auto' }}
         >
           + Add
@@ -646,7 +653,7 @@ export function ExpensesPage() {
     </div>
 
     {/* Scrollable list */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24">
+    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
       {loading && (
         <div className="flex justify-center py-12">
           <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>

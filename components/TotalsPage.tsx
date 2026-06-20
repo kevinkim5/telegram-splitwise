@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 
 interface CurrencySummary {
@@ -25,6 +26,7 @@ interface TotalsData {
 }
 
 export function TotalsPage() {
+  const router = useRouter()
   const { chatId, group, apiHeaders } = useAppContext()
   const [data, setData] = useState<TotalsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,10 +60,19 @@ export function TotalsPage() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="px-4 pt-4 pb-24 flex flex-col gap-4">
+      <div className="px-4 pt-4 pb-8 flex flex-col gap-4">
 
         {/* Header */}
-        <h1 className="font-bold text-lg">{group.title}</h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push(`/?chatId=${chatId}`)}
+            className="text-sm font-medium"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+          >
+            ← Back
+          </button>
+          <h1 className="font-bold text-lg">Totals</h1>
+        </div>
 
         {/* Loading */}
         {loading && (
