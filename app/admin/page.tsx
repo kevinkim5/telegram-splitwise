@@ -49,7 +49,7 @@ export default async function AdminPage() {
             <div style={{ background: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                 <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#6b7280', marginLeft: '0.5rem', flexShrink: 0 }}>{String(g.currency)}</span>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.5rem', flexShrink: 0 }}>default: {String(g.currency)}</span>
               </div>
               <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.5rem' }}>
                 <span>{String(g.member_count)} members</span>

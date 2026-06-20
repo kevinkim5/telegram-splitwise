@@ -129,7 +129,7 @@ export default async function AdminGroupPage({
         {String(group.title)}
       </h1>
       <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.5rem' }}>
-        {String(group.currency)} · {members.length} members · {expenseRows.length} expenses
+        Default: {String(group.currency)} · {members.length} members · {expenseRows.length} expenses
       </p>
 
       {/* Balances */}
