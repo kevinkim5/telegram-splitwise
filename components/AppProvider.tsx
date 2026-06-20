@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import type { Group, Member } from '@/types'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
 
@@ -250,10 +251,16 @@ function HomepageReceipt() {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
   const [pendingCurrency, setPendingCurrency] = useState<string | null>(null)
+
+  // Admin routes are plain web pages — skip Telegram Mini App initialisation entirely
+  if (pathname.startsWith('/admin')) {
+    return <>{children}</>
+  }
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
