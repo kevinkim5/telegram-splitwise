@@ -754,6 +754,7 @@ export function ExpensesPage() {
                   return (
                     <div
                       key={`e-${exp.id}`}
+                      data-testid="expense-item"
                       className="tg-section"
                       style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1 }}
                       onClick={() => openExpenseDetail(exp)}
