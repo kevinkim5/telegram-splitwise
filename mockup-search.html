@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Search & Filter Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #efeff4;
+    display: flex;
+    gap: 0;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+
+  /* ── Phone shell ── */
+  .phone {
+    width: 375px;
+    flex-shrink: 0;
+    background: #efeff4;
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.22), 0 0 0 8px #1a1a1a, 0 0 0 10px #333;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .phone-notch {
+    height: 44px;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .notch-pill {
+    width: 120px; height: 32px;
+    background: #000;
+    border-radius: 0 0 18px 18px;
+  }
+
+  .phone-screen {
+    background: #efeff4;
+    height: 720px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── App chrome ── */
+  .header {
+    background: #fff;
+    padding: 16px 16px 12px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+    flex-shrink: 0;
+    transition: padding-bottom 0.2s ease;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .group-title { font-size: 18px; font-weight: 700; color: #111; }
+  .balance-text { font-size: 12px; color: #ff3b30; font-weight: 500; margin-top: 2px; }
+
+  .avatars { display: flex; align-items: center; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+    margin-right: -8px; flex-shrink: 0;
+  }
+
+  .action-row { display: flex; gap: 8px; }
+  .btn-balances {
+    flex: 1; padding: 10px; border-radius: 12px; font-size: 14px;
+    font-weight: 500; cursor: pointer;
+    background: #f2f2f7; border: 1px solid rgba(0,0,0,0.12);
+    color: #111;
+  }
+  .btn-add {
+    flex: 1; padding: 10px; border-radius: 12px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+    background: #2481cc; border: none; color: #fff;
+  }
+
+  /* ── Search row (NEW) ── */
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+  }
+  .search-row.open {
+    max-height: 40px;
+    opacity: 1;
+  }
+
+  .search-input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f2f2f7;
+    border-radius: 10px;
+    padding: 0 10px;
+    height: 36px;
+  }
+  .search-icon { font-size: 14px; opacity: 0.45; flex-shrink: 0; }
+  .search-input {
+    flex: 1; border: none; background: transparent;
+    font-size: 14px; outline: none; color: #111;
+  }
+  .search-input::placeholder { color: #aaa; }
+  .clear-btn {
+    background: #c7c7cc; border: none; border-radius: 50%;
+    width: 16px; height: 16px; color: #fff; font-size: 10px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .filter-icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #f2f2f7; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    position: relative;
+  }
+  .filter-icon-btn.active { background: rgba(36,129,204,0.15); }
+  .filter-dot {
+    position: absolute; top: 5px; right: 5px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #2481cc; border: 1.5px solid #fff;
+    display: none;
+  }
+  .filter-icon-btn.has-filter .filter-dot { display: block; }
+
+  /* ── Category chips (NEW) ── */
+  .chips-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0 0 2px;
+    margin-top: 0;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .chips-row::-webkit-scrollbar { display: none; }
+  .chips-row.open {
+    max-height: 36px;
+    opacity: 1;
+    margin-top: 8px;
+  }
+
+  .chip {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: 20px; font-size: 12px;
+    font-weight: 500; white-space: nowrap; cursor: pointer;
+    background: #f2f2f7; border: 1px solid rgba(0,0,0,0.08);
+    color: #555; transition: background 0.15s, color 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .chip.active {
+    background: rgba(36,129,204,0.12);
+    border-color: rgba(36,129,204,0.3);
+    color: #2481cc;
+  }
+
+  /* ── Search toggle pill (collapsed state) ── */
+  .search-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 7px 12px;
+    border-radius: 10px;
+    background: #f2f2f7;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: #888;
+    width: 100%;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .search-toggle:hover { background: #e9e9ee; }
+  .search-toggle.hidden { display: none; }
+  .search-toggle-close {
+    margin-left: auto;
+    font-size: 18px;
+    color: #aaa;
+    line-height: 1;
+  }
+
+  /* ── List ── */
+  .list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 16px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .date-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 4px 8px;
+  }
+  .date-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #aaa; flex-shrink: 0;
+  }
+  .date-label { font-size: 13px; font-weight: 700; color: #111; }
+  .date-day { font-size: 13px; color: #999; }
+
+  .expense-card {
+    background: #fff; border-radius: 12px;
+    margin-bottom: 8px; overflow: hidden;
+    cursor: pointer;
+  }
+  .expense-inner {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px;
+  }
+  .expense-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    background: #f2f2f7; display: flex; align-items: center;
+    justify-content: center; font-size: 22px; flex-shrink: 0;
+  }
+  .expense-desc { font-size: 15px; font-weight: 600; color: #111; }
+  .expense-sub { font-size: 12px; color: #999; margin-top: 2px; }
+  .expense-right { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .expense-verb { font-size: 11px; color: #2481cc; }
+  .expense-amount { font-size: 15px; font-weight: 700; color: #2481cc; }
+  .expense-arrow { font-size: 18px; color: #ccc; margin-top: 2px; }
+
+  /* highlight matched text */
+  mark { background: rgba(36,129,204,0.15); color: #2481cc; border-radius: 3px; padding: 0 1px; }
+
+  /* empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 0; gap: 10px; color: #888;
+  }
+  .empty-state .icon { font-size: 40px; }
+  .empty-state .title { font-size: 15px; font-weight: 600; color: #333; }
+  .empty-state .sub { font-size: 13px; }
+
+  /* ── Controls panel (outside phone) ── */
+  .controls {
+    width: 280px;
+    flex-shrink: 0;
+    padding: 20px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    height: fit-content;
+    margin-left: 24px;
+    margin-top: 20px;
+  }
+  .controls h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: #111; }
+  .controls h3 { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 8px; }
+  .ctrl-btn {
+    display: block; width: 100%;
+    padding: 10px 14px; border-radius: 10px;
+    background: #f2f2f7; border: none;
+    font-size: 13px; color: #333; text-align: left;
+    cursor: pointer; margin-bottom: 6px;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .ctrl-btn:hover { background: #e5e5ea; }
+  .ctrl-btn.active { background: rgba(36,129,204,0.12); color: #2481cc; font-weight: 600; }
+  .ctrl-note { font-size: 12px; color: #999; line-height: 1.5; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- Phone -->
+<div class="phone">
+  <div class="phone-notch"><div class="notch-pill"></div></div>
+  <div class="phone-screen">
+
+    <!-- HEADER -->
+    <div class="header" id="header">
+      <div class="header-top">
+        <div>
+          <div class="group-title">Bali Trip 🌴</div>
+          <div class="balance-text">You owe SGD 47.50</div>
+        </div>
+        <div class="avatars">
+          <div class="avatar" style="background:#FF6B6B; z-index:3">A</div>
+          <div class="avatar" style="background:#4ECDC4; z-index:2">B</div>
+          <div class="avatar" style="background:#45B7D1; z-index:1">C</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn-balances">⚖️ Balances</button>
+        <button class="btn-add">+ Add</button>
+      </div>
+
+      <!-- OPTION A: search toggle pill (tapping expands search bar below) -->
+      <button class="search-toggle" id="searchToggle" onclick="openSearch()">
+        <span>🔍</span>
+        <span>Search expenses…</span>
+      </button>
+
+      <!-- Expanded: search input + filter icon -->
+      <div class="search-row" id="searchRow">
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" id="searchInput" placeholder="Search expenses…"
+            oninput="onSearch(this.value)" />
+          <button class="clear-btn" id="clearBtn" onclick="clearSearch()" style="display:none">✕</button>
+        </div>
+        <button class="filter-icon-btn" id="filterBtn" onclick="toggleChips()">
+          ⚙️
+          <div class="filter-dot"></div>
+        </button>
+      </div>
+
+      <!-- Category chips -->
+      <div class="chips-row" id="chipsRow">
+        <button class="chip" onclick="toggleChip(this, 'Food')">🍜 Food</button>
+        <button class="chip" onclick="toggleChip(this, 'Drinks')">🍺 Drinks</button>
+        <button class="chip" onclick="toggleChip(this, 'Stay')">🏨 Stay</button>
+        <button class="chip" onclick="toggleChip(this, 'Transport')">🚌 Transport</button>
+        <button class="chip" onclick="toggleChip(this, 'Taxi')">🚕 Taxi</button>
+        <button class="chip" onclick="toggleChip(this, 'Activities')">🎡 Activities</button>
+        <button class="chip" onclick="toggleChip(this, 'Shopping')">🛒 Shopping</button>
+      </div>
+    </div>
+    <!-- /HEADER -->
+
+    <!-- LIST -->
+    <div class="list" id="expenseList"></div>
+
+  </div><!-- /phone-screen -->
+</div><!-- /phone -->
+
+<!-- Controls -->
+<div class="controls">
+  <h2>Try different states</h2>
+
+  <h3>Search state</h3>
+  <button class="ctrl-btn active" id="stateCollapsed" onclick="setDemo('collapsed')">Collapsed (default)</button>
+  <button class="ctrl-btn" id="stateOpen" onclick="setDemo('open')">Search bar open</button>
+  <button class="ctrl-btn" id="stateSearching" onclick="setDemo('searching')">Searching "taxi"</button>
+  <button class="ctrl-btn" id="stateFiltered" onclick="setDemo('filtered')">Category filtered</button>
+  <button class="ctrl-btn" id="stateNoResults" onclick="setDemo('noResults')">No results</button>
+
+  <h3>Placement notes</h3>
+  <p class="ctrl-note">
+    The search toggle sits <strong>below the action buttons</strong> inside the fixed header.
+    It only expands when tapped — zero visual noise in the default state.<br><br>
+    Category chips appear on a second row below the search input, revealed by the ⚙️ filter button.<br><br>
+    The list scrolls independently underneath; the header stays fixed.
+  </p>
+</div>
+
+<script>
+const EXPENSES = [
+  { id:1, desc:'Hotel Alaya',      cat:'🏨 Stay',      icon:'🏨', amount:'SGD 420.00', verb:'You lent',    amtColor:'#2481cc', payer:'Alice', date:'12 Jun', day:'Thursday' },
+  { id:2, desc:'Grab to airport',  cat:'🚕 Taxi',      icon:'🚕', amount:'SGD 24.00',  verb:'You borrowed', amtColor:'#ff3b30', payer:'Bob',   date:'12 Jun', day:'Thursday' },
+  { id:3, desc:'Nasi goreng',      cat:'🍜 Food',      icon:'🍜', amount:'SGD 18.50',  verb:'You lent',    amtColor:'#2481cc', payer:'Alice', date:'11 Jun', day:'Wednesday' },
+  { id:4, desc:'Bintang beers',    cat:'🍺 Drinks',    icon:'🍺', amount:'SGD 32.00',  verb:'You lent',    amtColor:'#2481cc', payer:'Alice', date:'11 Jun', day:'Wednesday' },
+  { id:5, desc:'Surf lesson',      cat:'🎡 Activities',icon:'🎡', amount:'SGD 55.00',  verb:'You borrowed', amtColor:'#ff3b30', payer:'Carol', date:'10 Jun', day:'Tuesday' },
+  { id:6, desc:'Taxi to Seminyak', cat:'🚕 Taxi',      icon:'🚕', amount:'SGD 12.00',  verb:'You borrowed', amtColor:'#ff3b30', payer:'Bob',   date:'10 Jun', day:'Tuesday' },
+  { id:7, desc:'Grocery run',      cat:'🛒 Shopping',  icon:'🛒', amount:'SGD 28.80',  verb:'You lent',    amtColor:'#2481cc', payer:'Alice', date:'9 Jun',  day:'Monday' },
+  { id:8, desc:'Kuta beach drinks',cat:'🍺 Drinks',    icon:'🍺', amount:'SGD 45.00',  verb:'You borrowed', amtColor:'#ff3b30', payer:'Carol', date:'9 Jun',  day:'Monday' },
+]
+
+let searchOpen = false
+let chipsOpen = false
+let activeChips = new Set()
+let currentQuery = ''
+
+function renderList(items, query) {
+  const list = document.getElementById('expenseList')
+  if (items.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="icon">🔍</div>
+      <div class="title">No results</div>
+      <div class="sub">${query ? `Nothing matching "${query}"` : 'No expenses in this category'}</div>
+    </div>`
+    return
+  }
+
+  // Group by date
+  const groups = []
+  for (const e of items) {
+    const last = groups[groups.length - 1]
+    if (last && last.date === e.date) { last.items.push(e) }
+    else { groups.push({ date: e.date, day: e.day, items: [e] }) }
+  }
+
+  list.innerHTML = groups.map(g => `
+    <div class="date-header">
+      <div class="date-dot"></div>
+      <span class="date-label">${g.date}</span>
+      <span class="date-day">${g.day}</span>
+    </div>
+    ${g.items.map(e => {
+      const desc = query
+        ? e.desc.replace(new RegExp(`(${query})`, 'gi'), '<mark>$1</mark>')
+        : e.desc
+      return `
+        <div class="expense-card">
+          <div class="expense-inner">
+            <div class="expense-icon">${e.icon}</div>
+            <div>
+              <div class="expense-desc">${desc}</div>
+              <div class="expense-sub">${e.payer} paid ${e.amount}</div>
+            </div>
+            <div class="expense-right">
+              <div class="expense-verb" style="color:${e.amtColor}">${e.verb}</div>
+              <div class="expense-amount" style="color:${e.amtColor}">${e.amount}</div>
+              <div class="expense-arrow">›</div>
+            </div>
+          </div>
+        </div>`
+    }).join('')}
+  `).join('')
+}
+
+function filter() {
+  let items = EXPENSES
+  if (currentQuery) {
+    items = items.filter(e => e.desc.toLowerCase().includes(currentQuery.toLowerCase()))
+  }
+  if (activeChips.size > 0) {
+    items = items.filter(e => [...activeChips].some(c => e.cat.includes(c)))
+  }
+  renderList(items, currentQuery)
+  // Update filter dot
+  const btn = document.getElementById('filterBtn')
+  btn.classList.toggle('has-filter', activeChips.size > 0)
+}
+
+function openSearch() {
+  searchOpen = true
+  document.getElementById('searchToggle').classList.add('hidden')
+  document.getElementById('searchRow').classList.add('open')
+  setTimeout(() => document.getElementById('searchInput').focus(), 250)
+  updateStateButtons('open')
+}
+
+function closeSearch() {
+  searchOpen = false
+  chipsOpen = false
+  currentQuery = ''
+  activeChips.clear()
+  document.getElementById('searchToggle').classList.remove('hidden')
+  document.getElementById('searchRow').classList.remove('open')
+  document.getElementById('chipsRow').classList.remove('open')
+  document.getElementById('searchInput').value = ''
+  document.getElementById('clearBtn').style.display = 'none'
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'))
+  filter()
+}
+
+function onSearch(val) {
+  currentQuery = val
+  document.getElementById('clearBtn').style.display = val ? 'flex' : 'none'
+  filter()
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = ''
+  currentQuery = ''
+  document.getElementById('clearBtn').style.display = 'none'
+  document.getElementById('searchInput').focus()
+  filter()
+}
+
+function toggleChips() {
+  chipsOpen = !chipsOpen
+  document.getElementById('chipsRow').classList.toggle('open', chipsOpen)
+  document.getElementById('filterBtn').classList.toggle('active', chipsOpen)
+}
+
+function toggleChip(el, cat) {
+  if (activeChips.has(cat)) { activeChips.delete(cat); el.classList.remove('active') }
+  else { activeChips.add(cat); el.classList.add('active') }
+  filter()
+}
+
+function setDemo(state) {
+  // Reset first
+  closeSearch()
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'))
+  document.getElementById('state' + state.charAt(0).toUpperCase() + state.slice(1))?.classList.add('active')
+
+  if (state === 'collapsed') {
+    // default — already reset
+  } else if (state === 'open') {
+    openSearch()
+  } else if (state === 'searching') {
+    openSearch()
+    setTimeout(() => {
+      document.getElementById('searchInput').value = 'taxi'
+      onSearch('taxi')
+    }, 300)
+  } else if (state === 'filtered') {
+    openSearch()
+    setTimeout(() => {
+      toggleChips()
+      setTimeout(() => {
+        const foodChip = [...document.querySelectorAll('.chip')].find(c => c.textContent.includes('Food'))
+        const drinkChip = [...document.querySelectorAll('.chip')].find(c => c.textContent.includes('Drinks'))
+        if (foodChip) toggleChip(foodChip, 'Food')
+        if (drinkChip) toggleChip(drinkChip, 'Drinks')
+      }, 50)
+    }, 300)
+  } else if (state === 'noResults') {
+    openSearch()
+    setTimeout(() => {
+      document.getElementById('searchInput').value = 'pizza'
+      onSearch('pizza')
+    }, 300)
+  }
+}
+
+function updateStateButtons(state) {
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'))
+  document.getElementById('state' + state.charAt(0).toUpperCase() + state.slice(1))?.classList.add('active')
+}
+
+// Init
+filter()
+</script>
+</body>
+</html>
