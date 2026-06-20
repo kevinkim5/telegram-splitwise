@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
+import { verifyWebhookSecret } from '@/lib/webhook-auth'
 
 const BOT_TOKEN = process.env.BOT_TOKEN!
 const WEBAPP_URL = process.env.WEBAPP_URL!
@@ -74,6 +75,11 @@ async function handleMessage(message: {
 }
 
 export async function POST(request: Request) {
+  const secretHeader = request.headers.get('x-telegram-bot-api-secret-token')
+  if (!verifyWebhookSecret(secretHeader, process.env.WEBHOOK_SECRET_TOKEN)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   try {
     const update = await request.json()
 
