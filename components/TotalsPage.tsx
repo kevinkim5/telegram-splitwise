@@ -41,15 +41,16 @@ export function TotalsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const d: TotalsData = await res.json()
       setData(d)
-      if (!selectedCurrency && d.summary.length > 0) {
-        setSelectedCurrency(d.summary[0].currency)
+      // Functional update: only initialises if still null — safe against stale closures
+      if (d.summary.length > 0) {
+        setSelectedCurrency(prev => prev ?? d.summary[0].currency)
       }
     } catch (e) {
       setError(String(e))
     } finally {
       setLoading(false)
     }
-  }, [chatId, apiHeaders]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chatId, apiHeaders])
 
   useEffect(() => { fetchTotals() }, [fetchTotals])
 
