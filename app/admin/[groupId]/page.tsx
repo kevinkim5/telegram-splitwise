@@ -2,6 +2,7 @@ import { sql } from '@/lib/sql'
 import { signOut } from '@/auth'
 import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
+import { ExpenseRow } from './ExpenseRow'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -39,10 +40,21 @@ export default async function AdminGroupPage({
   const [members, expenseRows, settlementRows, splitRows] = await Promise.all([
     sql`SELECT * FROM members WHERE group_id = ${group.id} ORDER BY first_name`,
     sql`
-      SELECT e.*, m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name
+      SELECT
+        e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at,
+        m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name,
+        json_agg(
+          json_build_object(
+            'name', sm.first_name || COALESCE(' ' || sm.last_name, ''),
+            'amount', es.amount::text
+          ) ORDER BY sm.first_name
+        ) AS splits
       FROM expenses e
       JOIN members m ON m.id = e.paid_by_member_id
+      JOIN expense_splits es ON es.expense_id = e.id
+      JOIN members sm ON sm.id = es.member_id
       WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
+      GROUP BY e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, m.first_name, m.last_name
       ORDER BY e.date DESC, e.created_at DESC
       LIMIT 100
     `,
@@ -129,7 +141,7 @@ export default async function AdminGroupPage({
         {String(group.title)}
       </h1>
       <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.5rem' }}>
-        Default: {String(group.currency)} · {members.length} members · {expenseRows.length} expenses
+        {members.length} members · {expenseRows.length} expenses
       </p>
 
       {/* Balances */}
@@ -176,22 +188,17 @@ export default async function AdminGroupPage({
           <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</span></Row>
         ) : (
           expenseRows.map((e, i) => (
-            <Row key={String(e.id)} last={i === expenseRows.length - 1}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0, marginRight: '0.75rem' }}>
-                  <div style={{ fontWeight: 500, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {String(e.description)}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
-                    {String(e.paid_by_name)} · {new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {e.category ? ` · ${String(e.category)}` : ''}
-                  </div>
-                </div>
-                <span style={{ fontWeight: 600, fontSize: '0.875rem', flexShrink: 0 }}>
-                  {String(e.currency)} {Number(e.total_amount).toFixed(2)}
-                </span>
-              </div>
-            </Row>
+            <ExpenseRow
+              key={String(e.id)}
+              description={String(e.description)}
+              paidBy={String(e.paid_by_name)}
+              date={new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              currency={String(e.currency)}
+              amount={Number(e.total_amount)}
+              category={e.category ? String(e.category) : null}
+              splits={e.splits as Array<{ name: string; amount: string }>}
+              last={i === expenseRows.length - 1}
+            />
           ))
         )}
       </Section>
