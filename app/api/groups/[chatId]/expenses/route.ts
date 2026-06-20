@@ -4,6 +4,8 @@ import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
+import { parseChatId } from '@/lib/parse-params'
+import { expenseBodySchema } from '@/lib/schemas'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -28,12 +30,15 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId } = await props.params
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+
   const { searchParams } = new URL(request.url)
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
   const limit = 30
   const offset = (page - 1) * limit
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const me = await getGroupMember(group.id as number, user.id)
@@ -62,27 +67,20 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId } = await props.params
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+
+  const parsed = expenseBodySchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 422 })
+  }
+  const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
+
+  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const currentMember = await getGroupMember(group.id as number, user.id)
   if (!currentMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  const body = await request.json()
-  const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = body as {
-    description: string
-    total_amount: number
-    currency?: string
-    paid_by_member_id: number
-    split_type: 'equal' | 'custom'
-    splits: { member_id: number; amount?: number }[]
-    date?: string
-    category?: string
-  }
-
-  if (!description || !total_amount || !paid_by_member_id || !splits?.length) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-  }
 
   const allMemberIds = [paid_by_member_id, ...splits.map(s => s.member_id)]
   if (!await validateGroupMembers(group.id as number, allMemberIds)) {

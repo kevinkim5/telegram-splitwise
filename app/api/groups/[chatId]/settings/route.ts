@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
+import { parseChatId } from '@/lib/parse-params'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId } = await props.params
-  const [group] = await sql`SELECT id, title, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+
+  const [group] = await sql`SELECT id, title, currency FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
@@ -22,7 +26,10 @@ export async function PUT(request: Request, props: { params: Promise<{ chatId: s
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId } = await props.params
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)

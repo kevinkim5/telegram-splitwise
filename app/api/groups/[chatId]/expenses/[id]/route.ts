@@ -4,6 +4,8 @@ import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
+import { parseChatId, parseResourceId } from '@/lib/parse-params'
+import { expenseBodySchema } from '@/lib/schemas'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -32,13 +34,18 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId, id } = await props.params
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+  const expenseId = parseResourceId(id)
+  if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
+
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const expense = await getExpenseWithSplits(parseInt(id))
+  const expense = await getExpenseWithSplits(expenseId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!expense || (expense as any).group_id !== group.id) {
     return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
@@ -55,32 +62,27 @@ export async function PUT(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId, id } = await props.params
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+  const expenseId = parseResourceId(id)
+  if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
+
+  const parsed = expenseBodySchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 422 })
+  }
+  const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
+
+  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const [existing] = await sql`
-    SELECT * FROM expenses WHERE id = ${parseInt(id)} AND group_id = ${group.id} AND deleted_at IS NULL
+    SELECT * FROM expenses WHERE id = ${expenseId} AND group_id = ${group.id} AND deleted_at IS NULL
   `
   if (!existing) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
-
-  const body = await request.json()
-  const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = body as {
-    description: string
-    total_amount: number
-    currency?: string
-    paid_by_member_id: number
-    split_type: 'equal' | 'custom'
-    splits: { member_id: number; amount?: number }[]
-    date?: string
-    category?: string
-  }
-
-  if (!description || !total_amount || !paid_by_member_id || !splits?.length) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-  }
 
   const allMemberIds = [paid_by_member_id, ...splits.map(s => s.member_id)]
   if (!await validateGroupMembers(group.id as number, allMemberIds)) {
@@ -106,7 +108,6 @@ export async function PUT(
 
   const memberIds = resolvedSplits.map(s => s.member_id)
   const amounts = resolvedSplits.map(s => s.amount)
-  const expId = parseInt(id)
 
   // Atomic: update expense + replace all splits in one transaction (single HTTP round trip to Neon)
   await sql.transaction([
@@ -118,14 +119,14 @@ export async function PUT(
             split_type = ${split_type},
             date = ${expenseDate},
             category = ${category ?? null}
-        WHERE id = ${expId}`,
-    sql`DELETE FROM expense_splits WHERE expense_id = ${expId}`,
+        WHERE id = ${expenseId}`,
+    sql`DELETE FROM expense_splits WHERE expense_id = ${expenseId}`,
     sql`INSERT INTO expense_splits (expense_id, member_id, amount)
-        SELECT ${expId}, t.m, t.a
+        SELECT ${expenseId}, t.m, t.a
         FROM unnest(${memberIds}::int[], ${amounts}::numeric[]) AS t(m, a)`,
   ])
 
-  const result = await getExpenseWithSplits(parseInt(id))
+  const result = await getExpenseWithSplits(expenseId)
   return NextResponse.json(result)
 }
 
@@ -137,17 +138,22 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { chatId, id } = await props.params
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${BigInt(chatId)}`
+  const chatIdBig = parseChatId(chatId)
+  if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+  const expenseId = parseResourceId(id)
+  if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
+
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const [existing] = await sql`
-    SELECT id FROM expenses WHERE id = ${parseInt(id)} AND group_id = ${group.id} AND deleted_at IS NULL
+    SELECT id FROM expenses WHERE id = ${expenseId} AND group_id = ${group.id} AND deleted_at IS NULL
   `
   if (!existing) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
 
-  await sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${parseInt(id)}`
+  await sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${expenseId}`
   return NextResponse.json({ ok: true })
 }
