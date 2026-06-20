@@ -3,6 +3,7 @@ import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { parseChatId } from '@/lib/parse-params'
+import { settingsBodySchema } from '@/lib/schemas'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
   const user = getAuthUser(request)
@@ -35,10 +36,12 @@ export async function PUT(request: Request, props: { params: Promise<{ chatId: s
   const member = await getGroupMember(group.id as number, user.id)
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { currency } = await request.json() as { currency: string }
-  if (!currency) return NextResponse.json({ error: 'currency is required' }, { status: 400 })
+  const parsed = settingsBodySchema.safeParse(await request.json())
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 422 })
+  }
 
-  await sql`UPDATE groups SET currency = ${currency.toUpperCase()} WHERE id = ${group.id}`
+  await sql`UPDATE groups SET currency = ${parsed.data.currency} WHERE id = ${group.id}`
 
   const [updated] = await sql`SELECT id, title, currency FROM groups WHERE id = ${group.id}`
   return NextResponse.json({ currency: updated.currency, title: updated.title })

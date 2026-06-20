@@ -23,6 +23,7 @@ import { validateGroupMembers } from '@/lib/validate-group-members'
 import { GET as expensesGET, POST as expensesPOST } from '../../app/api/groups/[chatId]/expenses/route'
 import { GET as expenseGET, DELETE as expenseDELETE } from '../../app/api/groups/[chatId]/expenses/[id]/route'
 import { POST as settlementsPOST } from '../../app/api/groups/[chatId]/settlements/route'
+import { PUT as settingsPUT } from '../../app/api/groups/[chatId]/settings/route'
 
 const mockSql = vi.mocked(sql)
 const mockGetAuthUser = vi.mocked(getAuthUser)
@@ -251,5 +252,89 @@ describe('POST /settlements — valid frontend payload (regression)', () => {
 
     const res = await settlementsPOST(jsonRequest(frontendPayload), { params })
     expect(res.status).toBe(201)
+  })
+})
+
+// ─── 5. Settings PUT — Zod validates currency format ─────────────────────────
+
+describe('PUT /settings — Zod rejects invalid currency before hitting the DB', () => {
+  const params = Promise.resolve({ chatId: '123' })
+
+  beforeEach(() => {
+    mockSql.mockResolvedValueOnce([{ id: 7 }])       // group lookup
+    mockGetGroupMember.mockResolvedValueOnce({ id: 5 }) // membership check
+  })
+
+  it('rejects lowercase currency code (sgd)', async () => {
+    const res = await settingsPUT(
+      jsonRequest({ currency: 'sgd' }, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(422)
+    // No UPDATE should have been issued
+    expect(mockSql).toHaveBeenCalledTimes(1) // only the group lookup
+  })
+
+  it('rejects 4-letter currency code (SGDD)', async () => {
+    const res = await settingsPUT(
+      jsonRequest({ currency: 'SGDD' }, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(422)
+    expect(mockSql).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects missing currency field', async () => {
+    const res = await settingsPUT(
+      jsonRequest({}, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(422)
+    expect(mockSql).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects currency with special characters (SG$)', async () => {
+    const res = await settingsPUT(
+      jsonRequest({ currency: 'SG$' }, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(422)
+    expect(mockSql).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PUT /settings — valid frontend payload (regression)', () => {
+  const params = Promise.resolve({ chatId: '123' })
+
+  it('accepts a valid 3-letter uppercase currency (SGD) and returns updated settings', async () => {
+    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
+    mockSql
+      .mockResolvedValueOnce([{ id: 7 }])                          // group lookup
+      .mockResolvedValueOnce([])                                     // UPDATE
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD' }]) // SELECT after update
+
+    const res = await settingsPUT(
+      jsonRequest({ currency: 'SGD' }, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.currency).toBe('SGD')
+  })
+
+  it('accepts USD as a valid currency', async () => {
+    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
+    mockSql
+      .mockResolvedValueOnce([{ id: 7 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'USD' }])
+
+    const res = await settingsPUT(
+      jsonRequest({ currency: 'USD' }, 'PUT'),
+      { params },
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.currency).toBe('USD')
   })
 })
