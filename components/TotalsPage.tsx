@@ -25,6 +25,40 @@ interface TotalsData {
   by_category: CategoryEntry[]
 }
 
+function SkeletonTotals() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        {[0, 1].map(i => (
+          <div key={i} className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: 'var(--tg-theme-section-bg-color)' }}>
+            <div className="skeleton" style={{ height: 10, width: '60%', borderRadius: 3 }} />
+            <div className="skeleton" style={{ height: 20, width: '76%', borderRadius: 4 }} />
+            <div className="skeleton" style={{ height: 10, width: '44%', borderRadius: 3 }} />
+          </div>
+        ))}
+      </div>
+      <div className="skeleton" style={{ height: 11, width: 80, borderRadius: 3 }} />
+      <div className="tg-section">
+        {[76, 54, 38, 22].map((barW, i) => (
+          <div key={i} style={{ padding: '12px 16px', borderBottom: i < 3 ? '0.5px solid rgba(0,0,0,0.08)' : 'none' }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="skeleton" style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0 }} />
+                <div className="flex flex-col gap-1.5">
+                  <div className="skeleton" style={{ height: 13, width: 70, borderRadius: 4 }} />
+                  <div className="skeleton" style={{ height: 10, width: 106, borderRadius: 3 }} />
+                </div>
+              </div>
+              <div className="skeleton" style={{ height: 13, width: 62, borderRadius: 4 }} />
+            </div>
+            <div className="skeleton" style={{ height: 4, borderRadius: 2, width: `${barW}%` }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function TotalsPage() {
   const router = useRouter()
   const { chatId, group, apiHeaders } = useAppContext()
@@ -60,7 +94,7 @@ export function TotalsPage() {
   const isMultiCurrency = (data?.summary.length ?? 0) > 1
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
+    <div className="flex-1 min-h-0 overflow-y-auto page-enter">
       <div className="px-4 pt-4 pb-8 flex flex-col gap-4">
 
         {/* Header */}
@@ -75,12 +109,7 @@ export function TotalsPage() {
           <h1 className="font-bold text-lg">Totals</h1>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex justify-center py-16">
-            <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
-          </div>
-        )}
+        {loading && <SkeletonTotals />}
 
         {/* Error */}
         {error && (
