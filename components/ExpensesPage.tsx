@@ -858,10 +858,11 @@ export function ExpensesPage() {
                   const myAmt = exp.my_split_amount != null ? Number(exp.my_split_amount) : null
                   const isPayer = exp.paid_by_member_id === currentMember.id
                   const expTotal = Number(exp.total_amount)
+                  const isSolo = myAmt !== null && isPayer && expTotal - myAmt <= 0.005
                   let myVerbLabel: string | null = null
                   let myAmtDisplay: string | null = null
                   let myLabelColor = 'var(--tg-theme-hint-color)'
-                  if (myAmt !== null) {
+                  if (!isSolo && myAmt !== null) {
                     if (isPayer && expTotal - myAmt > 0.005) {
                       myVerbLabel = 'You lent'
                       myAmtDisplay = `${exp.currency} ${(expTotal - myAmt).toFixed(2)}`
@@ -872,12 +873,12 @@ export function ExpensesPage() {
                       myLabelColor = 'var(--tg-theme-destructive-text-color, #ff3b30)'
                     }
                   }
-                  const notInvolved = myVerbLabel === null
+                  const notInvolved = !isSolo && myVerbLabel === null
                   return (
                     <div
                       key={`e-${exp.id}`}
                       className="tg-section"
-                      style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1 }}
+                      style={{ borderRadius: '12px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(0,0,0,0.05)', opacity: notInvolved ? 0.55 : 1  }}
                       onClick={() => openExpenseDetail(exp)}
                     >
                       <div className="flex items-center gap-3 p-3">
@@ -890,7 +891,7 @@ export function ExpensesPage() {
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-base truncate">{exp.description}</p>
                           <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                            {exp.paid_by_name ?? '?'} paid {exp.currency} {expTotal.toFixed(2)}
+                            {isSolo ? 'You paid for yourself' : `${exp.paid_by_name ?? '?'} paid ${exp.currency} ${expTotal.toFixed(2)}`}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -900,7 +901,7 @@ export function ExpensesPage() {
                               <p className="font-bold text-base" style={{ color: myLabelColor }}>{myAmtDisplay}</p>
                             </div>
                           ) : (
-                            <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Not involved</p>
+                            <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>{isSolo ? 'No balance' : 'Not involved'}</p>
                           )}
                           <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
                         </div>
