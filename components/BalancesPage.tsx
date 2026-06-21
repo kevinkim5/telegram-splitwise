@@ -252,7 +252,7 @@ export function BalancesPage() {
                       color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
                     }}>
                       {net > 0
-                        ? `You are owed ${currency} ${net.toFixed(2)}`
+                        ? `You get back ${currency} ${net.toFixed(2)}`
                         : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
                     </p>
                   ))
