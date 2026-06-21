@@ -1,17 +1,20 @@
 import { sql } from '@/lib/sql'
 import { signOut } from '@/auth'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
-async function archiveGroup(id: number) {
+async function archiveGroup(id: number, _formData: FormData) {
   'use server'
   await sql`UPDATE groups SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL`
+  revalidatePath('/admin')
 }
 
-async function restoreGroup(id: number) {
+async function restoreGroup(id: number, _formData: FormData) {
   'use server'
   await sql`UPDATE groups SET deleted_at = NULL WHERE id = ${id} AND deleted_at IS NOT NULL`
+  revalidatePath('/admin')
 }
 
 
