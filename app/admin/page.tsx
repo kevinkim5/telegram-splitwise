@@ -93,12 +93,12 @@ export default async function AdminPage() {
       {/* Active group cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
         {activeGroups.map(g => (
-          <div key={String(g.id)} style={{ position: 'relative' }}>
+          <div key={String(g.id)} style={{ display: 'flex', alignItems: 'stretch', gap: '0.5rem' }}>
             <Link
               href={`/admin/${g.id}`}
-              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+              style={{ textDecoration: 'none', color: 'inherit', flex: 1 }}
             >
-              <div style={{ background: '#fff', borderRadius: '14px', padding: '1rem 1.125rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', transition: 'box-shadow 0.15s' }}>
+              <div style={{ background: '#fff', borderRadius: '14px', padding: '1rem 1.125rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', transition: 'box-shadow 0.15s', height: '100%' }}>
 
                 {/* Row 1: title + status */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
@@ -141,16 +141,12 @@ export default async function AdminPage() {
               </div>
             </Link>
 
-            {/* Archive button — sits outside the link to avoid nesting */}
-            <form
-              action={archiveGroup.bind(null, g.id as number)}
-              style={{ position: 'absolute', top: '0.875rem', right: '0.875rem' }}
-            >
+            {/* Archive button — separate from the link, no event handler needed */}
+            <form action={archiveGroup.bind(null, g.id as number)} style={{ display: 'flex' }}>
               <button
                 type="submit"
                 title="Archive group"
-                style={{ fontSize: '0.6875rem', color: '#9ca3af', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.25rem 0.375rem', borderRadius: '4px', lineHeight: 1 }}
-                onClick={e => e.stopPropagation()}
+                style={{ fontSize: '0.6875rem', color: '#9ca3af', background: '#fff', border: 'none', cursor: 'pointer', borderRadius: '14px', padding: '0 0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', whiteSpace: 'nowrap' }}
               >
                 Archive
               </button>
