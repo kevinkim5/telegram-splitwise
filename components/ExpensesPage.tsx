@@ -666,14 +666,14 @@ export function ExpensesPage() {
           className="flex-1 py-2 rounded-xl text-sm font-medium"
           style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
-          ⚖️ Balances
+          Balances
         </button>
         <button
           onClick={() => navigate('/totals')}
           className="flex-1 py-2 rounded-xl text-sm font-medium"
           style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
         >
-          📊 Totals
+          Totals
         </button>
         <button
           onClick={() => navigate('/add')}
