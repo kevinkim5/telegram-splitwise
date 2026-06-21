@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { Group, Member } from '@/types'
-import { CurrencyPicker } from '@/components/CurrencyPicker'
 
 interface AppContextValue {
   chatId: string
@@ -238,13 +237,28 @@ function HomepageReceipt() {
 
       {/* Instruction */}
       <div style={{
-        marginTop: 28, maxWidth: 220, textAlign: 'center',
+        marginTop: 28, maxWidth: 240,
         animation: 'fadeUp 0.4s ease 0.3s both',
       }}>
-        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Open from a group chat</p>
-        <p style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.5 }}>
-          Send <strong>/start</strong> to the bot inside your Telegram group, then tap the button it sends.
-        </p>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>How to get started</p>
+        <a
+          href="https://t.me/kevin_tele_splitwise_bot?startgroup=true"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block', textAlign: 'center',
+            padding: '10px 16px', borderRadius: 10,
+            background: '#2481cc', color: '#fff',
+            fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            marginBottom: 14,
+          }}
+        >
+          1. Add bot to a group →
+        </a>
+        <ol start={2} style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
+          <li>Send <strong>/start</strong> in the group chat.</li>
+          <li>Tap the button the bot sends to open the app.</li>
+        </ol>
       </div>
     </div>
   )
@@ -254,8 +268,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
-  const [pendingCurrency, setPendingCurrency] = useState<string | null>(null)
 
   // Admin routes are plain web pages — skip Telegram Mini App initialisation entirely
   if (pathname.startsWith('/admin')) {
@@ -303,7 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const err = await res.json()
           throw new Error(err.error ?? 'Failed to initialize group')
         }
-        const { group, member, is_new_group } = await res.json() as {
+        const { group, member } = await res.json() as {
           group: Group
           member: Member
           is_new_group: boolean
@@ -325,11 +337,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         setCtx({ chatId, initData, group, currentMember: member, members, refreshMembers, refreshGroup, apiHeaders })
-
-        // Show currency picker for brand-new groups
-        if (is_new_group) {
-          setShowCurrencyPicker(true)
-        }
       } catch (e) {
         setError(String(e))
       }
@@ -337,22 +344,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     init()
   }, [])
-
-  const handleCurrencySelect = async (currency: string) => {
-    if (!ctx) return
-    try {
-      await fetch(`/api/groups/${ctx.chatId}/settings`, {
-        method: 'PUT',
-        headers: ctx.apiHeaders,
-        body: JSON.stringify({ currency }),
-      })
-      setCtx(prev => prev ? { ...prev, group: { ...prev.group, currency } } : prev)
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    } catch {
-      // silently ignore — user can change later
-    }
-    setShowCurrencyPicker(false)
-  }
 
   if (error) {
     return <HomepageReceipt />
@@ -369,15 +360,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-
-      {showCurrencyPicker && (
-        <CurrencyPicker
-          current={ctx.group.currency}
-          onSelect={handleCurrencySelect}
-          onClose={() => setShowCurrencyPicker(false)}
-          isFirstTime
-        />
-      )}
     </AppCtx.Provider>
   )
 }
