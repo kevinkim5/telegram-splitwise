@@ -242,8 +242,21 @@ function HomepageReceipt() {
         animation: 'fadeUp 0.4s ease 0.3s both',
       }}>
         <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>How to get started</p>
-        <ol style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
-          <li>Add the bot to your Telegram group.</li>
+        <a
+          href="https://t.me/kevin_tele_splitwise_bot?startgroup=true"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block', textAlign: 'center',
+            padding: '10px 16px', borderRadius: 10,
+            background: '#2481cc', color: '#fff',
+            fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            marginBottom: 14,
+          }}
+        >
+          1. Add bot to a group →
+        </a>
+        <ol start={2} style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
           <li>Send <strong>/start</strong> in the group chat.</li>
           <li>Tap the button the bot sends to open the app.</li>
         </ol>
