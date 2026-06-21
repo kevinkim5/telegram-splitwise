@@ -238,13 +238,15 @@ function HomepageReceipt() {
 
       {/* Instruction */}
       <div style={{
-        marginTop: 28, maxWidth: 220, textAlign: 'center',
+        marginTop: 28, maxWidth: 240,
         animation: 'fadeUp 0.4s ease 0.3s both',
       }}>
-        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Open from a group chat</p>
-        <p style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.5 }}>
-          Send <strong>/start</strong> to the bot inside your Telegram group, then tap the button it sends.
-        </p>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, textAlign: 'center' }}>How to get started</p>
+        <ol style={{ fontSize: 12, color: 'var(--tg-theme-hint-color)', lineHeight: 1.6, paddingLeft: 18, margin: 0 }}>
+          <li>Add the bot to your Telegram group.</li>
+          <li>Send <strong>/start</strong> in the group chat.</li>
+          <li>Tap the button the bot sends to open the app.</li>
+        </ol>
       </div>
     </div>
   )
