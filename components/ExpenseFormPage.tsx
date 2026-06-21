@@ -49,6 +49,11 @@ export function ExpenseFormPage({ editId }: Props) {
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
   const showSkeleton = useShowSkeleton(loading)
   const [inputFocused, setInputFocused] = useState(false)
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    setIsDark(window.Telegram?.WebApp?.colorScheme === 'dark')
+  }, [])
 
   useEffect(() => {
     if (!isEdit || !editId) return
@@ -238,7 +243,9 @@ export function ExpenseFormPage({ editId }: Props) {
             border: 'none',
             background: 'var(--tg-theme-button-color, #2481cc)',
             cursor: 'pointer',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+            boxShadow: isDark
+              ? '0 2px 16px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)'
+              : '0 2px 12px rgba(0,0,0,0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
