@@ -2,6 +2,7 @@ import { sql } from '@/lib/sql'
 import { signOut } from '@/auth'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
+import { ArchiveButton } from './ArchiveButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,15 +145,9 @@ export default async function AdminPage() {
               </div>
             </Link>
 
-            {/* Archive button — separate from the link, no event handler needed */}
+            {/* Archive button — separate from the link */}
             <form action={archiveGroup.bind(null, g.id as number)} style={{ display: 'flex' }}>
-              <button
-                type="submit"
-                title="Archive group"
-                style={{ fontSize: '0.6875rem', color: '#9ca3af', background: '#fff', border: 'none', cursor: 'pointer', borderRadius: '14px', padding: '0 0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', whiteSpace: 'nowrap' }}
-              >
-                Archive
-              </button>
+              <ArchiveButton groupTitle={String(g.title)} />
             </form>
           </div>
         ))}
