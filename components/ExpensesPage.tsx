@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { Expense, ExpenseSplit, Member, Settlement } from '@/types'
+import { CurrencyPicker } from '@/components/CurrencyPicker'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -411,6 +412,66 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
+function SettingsSheet({ onClose }: { onClose: () => void }) {
+  const { chatId, group, apiHeaders, refreshGroup } = useAppContext()
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
+
+  const handleCurrencySelect = async (currency: string) => {
+    try {
+      await fetch(`/api/groups/${chatId}/settings`, {
+        method: 'PUT',
+        headers: apiHeaders,
+        body: JSON.stringify({ currency }),
+      })
+      await refreshGroup()
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    } catch { /* ignore */ }
+    setShowCurrencyPicker(false)
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 flex items-end justify-center z-50"
+        style={{ background: 'rgba(0,0,0,0.5)' }}
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      >
+        <div className="w-full rounded-t-2xl flex flex-col" style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}>
+          <div className="flex justify-between items-center p-4 pb-3">
+            <h2 className="text-lg font-bold">Group Settings</h2>
+            <button onClick={onClose}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}>
+              ×
+            </button>
+          </div>
+          <div className="px-4 pb-6">
+            <p className="tg-label mb-2">Default Currency</p>
+            <div className="tg-section">
+              <button
+                onClick={() => setShowCurrencyPicker(true)}
+                className="w-full flex items-center justify-between"
+                style={{ padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              >
+                <span className="text-sm">Currency</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--tg-theme-button-color)' }}>
+                  {group.currency} ›
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {showCurrencyPicker && (
+        <CurrencyPicker
+          current={group.currency}
+          onSelect={handleCurrencySelect}
+          onClose={() => setShowCurrencyPicker(false)}
+        />
+      )}
+    </>
+  )
+}
+
 function SkeletonExpenseItem() {
   return (
     <div className="tg-section" style={{ borderRadius: 12 }}>
@@ -456,6 +517,7 @@ export function ExpensesPage() {
   const [error, setError] = useState<string | null>(null)
   const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [detail, setDetail] = useState<DetailState | null>(null)
 
   const showSkeleton = useShowSkeleton(loading)
@@ -619,45 +681,54 @@ export function ExpensesPage() {
               : null
           }
         </div>
-        <button
-          onClick={() => setShowMembers(true)}
-          className="flex items-center"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-          aria-label="Group members"
-        >
-          {members.slice(0, 3).map((m, i) => (
-            <div
-              key={m.id}
-              style={{
-                marginRight: -8,
-                borderRadius: '50%',
-                border: '2px solid var(--tg-theme-bg-color)',
-                lineHeight: 0,
-                flexShrink: 0,
-              }}
-            >
-              <MemberAvatar member={m} size={26} />
-            </div>
-          ))}
-          {members.length > 3 && (
-            <div
-              className="flex items-center justify-center flex-shrink-0"
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: '50%',
-                background: 'var(--tg-theme-secondary-bg-color)',
-                border: '2px solid var(--tg-theme-bg-color)',
-                fontSize: '10px',
-                fontWeight: 700,
-                color: 'var(--tg-theme-hint-color)',
-                marginLeft: 0,
-              }}
-            >
-              +{members.length - 3}
-            </div>
-          )}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowMembers(true)}
+            className="flex items-center"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            aria-label="Group members"
+          >
+            {members.slice(0, 3).map((m, i) => (
+              <div
+                key={m.id}
+                style={{
+                  marginRight: -8,
+                  borderRadius: '50%',
+                  border: '2px solid var(--tg-theme-bg-color)',
+                  lineHeight: 0,
+                  flexShrink: 0,
+                }}
+              >
+                <MemberAvatar member={m} size={26} />
+              </div>
+            ))}
+            {members.length > 3 && (
+              <div
+                className="flex items-center justify-center flex-shrink-0"
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  background: 'var(--tg-theme-secondary-bg-color)',
+                  border: '2px solid var(--tg-theme-bg-color)',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  color: 'var(--tg-theme-hint-color)',
+                  marginLeft: 0,
+                }}
+              >
+                +{members.length - 3}
+              </div>
+            )}
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', marginLeft: 6, color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}
+            aria-label="Group settings"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -861,6 +932,7 @@ export function ExpensesPage() {
     </div>
 
     {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}
+    {showSettings && <SettingsSheet onClose={() => setShowSettings(false)} />}
 
     {detail && (
       <DetailPanel

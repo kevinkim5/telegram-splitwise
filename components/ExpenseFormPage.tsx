@@ -41,7 +41,7 @@ export function ExpenseFormPage({ editId }: Props) {
     () => Object.fromEntries(members.map(m => [m.id, 1]))
   )
   const [category, setCategory] = useState<string>('')
-  const [expenseCurrency, setExpenseCurrency] = useState<string>('SGD')
+  const [expenseCurrency, setExpenseCurrency] = useState<string>(group.currency)
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)

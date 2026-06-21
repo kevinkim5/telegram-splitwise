@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import type { Group, Member } from '@/types'
-import { CurrencyPicker } from '@/components/CurrencyPicker'
 
 interface AppContextValue {
   chatId: string
@@ -269,8 +268,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
-  const [pendingCurrency, setPendingCurrency] = useState<string | null>(null)
 
   // Admin routes are plain web pages — skip Telegram Mini App initialisation entirely
   if (pathname.startsWith('/admin')) {
@@ -318,7 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const err = await res.json()
           throw new Error(err.error ?? 'Failed to initialize group')
         }
-        const { group, member, is_new_group } = await res.json() as {
+        const { group, member } = await res.json() as {
           group: Group
           member: Member
           is_new_group: boolean
@@ -340,11 +337,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         setCtx({ chatId, initData, group, currentMember: member, members, refreshMembers, refreshGroup, apiHeaders })
-
-        // Show currency picker for brand-new groups
-        if (is_new_group) {
-          setShowCurrencyPicker(true)
-        }
       } catch (e) {
         setError(String(e))
       }
@@ -352,22 +344,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     init()
   }, [])
-
-  const handleCurrencySelect = async (currency: string) => {
-    if (!ctx) return
-    try {
-      await fetch(`/api/groups/${ctx.chatId}/settings`, {
-        method: 'PUT',
-        headers: ctx.apiHeaders,
-        body: JSON.stringify({ currency }),
-      })
-      setCtx(prev => prev ? { ...prev, group: { ...prev.group, currency } } : prev)
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    } catch {
-      // silently ignore — user can change later
-    }
-    setShowCurrencyPicker(false)
-  }
 
   if (error) {
     return <HomepageReceipt />
@@ -384,15 +360,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-
-      {showCurrencyPicker && (
-        <CurrencyPicker
-          current={ctx.group.currency}
-          onSelect={handleCurrencySelect}
-          onClose={() => setShowCurrencyPicker(false)}
-          isFirstTime
-        />
-      )}
     </AppCtx.Provider>
   )
 }
