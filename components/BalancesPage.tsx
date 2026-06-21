@@ -321,15 +321,17 @@ export function BalancesPage() {
                       >
                         <span className="text-sm font-medium">{name}</span>
                         <span className="flex items-center gap-2">
-                          {lines.length === 0 ? (
-                            <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
-                          ) : lines.map(({ currency, net }) => (
-                            <span key={currency} className="text-xs font-bold" style={{
-                              color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                            }}>
-                              {net > 0 ? 'receives' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
-                            </span>
-                          ))}
+                          <span className="flex flex-col items-end gap-0.5">
+                            {lines.length === 0 ? (
+                              <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
+                            ) : lines.map(({ currency, net }) => (
+                              <span key={currency} className="text-xs font-bold" style={{
+                                color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                              }}>
+                                {net > 0 ? 'receives' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
+                              </span>
+                            ))}
+                          </span>
                           {hasDetails && (
                             <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '12px' }}>
                               {expanded ? '▲' : '▼'}
