@@ -38,7 +38,7 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const limit = 30
   const offset = (page - 1) * limit
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const me = await getGroupMember(group.id as number, user.id)
@@ -76,7 +76,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   }
   const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const currentMember = await getGroupMember(group.id as number, user.id)

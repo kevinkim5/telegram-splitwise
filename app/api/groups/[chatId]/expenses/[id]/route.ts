@@ -39,7 +39,7 @@ export async function GET(
   const expenseId = parseResourceId(id)
   if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
@@ -73,7 +73,7 @@ export async function PUT(
   }
   const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
@@ -143,7 +143,7 @@ export async function DELETE(
   const expenseId = parseResourceId(id)
   if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
