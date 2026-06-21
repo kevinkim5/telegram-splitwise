@@ -28,8 +28,8 @@ async function handleMessage(message: {
 
   // Auto-register the sender as a member of this chat
   await sql`
-    INSERT INTO groups (chat_id, title)
-    VALUES (${chat.id}, ${chat.title ?? chat.first_name ?? 'Private Chat'})
+    INSERT INTO groups (chat_id, title, currency)
+    VALUES (${chat.id}, ${chat.title ?? chat.first_name ?? 'Private Chat'}, 'SGD')
     ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title
   `
 
