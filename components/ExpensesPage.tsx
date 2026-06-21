@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { Expense, ExpenseSplit, Member, Settlement } from '@/types'
 
 function formatDate(dateStr: string) {
@@ -410,6 +411,39 @@ function MembersSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
+function SkeletonExpenseItem() {
+  return (
+    <div className="tg-section" style={{ borderRadius: 12 }}>
+      <div className="flex items-center gap-3 p-3">
+        <div className="skeleton" style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0 }} />
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <div className="skeleton" style={{ height: 14, width: '55%', borderRadius: 4 }} />
+          <div className="skeleton" style={{ height: 11, width: '38%', borderRadius: 4 }} />
+        </div>
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="skeleton" style={{ height: 10, width: 44, borderRadius: 4 }} />
+          <div className="skeleton" style={{ height: 14, width: 60, borderRadius: 4 }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SkeletonExpenseGroup({ count, first = false }: { count: number; first?: boolean }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 px-1" style={{ paddingTop: first ? 8 : 16, paddingBottom: 8 }}>
+        <div className="skeleton" style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0 }} />
+        <div className="skeleton" style={{ height: 10, width: 56, borderRadius: 3 }} />
+        <div className="skeleton" style={{ height: 10, width: 48, borderRadius: 3 }} />
+      </div>
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: count }).map((_, i) => <SkeletonExpenseItem key={i} />)}
+      </div>
+    </div>
+  )
+}
+
 export function ExpensesPage() {
   const router = useRouter()
   const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
@@ -423,6 +457,9 @@ export function ExpensesPage() {
   const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
   const [showMembers, setShowMembers] = useState(false)
   const [detail, setDetail] = useState<DetailState | null>(null)
+
+  const showSkeleton = useShowSkeleton(loading)
+  const showBalanceShimmer = useShowSkeleton(myBalances === null)
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -571,7 +608,7 @@ export function ExpensesPage() {
 
   return (
     <>
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full page-enter">
     {/* Fixed header */}
     <div
       className="flex-shrink-0 px-4 pt-4 pb-3"
@@ -580,11 +617,12 @@ export function ExpensesPage() {
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          {balanceText && (
-            <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>
-              {balanceText}
-            </p>
-          )}
+          {showBalanceShimmer
+            ? <div className="skeleton" style={{ height: 12, width: 134, borderRadius: 3, marginTop: 4 }} />
+            : balanceText
+              ? <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>{balanceText}</p>
+              : null
+          }
         </div>
         <button
           onClick={() => setShowMembers(true)}
@@ -654,10 +692,11 @@ export function ExpensesPage() {
 
     {/* Scrollable list */}
     <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
-      {loading && (
-        <div className="flex justify-center py-12">
-          <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
-        </div>
+      {showSkeleton && (
+        <>
+          <SkeletonExpenseGroup count={3} first />
+          <SkeletonExpenseGroup count={2} />
+        </>
       )}
 
       {error && (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
 
@@ -75,12 +76,47 @@ function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
   )
 }
 
+function SkeletonBalances() {
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <div className="skeleton" style={{ height: 11, width: 24, borderRadius: 3, margin: '0 16px 8px' }} />
+        <div className="tg-section">
+          <div className="tg-list-item flex items-center justify-between">
+            <div className="skeleton" style={{ height: 14, width: '42%', borderRadius: 4 }} />
+            <div className="skeleton" style={{ height: 12, width: '28%', borderRadius: 4 }} />
+          </div>
+          <div className="tg-list-item flex items-center justify-between" style={{ borderBottom: 'none' }}>
+            <div className="flex-1 pr-4">
+              <div className="skeleton" style={{ height: 12, width: '50%', borderRadius: 3, marginBottom: 6 }} />
+              <div className="skeleton" style={{ height: 15, width: '32%', borderRadius: 4 }} />
+            </div>
+            <div className="skeleton" style={{ height: 30, width: 58, borderRadius: 10 }} />
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="skeleton" style={{ height: 11, width: 40, borderRadius: 3, margin: '0 16px 8px' }} />
+        <div className="tg-section">
+          {[0, 1].map(i => (
+            <div key={i} className="tg-list-item flex items-center justify-between" style={{ borderBottom: i === 1 ? 'none' : undefined }}>
+              <div className="skeleton" style={{ height: 14, width: '44%', borderRadius: 4 }} />
+              <div className="skeleton" style={{ height: 13, width: '22%', borderRadius: 4 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function BalancesPage() {
   const router = useRouter()
   const { chatId, currentMember, apiHeaders } = useAppContext()
   const [data, setData] = useState<BalancesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const showSkeleton = useShowSkeleton(loading)
   const [settleDebt, setSettleDebt] = useState<{ debt: SimplifiedDebt; label: string } | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
@@ -168,7 +204,7 @@ export function BalancesPage() {
     data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
@@ -181,11 +217,7 @@ export function BalancesPage() {
         <h1 className="font-bold text-lg">Balances</h1>
       </div>
 
-      {loading && (
-        <div className="flex justify-center py-12">
-          <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
-        </div>
-      )}
+      {showSkeleton && <SkeletonBalances />}
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
           {error}

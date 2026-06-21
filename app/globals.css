@@ -109,3 +109,24 @@ input[type="number"] {
   padding: 0 16px;
   margin-bottom: 6px;
 }
+
+/* Page transition */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: pageEnter 0.18s ease both;
+}
+
+/* Skeleton loading */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+.skeleton {
+  background-color: var(--tg-theme-secondary-bg-color);
+  animation: skeletonPulse 1.6s ease-in-out infinite;
+}

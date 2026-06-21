@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import { computeShareSplits } from '@/lib/splits'
 import type { Expense } from '@/types'
 
@@ -45,6 +46,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
+  const showSkeleton = useShowSkeleton(loading)
 
   useEffect(() => {
     if (!isEdit || !editId) return
@@ -164,16 +166,39 @@ export function ExpenseFormPage({ editId }: Props) {
     }
   }
 
+  if (loading && !showSkeleton) {
+    return <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter" />
+  }
+
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <p style={{ color: 'var(--tg-theme-hint-color)' }}>Loading…</p>
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
+        <div className="flex items-center gap-3 mb-5">
+          <button
+            onClick={() => navigate('/')}
+            className="text-sm font-medium"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+          >
+            ← Back
+          </button>
+          <h1 className="text-lg font-bold">Edit Expense</h1>
+        </div>
+        <div className="flex flex-col gap-5">
+          {['Description', 'Amount', 'Paid by', 'Split between', 'Date'].map(label => (
+            <div key={label}>
+              <div className="skeleton" style={{ height: 11, width: label.length * 7.5, borderRadius: 3, margin: '0 16px 6px' }} />
+              <div className="tg-section">
+                <div className="skeleton" style={{ height: 44, borderRadius: 0 }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
