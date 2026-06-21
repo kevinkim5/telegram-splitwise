@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
 
@@ -115,6 +116,7 @@ export function BalancesPage() {
   const [data, setData] = useState<BalancesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const showSkeleton = useShowSkeleton(loading)
   const [settleDebt, setSettleDebt] = useState<{ debt: SimplifiedDebt; label: string } | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
@@ -215,7 +217,7 @@ export function BalancesPage() {
         <h1 className="font-bold text-lg">Balances</h1>
       </div>
 
-      {loading && <SkeletonBalances />}
+      {showSkeleton && <SkeletonBalances />}
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
           {error}

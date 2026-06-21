@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 
 interface CurrencySummary {
   currency: string
@@ -66,6 +67,7 @@ export function TotalsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null)
+  const showSkeleton = useShowSkeleton(loading)
 
   const fetchTotals = useCallback(async () => {
     setLoading(true)
@@ -109,7 +111,7 @@ export function TotalsPage() {
           <h1 className="font-bold text-lg">Totals</h1>
         </div>
 
-        {loading && <SkeletonTotals />}
+        {showSkeleton && <SkeletonTotals />}
 
         {/* Error */}
         {error && (

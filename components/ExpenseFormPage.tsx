@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import { computeShareSplits } from '@/lib/splits'
 import type { Expense } from '@/types'
 
@@ -45,6 +46,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
+  const showSkeleton = useShowSkeleton(loading)
 
   useEffect(() => {
     if (!isEdit || !editId) return
@@ -162,6 +164,10 @@ export function ExpenseFormPage({ editId }: Props) {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (loading && !showSkeleton) {
+    return <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter" />
   }
 
   if (loading) {

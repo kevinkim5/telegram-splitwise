@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { Expense, ExpenseSplit, Member, Settlement } from '@/types'
 
 function formatDate(dateStr: string) {
@@ -457,6 +458,9 @@ export function ExpensesPage() {
   const [showMembers, setShowMembers] = useState(false)
   const [detail, setDetail] = useState<DetailState | null>(null)
 
+  const showSkeleton = useShowSkeleton(loading)
+  const showBalanceShimmer = useShowSkeleton(myBalances === null)
+
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
@@ -613,7 +617,7 @@ export function ExpensesPage() {
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-3">
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          {myBalances === null
+          {showBalanceShimmer
             ? <div className="skeleton" style={{ height: 12, width: 134, borderRadius: 3, marginTop: 4 }} />
             : balanceText
               ? <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>{balanceText}</p>
@@ -688,7 +692,7 @@ export function ExpensesPage() {
 
     {/* Scrollable list */}
     <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
-      {loading && (
+      {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />
           <SkeletonExpenseGroup count={2} />
