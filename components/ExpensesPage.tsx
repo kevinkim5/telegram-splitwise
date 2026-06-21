@@ -583,28 +583,19 @@ export function ExpensesPage() {
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const balanceText = myBalances === null ? null
-    : myBalances.length === 0 ? 'All settled up ✓'
-    : (() => {
-        const owed = myBalances.filter(b => b.amount > 0)
-        const owe = myBalances.filter(b => b.amount < 0)
-        if (owe.length === 0)
-          return 'You are owed ' + owed.map(b => `${b.currency} ${b.amount.toFixed(2)}`).join(' + ')
-        if (owed.length === 0)
-          return 'You owe ' + owe.map(b => `${b.currency} ${Math.abs(b.amount).toFixed(2)}`).join(' + ')
-        return [
-          ...owed.map(b => `You are owed ${b.currency} ${b.amount.toFixed(2)}`),
-          ...owe.map(b => `You owe ${b.currency} ${Math.abs(b.amount).toFixed(2)}`),
-        ].join(', ')
-      })()
-
-  const balanceColor = !myBalances || myBalances.length === 0
-    ? 'var(--tg-theme-hint-color)'
-    : myBalances.every(b => b.amount > 0)
-      ? 'var(--tg-theme-button-color)'
-      : myBalances.every(b => b.amount < 0)
-        ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-        : 'var(--tg-theme-hint-color)'
+  const balanceLines: { text: string; color: string }[] = myBalances === null ? []
+    : myBalances.length === 0
+      ? [{ text: 'All settled up ✓', color: 'var(--tg-theme-hint-color)' }]
+      : [
+          ...myBalances.filter(b => b.amount < 0).map(b => ({
+            text: `You owe ${b.currency} ${Math.abs(b.amount).toFixed(2)}`,
+            color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+          })),
+          ...myBalances.filter(b => b.amount > 0).map(b => ({
+            text: `You get back ${b.currency} ${b.amount.toFixed(2)}`,
+            color: 'var(--tg-theme-button-color)',
+          })),
+        ]
 
   return (
     <>
@@ -619,8 +610,12 @@ export function ExpensesPage() {
           <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
           {showBalanceShimmer
             ? <div className="skeleton" style={{ height: 12, width: 134, borderRadius: 3, marginTop: 4 }} />
-            : balanceText
-              ? <p className="text-xs mt-0.5 font-medium" style={{ color: balanceColor }}>{balanceText}</p>
+            : balanceLines.length > 0
+              ? <div className="mt-0.5 flex flex-col gap-0">
+                  {balanceLines.map((line, i) => (
+                    <p key={i} className="text-xs font-medium" style={{ color: line.color }}>{line.text}</p>
+                  ))}
+                </div>
               : null
           }
         </div>
