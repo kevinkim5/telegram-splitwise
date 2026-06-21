@@ -28,7 +28,7 @@ export async function PUT(
     return NextResponse.json({ error: 'from and to must differ' }, { status: 400 })
   }
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)
@@ -80,7 +80,7 @@ export async function DELETE(
   const settlementId = parseResourceId(id)
   if (!settlementId) return NextResponse.json({ error: 'Invalid settlement ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
+  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
 
   const member = await getGroupMember(group.id as number, user.id)

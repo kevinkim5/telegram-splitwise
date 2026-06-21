@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   }
 
   const webhookUrl = `${WEBAPP_URL}/api/bot/webhook`
-  const body: Record<string, unknown> = { url: webhookUrl, allowed_updates: ['message'] }
+  const body: Record<string, unknown> = { url: webhookUrl, allowed_updates: ['message', 'my_chat_member'] }
   if (process.env.WEBHOOK_SECRET_TOKEN) {
     body.secret_token = process.env.WEBHOOK_SECRET_TOKEN
   }

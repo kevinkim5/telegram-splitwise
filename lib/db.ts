@@ -7,7 +7,8 @@ export async function ensureSchema() {
       chat_id    BIGINT NOT NULL UNIQUE,
       title      TEXT   NOT NULL,
       currency   VARCHAR(10) NOT NULL DEFAULT 'SGD',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
     )
   `
   await sql`
@@ -40,6 +41,7 @@ export async function ensureSchema() {
   `
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(50)`
   await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS photo_url TEXT`
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
   await sql`
     CREATE TABLE IF NOT EXISTS expense_splits (
       id         SERIAL PRIMARY KEY,

@@ -34,6 +34,9 @@ export async function POST(request: Request) {
     ON CONFLICT (chat_id) DO NOTHING
   `
 
+  // Reactivate if the group was previously archived (bot re-added to chat)
+  await sql`UPDATE groups SET deleted_at = NULL WHERE chat_id = ${BigInt(chatId)} AND deleted_at IS NOT NULL`
+
   const [group] = await sql`SELECT * FROM groups WHERE chat_id = ${BigInt(chatId)}`
 
   // Upsert current user as member (including photo_url)

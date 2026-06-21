@@ -74,6 +74,28 @@ async function handleMessage(message: {
   }
 }
 
+async function handleMyChatMember(update: {
+  chat: { id: number }
+  new_chat_member: { status: string }
+}) {
+  const { chat, new_chat_member } = update
+  const status = new_chat_member.status
+
+  if (status === 'kicked' || status === 'left') {
+    await sql`
+      UPDATE groups SET deleted_at = NOW()
+      WHERE chat_id = ${chat.id} AND deleted_at IS NULL
+    `
+    console.log(`Bot removed from chat ${chat.id} (${status}), group archived`)
+  } else if (status === 'member' || status === 'administrator') {
+    await sql`
+      UPDATE groups SET deleted_at = NULL
+      WHERE chat_id = ${chat.id} AND deleted_at IS NOT NULL
+    `
+    console.log(`Bot re-added to chat ${chat.id} (${status}), group reactivated`)
+  }
+}
+
 export async function POST(request: Request) {
   const secretHeader = request.headers.get('x-telegram-bot-api-secret-token')
   if (!verifyWebhookSecret(secretHeader, process.env.WEBHOOK_SECRET_TOKEN)) {
@@ -85,6 +107,8 @@ export async function POST(request: Request) {
 
     if (update.message) {
       await handleMessage(update.message)
+    } else if (update.my_chat_member) {
+      await handleMyChatMember(update.my_chat_member)
     }
 
     return NextResponse.json({ ok: true })
