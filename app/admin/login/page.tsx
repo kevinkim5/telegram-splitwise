@@ -14,7 +14,7 @@ export default function LoginPage({
         background: '#fff', borderRadius: '12px', padding: '2.5rem',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)', width: '100%', maxWidth: '360px', textAlign: 'center',
       }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Split</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Split Admin</h1>
         <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '2rem' }}>
           Sign in with your GitHub account to continue.
         </p>

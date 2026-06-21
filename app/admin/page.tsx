@@ -44,7 +44,7 @@ export default async function AdminPage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Split</h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Split Admin</h1>
         <form action={async () => {
           'use server'
           await signOut({ redirectTo: '/admin/login' })
