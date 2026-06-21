@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 export default async function AdminPage() {
   const groups = await sql`
     SELECT
-      g.id, g.title, g.created_at,
+      g.id, g.title, g.currency, g.created_at,
       (SELECT COUNT(*) FROM members     WHERE group_id = g.id)                          AS member_count,
       (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL)   AS expense_count,
       (SELECT COUNT(*) FROM settlements WHERE group_id = g.id AND deleted_at IS NULL)   AS settlement_count,
@@ -40,7 +40,7 @@ export default async function AdminPage() {
   const totalExpenses = groups.reduce((s, g) => s + Number(g.expense_count), 0)
 
   return (
-    <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
+    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '1.5rem 1rem 2rem' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
@@ -59,7 +59,7 @@ export default async function AdminPage() {
       </p>
 
       {/* Nav */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem' }}>
         <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', padding: '0.375rem 0.75rem', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
           Groups
         </span>
@@ -76,29 +76,46 @@ export default async function AdminPage() {
             href={`/admin/${g.id}`}
             style={{ textDecoration: 'none', color: 'inherit' }}
           >
-            <div style={{ background: '#fff', borderRadius: '12px', padding: '1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+            <div style={{ background: '#fff', borderRadius: '14px', padding: '1rem 1.125rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', transition: 'box-shadow 0.15s' }}>
+
+              {/* Row 1: title + status */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
                 <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
                 {g.is_settled ? (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', borderRadius: '999px', padding: '0.1875rem 0.625rem', flexShrink: 0, marginLeft: '0.75rem' }}>
                     Settled
                   </span>
                 ) : (
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#dc2626', background: '#fef2f2', borderRadius: '999px', padding: '0.125rem 0.625rem', flexShrink: 0, marginLeft: '0.5rem' }}>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#dc2626', background: '#fef2f2', borderRadius: '999px', padding: '0.1875rem 0.625rem', flexShrink: 0, marginLeft: '0.75rem' }}>
                     Outstanding
                   </span>
                 )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem', color: '#6b7280' }}>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <span>{String(g.member_count)} members</span>
-                  <span>{String(g.expense_count)} expenses</span>
-                  <span>{String(g.settlement_count)} settlements</span>
-                </div>
-                <span style={{ flexShrink: 0, marginLeft: '0.5rem' }}>
+
+              {/* Row 2: currency + date */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', background: '#eff6ff', borderRadius: '6px', padding: '0.125rem 0.5rem' }}>
+                  {String(g.currency)}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
                   {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </span>
               </div>
+
+              {/* Row 3: stats */}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {[
+                  { label: 'members',     value: String(g.member_count) },
+                  { label: 'expenses',    value: String(g.expense_count) },
+                  { label: 'settlements', value: String(g.settlement_count) },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '0.4375rem 0.625rem' }}>
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>{value}</div>
+                    <div style={{ fontSize: '0.6875rem', color: '#9ca3af', marginTop: '0.125rem' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
             </div>
           </Link>
         ))}
