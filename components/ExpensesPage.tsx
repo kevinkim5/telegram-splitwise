@@ -586,16 +586,16 @@ export function ExpensesPage() {
   const balanceLines: { text: string; color: string }[] = myBalances === null ? []
     : myBalances.length === 0
       ? [{ text: 'All settled up ✓', color: 'var(--tg-theme-hint-color)' }]
-      : [
-          ...myBalances.filter(b => b.amount < 0).map(b => ({
-            text: `You owe ${b.currency} ${Math.abs(b.amount).toFixed(2)}`,
-            color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
-          })),
-          ...myBalances.filter(b => b.amount > 0).map(b => ({
-            text: `You get back ${b.currency} ${b.amount.toFixed(2)}`,
-            color: 'var(--tg-theme-button-color)',
-          })),
-        ]
+      : (() => {
+          const owe = myBalances.filter(b => b.amount < 0)
+          const getBack = myBalances.filter(b => b.amount > 0)
+          const lines: { text: string; color: string }[] = []
+          if (owe.length > 0)
+            lines.push({ text: 'You owe ' + owe.map(b => `${b.currency} ${Math.abs(b.amount).toFixed(2)}`).join(' + '), color: 'var(--tg-theme-destructive-text-color, #ff3b30)' })
+          if (getBack.length > 0)
+            lines.push({ text: 'You get back ' + getBack.map(b => `${b.currency} ${b.amount.toFixed(2)}`).join(' + '), color: 'var(--tg-theme-button-color)' })
+          return lines
+        })()
 
   return (
     <>
