@@ -58,6 +58,16 @@ export default async function AdminPage() {
         {groups.length} groups · {totalMembers} members · {totalExpenses} expenses
       </p>
 
+      {/* Nav */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
+        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', padding: '0.375rem 0.75rem', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
+          Groups
+        </span>
+        <Link href="/admin/users" style={{ fontSize: '0.875rem', fontWeight: 400, color: '#6b7280', textDecoration: 'none', padding: '0.375rem 0.75rem', borderRadius: '999px' }}>
+          Users
+        </Link>
+      </div>
+
       {/* Group cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {groups.map(g => (
