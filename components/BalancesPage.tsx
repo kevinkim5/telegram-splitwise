@@ -127,7 +127,7 @@ export function BalancesPage() {
   // Currency conversion
   const [converting, setConverting] = useState(false)
   const [showConverted, setShowConverted] = useState(false)
-  const [eurRates, setEurRates] = useState<Record<string, number> | null>(null)
+  const [directRates, setDirectRates] = useState<Record<string, number> | null>(null)
   const [convertError, setConvertError] = useState<string | null>(null)
 
   const handleNotify = async () => {
@@ -170,14 +170,15 @@ export function BalancesPage() {
   useEffect(() => { loadBalances() }, [loadBalances])
 
   const fetchRates = async () => {
-    if (eurRates) { setShowConverted(v => !v); return }
+    if (directRates) { setShowConverted(v => !v); return }
     setConverting(true)
     setConvertError(null)
     try {
-      const res = await fetch('https://api.frankfurter.app/latest')
+      const froms = foreignCurrencies.join(',')
+      const res = await fetch(`/api/rates?from=${froms}&to=${groupCurrency}`)
       if (!res.ok) throw new Error('fetch failed')
       const json = await res.json() as { rates: Record<string, number> }
-      setEurRates(json.rates)
+      setDirectRates(json.rates)
       setShowConverted(true)
     } catch {
       setConvertError('Could not load exchange rates')
@@ -262,13 +263,12 @@ export function BalancesPage() {
     : []
   const hasMultipleCurrencies = foreignCurrencies.length > 0
 
-  // Convert amount from any currency to groupCurrency using EUR as cross-rate base
+  // Convert amount from a foreign currency to groupCurrency using Yahoo Finance direct rates
   const toGroupCurrency = (amount: number, fromCurrency: string): number | null => {
-    if (!eurRates || !groupCurrency || fromCurrency === groupCurrency) return null
-    const fromRate = fromCurrency === 'EUR' ? 1 : eurRates[fromCurrency]
-    const toRate = groupCurrency === 'EUR' ? 1 : eurRates[groupCurrency]
-    if (!fromRate || !toRate) return null
-    return Math.round((amount / fromRate) * toRate * 100) / 100
+    if (!directRates || !groupCurrency || fromCurrency === groupCurrency) return null
+    const rate = directRates[fromCurrency]
+    if (!rate) return null
+    return Math.round(amount * rate * 100) / 100
   }
 
   const approxStr = (amount: number, currency: string): string | null => {
@@ -356,7 +356,7 @@ export function BalancesPage() {
       )}
       {showConverted && (
         <p className="text-xs mb-3 text-center" style={{ color: 'var(--tg-theme-hint-color)', marginTop: -12 }}>
-          ≈ Converted at live rates
+          ≈ Converted at real-time rates
         </p>
       )}
 
