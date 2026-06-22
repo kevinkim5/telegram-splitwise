@@ -12,11 +12,6 @@ async function archiveGroup(id: number, _formData: FormData) {
   revalidatePath('/admin')
 }
 
-async function restoreGroup(id: number, _formData: FormData) {
-  'use server'
-  await sql`UPDATE groups SET deleted_at = NULL WHERE id = ${id} AND deleted_at IS NOT NULL`
-  revalidatePath('/admin')
-}
 
 
 export default async function AdminPage() {
@@ -163,23 +158,13 @@ export default async function AdminPage() {
             {archivedGroups.map(g => (
               <div
                 key={String(g.id)}
-                style={{ background: '#fff', borderRadius: '12px', padding: '0.75rem 1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: 0.6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}
+                style={{ background: '#fff', borderRadius: '12px', padding: '0.75rem 1rem', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: 0.6 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{String(g.title)}</span>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.5rem' }}>{String(g.currency)}</span>
-                  <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
-                    {String(g.member_count)} members · {String(g.expense_count)} expenses · archived {new Date(g.deleted_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-                <form action={restoreGroup.bind(null, g.id as number)} style={{ flexShrink: 0 }}>
-                  <button
-                    type="submit"
-                    style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: 'none', borderRadius: '6px', padding: '0.3125rem 0.625rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  >
-                    Restore
-                  </button>
-                </form>
+                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{String(g.title)}</span>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.5rem' }}>{String(g.currency)}</span>
+                <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
+                  {String(g.member_count)} members · {String(g.expense_count)} expenses · archived {new Date(g.deleted_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
               </div>
             ))}
           </div>
