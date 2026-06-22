@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Convert Button Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f2f2f7;
+    padding: 32px 16px;
+  }
+
+  h1 {
+    font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #8e8e93;
+    text-align: center; margin-bottom: 28px;
+  }
+
+  .group {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+
+  .option-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #8e8e93;
+    margin-bottom: 14px;
+  }
+
+  /* Mock header strip */
+  .header-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f2f2f7;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .header-strip + .header-strip { margin-top: 8px; }
+  .strip-left { font-size: 15px; font-weight: 700; color: #000; }
+  .state-tag {
+    font-size: 10px; font-weight: 600; color: #8e8e93;
+    margin-left: 8px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+
+  /* ── Option A: Current pill (baseline) ── */
+  .btn-a-off {
+    font-size: 12px; font-weight: 500;
+    background: #e5e5ea; border: none; border-radius: 10px;
+    padding: 5px 10px; color: #3c3c43; cursor: pointer;
+  }
+  .btn-a-on {
+    font-size: 12px; font-weight: 600;
+    background: rgba(0,122,255,0.15); border: none; border-radius: 10px;
+    padding: 5px 10px; color: #007aff; cursor: pointer;
+  }
+
+  /* ── Option B: Segmented control ── */
+  .segmented {
+    display: flex;
+    background: #e5e5ea;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .seg-item {
+    font-size: 11px; font-weight: 600;
+    padding: 4px 9px; border-radius: 6px;
+    border: none; cursor: pointer;
+    color: #3c3c43; background: transparent;
+  }
+  .seg-item.active {
+    background: #fff;
+    color: #000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+
+  /* ── Option C: Icon only ── */
+  .btn-c-off {
+    font-size: 18px; line-height: 1;
+    background: #e5e5ea; border: none; border-radius: 10px;
+    width: 34px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: #636366; cursor: pointer;
+  }
+  .btn-c-on {
+    font-size: 18px; line-height: 1;
+    background: rgba(0,122,255,0.15); border: none; border-radius: 10px;
+    width: 34px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: #007aff; cursor: pointer;
+  }
+
+  /* ── Option D: Currency chip with dot ── */
+  .btn-d-off {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 600;
+    background: #e5e5ea; border: none; border-radius: 10px;
+    padding: 5px 10px; color: #636366; cursor: pointer;
+  }
+  .btn-d-on {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 600;
+    background: rgba(0,122,255,0.15); border: none; border-radius: 10px;
+    padding: 5px 10px; color: #007aff; cursor: pointer;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #007aff; flex-shrink: 0;
+  }
+  .dot-off {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #c7c7cc; flex-shrink: 0;
+  }
+
+  /* ── Option E: Text link underline ── */
+  .btn-e-off {
+    font-size: 13px; font-weight: 500;
+    background: none; border: none; border-bottom: 1px solid #c7c7cc;
+    padding: 2px 0; color: #636366; cursor: pointer;
+  }
+  .btn-e-on {
+    font-size: 13px; font-weight: 600;
+    background: none; border: none; border-bottom: 2px solid #007aff;
+    padding: 2px 0; color: #007aff; cursor: pointer;
+  }
+
+  .desc {
+    font-size: 11px; color: #8e8e93; margin-top: 10px; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<h1>Convert Button — Design Options</h1>
+
+<!-- Option A -->
+<div class="group">
+  <p class="option-label">A — Pill (current baseline)</p>
+
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">Off</span></span>
+    <button class="btn-a-off">≈ SGD</button>
+  </div>
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">On</span></span>
+    <button class="btn-a-on">≈ SGD ✓</button>
+  </div>
+  <p class="desc">Simple grey → blue pill. Familiar iOS-style. "≈" signals approximation. Checkmark confirms active state.</p>
+</div>
+
+<!-- Option B -->
+<div class="group">
+  <p class="option-label">B — Segmented control</p>
+
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">Off</span></span>
+    <div class="segmented">
+      <button class="seg-item active">Original</button>
+      <button class="seg-item">≈ SGD</button>
+    </div>
+  </div>
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">On</span></span>
+    <div class="segmented">
+      <button class="seg-item">Original</button>
+      <button class="seg-item active">≈ SGD</button>
+    </div>
+  </div>
+  <p class="desc">Two-tab switch. Makes it obvious both states exist and how to revert. Slightly wider.</p>
+</div>
+
+<!-- Option C -->
+<div class="group">
+  <p class="option-label">C — Icon-only (⇄)</p>
+
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">Off</span></span>
+    <button class="btn-c-off">⇄</button>
+  </div>
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">On</span></span>
+    <button class="btn-c-on">⇄</button>
+  </div>
+  <p class="desc">Minimal footprint. Leaves header clean. Relies on context to communicate meaning — less obvious on first use.</p>
+</div>
+
+<!-- Option D -->
+<div class="group">
+  <p class="option-label">D — Chip with indicator dot</p>
+
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">Off</span></span>
+    <button class="btn-d-off"><span class="dot-off"></span>SGD</button>
+  </div>
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">On</span></span>
+    <button class="btn-d-on"><span class="dot"></span>SGD</button>
+  </div>
+  <p class="desc">Clean label. Blue dot is a subtle live indicator when active. Familiar from notification/status patterns.</p>
+</div>
+
+<!-- Option E -->
+<div class="group">
+  <p class="option-label">E — Underline text link</p>
+
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">Off</span></span>
+    <button class="btn-e-off">≈ SGD</button>
+  </div>
+  <div class="header-strip">
+    <span class="strip-left">Balances <span class="state-tag">On</span></span>
+    <button class="btn-e-on">≈ SGD</button>
+  </div>
+  <p class="desc">Lowest visual weight — feels more like a toggle label than a button. Thicker underline + color change signals active state.</p>
+</div>
+
+</body>
+</html>
