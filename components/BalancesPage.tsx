@@ -124,6 +124,12 @@ export function BalancesPage() {
   const [notifyError, setNotifyError] = useState<string | null>(null)
   const [notifySent, setNotifySent] = useState(false)
 
+  // Currency conversion
+  const [converting, setConverting] = useState(false)
+  const [showConverted, setShowConverted] = useState(false)
+  const [eurRates, setEurRates] = useState<Record<string, number> | null>(null)
+  const [convertError, setConvertError] = useState<string | null>(null)
+
   const handleNotify = async () => {
     setNotifying(true)
     setNotifyError(null)
@@ -162,6 +168,23 @@ export function BalancesPage() {
   }, [chatId, apiHeaders])
 
   useEffect(() => { loadBalances() }, [loadBalances])
+
+  const fetchRates = async () => {
+    if (eurRates) { setShowConverted(v => !v); return }
+    setConverting(true)
+    setConvertError(null)
+    try {
+      const res = await fetch('https://api.frankfurter.app/latest')
+      if (!res.ok) throw new Error('fetch failed')
+      const json = await res.json() as { rates: Record<string, number> }
+      setEurRates(json.rates)
+      setShowConverted(true)
+    } catch {
+      setConvertError('Could not load exchange rates')
+    } finally {
+      setConverting(false)
+    }
+  }
 
   const handleSettle = async (debt: SimplifiedDebt, amount: number) => {
     const res = await fetch(`/api/groups/${chatId}/settlements`, {
@@ -230,6 +253,30 @@ export function BalancesPage() {
   const memberName = (id: number) =>
     data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
+  // Group's default currency (target for conversion)
+  const groupCurrency = data?.balances[0]?.currency ?? ''
+
+  // Only show convert button when there are debts in other currencies
+  const foreignCurrencies = data
+    ? Object.keys(data.balances_by_currency).filter(c => c !== groupCurrency)
+    : []
+  const hasMultipleCurrencies = foreignCurrencies.length > 0
+
+  // Convert amount from any currency to groupCurrency using EUR as cross-rate base
+  const toGroupCurrency = (amount: number, fromCurrency: string): number | null => {
+    if (!eurRates || !groupCurrency || fromCurrency === groupCurrency) return null
+    const fromRate = fromCurrency === 'EUR' ? 1 : eurRates[fromCurrency]
+    const toRate = groupCurrency === 'EUR' ? 1 : eurRates[groupCurrency]
+    if (!fromRate || !toRate) return null
+    return Math.round((amount / fromRate) * toRate * 100) / 100
+  }
+
+  const approxStr = (amount: number, currency: string): string | null => {
+    if (!showConverted) return null
+    const v = toGroupCurrency(amount, currency)
+    return v !== null ? `≈ ${groupCurrency} ${v.toFixed(2)}` : null
+  }
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
       {/* Header */}
@@ -245,25 +292,71 @@ export function BalancesPage() {
           <h1 className="font-bold text-lg">Balances</h1>
         </div>
         {data && !allSettled && (
-          <button
-            onClick={handleNotify}
-            disabled={notifying}
-            className="text-sm font-medium px-3 py-1.5 rounded-xl flex-shrink-0"
-            style={{
-              background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-secondary-bg-color)',
-              border: 'none',
-              cursor: notifying ? 'default' : 'pointer',
-              color: notifySent ? '#34c759' : 'var(--tg-theme-text-color)',
-              opacity: notifying ? 0.6 : 1,
-            }}
-          >
-            {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {hasMultipleCurrencies && (
+              <button
+                onClick={() => showConverted ? setShowConverted(false) : fetchRates()}
+                disabled={converting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: showConverted
+                    ? 'rgba(0,122,255,0.15)'
+                    : 'var(--tg-theme-secondary-bg-color)',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '5px 10px',
+                  color: showConverted ? '#007aff' : 'var(--tg-theme-hint-color)',
+                  cursor: converting ? 'default' : 'pointer',
+                  opacity: converting ? 0.6 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  background: showConverted ? '#007aff' : 'var(--tg-theme-hint-color)',
+                }} />
+                {converting ? '…' : groupCurrency}
+              </button>
+            )}
+            <button
+              onClick={handleNotify}
+              disabled={notifying}
+              className="text-sm font-medium px-3 py-1.5 rounded-xl flex-shrink-0"
+              style={{
+                background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-secondary-bg-color)',
+                border: 'none',
+                cursor: notifying ? 'default' : 'pointer',
+                color: notifySent ? '#34c759' : 'var(--tg-theme-text-color)',
+                opacity: notifying ? 0.6 : 1,
+              }}
+            >
+              {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
+            </button>
+          </div>
         )}
       </div>
+
+      {/* Inline error rows */}
       {notifyError && (
         <p className="text-xs mb-3" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
           {notifyError}
+        </p>
+      )}
+      {convertError && (
+        <p className="text-xs mb-3" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
+          {convertError}
+        </p>
+      )}
+      {showConverted && (
+        <p className="text-xs mb-3 text-center" style={{ color: 'var(--tg-theme-hint-color)', marginTop: -12 }}>
+          ≈ Converted at live rates
         </p>
       )}
 
@@ -297,15 +390,23 @@ export function BalancesPage() {
                 {myCurrencyLines.length === 0 ? (
                   <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>All settled up ✓</p>
                 ) : (
-                  myCurrencyLines.map(({ currency, net }) => (
-                    <p key={currency} className="text-xs font-medium" style={{
-                      color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                    }}>
-                      {net > 0
-                        ? `You get back ${currency} ${net.toFixed(2)}`
-                        : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
-                    </p>
-                  ))
+                  myCurrencyLines.map(({ currency, net }) => {
+                    const approx = approxStr(Math.abs(net), currency)
+                    return (
+                      <div key={currency}>
+                        <p className="text-xs font-medium" style={{
+                          color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                        }}>
+                          {net > 0
+                            ? `You get back ${currency} ${net.toFixed(2)}`
+                            : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
+                        </p>
+                        {approx && (
+                          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>{approx}</p>
+                        )}
+                      </div>
+                    )
+                  })
                 )}
               </div>
 
@@ -316,6 +417,7 @@ export function BalancesPage() {
                 const label = iOwe ? `You owe ${other}` : `${other} owes you`
                 const settleLabel = iOwe ? `You pay ${other}` : `${other} pays you`
                 const isLast = idx === myDebts.length - 1
+                const approx = approxStr(debt.amount, debt.currency)
                 return (
                   <div key={idx} className="tg-list-item flex items-center justify-between gap-3"
                     style={{ borderBottom: isLast ? 'none' : undefined }}>
@@ -328,6 +430,9 @@ export function BalancesPage() {
                       }}>
                         {debt.currency} {debt.amount.toFixed(2)}
                       </p>
+                      {approx && (
+                        <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)', marginTop: 1 }}>{approx}</p>
+                      )}
                     </div>
                     <button
                       onClick={() => setSettleDebt({ debt, label: settleLabel })}
@@ -374,13 +479,21 @@ export function BalancesPage() {
                           <span className="flex flex-col items-end gap-0.5">
                             {lines.length === 0 ? (
                               <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
-                            ) : lines.map(({ currency, net }) => (
-                              <span key={currency} className="text-xs font-bold" style={{
-                                color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                              }}>
-                                {net > 0 ? 'gets back' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
-                              </span>
-                            ))}
+                            ) : lines.map(({ currency, net }) => {
+                              const approx = approxStr(Math.abs(net), currency)
+                              return (
+                                <span key={currency} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                  <span className="text-xs font-bold" style={{
+                                    color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                                  }}>
+                                    {net > 0 ? 'gets back' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
+                                  </span>
+                                  {approx && (
+                                    <span style={{ fontSize: 10, color: 'var(--tg-theme-hint-color)' }}>{approx}</span>
+                                  )}
+                                </span>
+                              )
+                            })}
                           </span>
                           {hasDetails && (
                             <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '12px' }}>
@@ -396,6 +509,7 @@ export function BalancesPage() {
                           {debts.map((d, di) => {
                             const theyOwe = d.from_member_id === memberId
                             const other = theyOwe ? d.to_name : d.from_name
+                            const approx = approxStr(d.amount, d.currency)
                             return (
                               <p key={di} className="text-xs py-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
                                 {theyOwe ? `${name} owes ${other}` : `${other} owes ${name}`}
@@ -403,6 +517,9 @@ export function BalancesPage() {
                                 <span className="font-semibold" style={{ color: 'var(--tg-theme-text-color)' }}>
                                   {d.currency} {d.amount.toFixed(2)}
                                 </span>
+                                {approx && (
+                                  <span style={{ color: 'var(--tg-theme-hint-color)', fontWeight: 400 }}> ({approx})</span>
+                                )}
                               </p>
                             )
                           })}
