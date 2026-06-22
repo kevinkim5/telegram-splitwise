@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Currency Conversion Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f2f2f7; }
+
+  .phone-row {
+    display: flex;
+    gap: 20px;
+    padding: 24px 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .phone {
+    background: #f2f2f7;
+    border-radius: 20px;
+    width: 320px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .phone-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8e8e93;
+    padding: 14px 0 6px;
+  }
+
+  .screen {
+    background: #f2f2f7;
+    padding: 16px;
+    padding-bottom: 24px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .back { font-size: 13px; font-weight: 500; color: #007aff; background: none; border: none; cursor: pointer; }
+  .title { font-size: 17px; font-weight: 700; color: #000; }
+  .notify-btn {
+    font-size: 12px; font-weight: 500;
+    background: #e5e5ea; border: none; border-radius: 10px;
+    padding: 5px 10px; color: #3c3c43; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .convert-btn {
+    font-size: 12px; font-weight: 600;
+    border: none; border-radius: 10px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  .convert-btn.off { background: #e5e5ea; color: #3c3c43; }
+  .convert-btn.on  { background: rgba(0,122,255,0.15); color: #007aff; }
+
+  .header-btns { display: flex; gap: 6px; }
+
+  /* Section label */
+  .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #8e8e93;
+    margin: 0 4px 6px;
+  }
+
+  /* Card */
+  .card {
+    background: #fff; border-radius: 12px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .row {
+    padding: 11px 16px;
+    border-bottom: 0.5px solid rgba(0,0,0,0.08);
+  }
+  .row:last-child { border-bottom: none; }
+
+  .row-flex { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .name { font-size: 13px; font-weight: 600; color: #000; }
+  .sub  { font-size: 12px; color: #8e8e93; margin-top: 2px; }
+
+  .red  { color: #ff3b30; }
+  .blue { color: #007aff; }
+  .grey { color: #8e8e93; }
+  .green { color: #34c759; }
+
+  .amount { font-size: 13px; font-weight: 700; }
+  .amount-small { font-size: 11px; color: #8e8e93; margin-top: 2px; text-align: right; }
+
+  .settle-btn {
+    font-size: 11px; font-weight: 600;
+    background: #007aff; color: #fff;
+    border: none; border-radius: 8px;
+    padding: 5px 10px; cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    border-radius: 999px; padding: 2px 8px; margin-bottom: 8px;
+  }
+  .tag-original { background: #e5e5ea; color: #636366; }
+  .tag-append   { background: rgba(0,122,255,0.12); color: #007aff; }
+  .tag-replace  { background: rgba(52,199,89,0.15); color: #34c759; }
+
+  .divider {
+    height: 1px; background: rgba(0,0,0,0.06);
+    margin: 4px 0;
+  }
+
+  .converted-note {
+    font-size: 10px; color: #8e8e93;
+    text-align: center; margin-top: -8px; margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-row">
+
+  <!-- ORIGINAL -->
+  <div class="phone">
+    <p class="phone-label">Original (no conversion)</p>
+    <div class="screen">
+
+      <div class="header">
+        <div class="header-left">
+          <span class="back">← Back</span>
+          <span class="title">Balances</span>
+        </div>
+        <div class="header-btns">
+          <button class="notify-btn">Notify Group</button>
+          <button class="convert-btn off">≈ SGD</button>
+        </div>
+      </div>
+
+      <p class="section-label">You</p>
+      <div class="card">
+        <div class="row">
+          <p class="name">Kevin</p>
+          <p class="sub red">You owe JPY 3,000</p>
+          <p class="sub red">You owe USD 18.50</p>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Alice</p>
+            <p class="amount red">JPY 3,000</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Bob</p>
+            <p class="amount red">USD 18.50</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+      </div>
+
+      <p class="section-label">Others</p>
+      <div class="card">
+        <div class="row row-flex">
+          <span class="name">Alice</span>
+          <span class="amount blue" style="font-size:12px">gets back JPY 3,000</span>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Bob</span>
+          <span class="amount blue" style="font-size:12px">gets back USD 18.50</span>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Charlie</span>
+          <span class="grey" style="font-size:12px">Settled</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OPTION A: APPEND -->
+  <div class="phone">
+    <p class="phone-label">Option A — Append ≈ SGD</p>
+    <div class="screen">
+
+      <div class="header">
+        <div class="header-left">
+          <span class="back">← Back</span>
+          <span class="title">Balances</span>
+        </div>
+        <div class="header-btns">
+          <button class="notify-btn">Notify Group</button>
+          <button class="convert-btn on">≈ SGD ✓</button>
+        </div>
+      </div>
+
+      <p class="converted-note">Converted at live rates · 1 JPY = SGD 0.0091</p>
+
+      <p class="section-label">You</p>
+      <div class="card">
+        <div class="row">
+          <p class="name">Kevin</p>
+          <p class="sub red">You owe JPY 3,000 <span class="grey">≈ SGD 27.30</span></p>
+          <p class="sub red">You owe USD 18.50 <span class="grey">≈ SGD 24.80</span></p>
+          <p class="sub grey" style="margin-top:4px">Total ≈ SGD 52.10</p>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Alice</p>
+            <p class="amount red">JPY 3,000</p>
+            <p class="amount-small">≈ SGD 27.30</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Bob</p>
+            <p class="amount red">USD 18.50</p>
+            <p class="amount-small">≈ SGD 24.80</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+      </div>
+
+      <p class="section-label">Others</p>
+      <div class="card">
+        <div class="row row-flex">
+          <span class="name">Alice</span>
+          <div style="text-align:right">
+            <p class="amount blue" style="font-size:12px">gets back JPY 3,000</p>
+            <p class="amount-small">≈ SGD 27.30</p>
+          </div>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Bob</span>
+          <div style="text-align:right">
+            <p class="amount blue" style="font-size:12px">gets back USD 18.50</p>
+            <p class="amount-small">≈ SGD 24.80</p>
+          </div>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Charlie</span>
+          <span class="grey" style="font-size:12px">Settled</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OPTION B: REPLACE -->
+  <div class="phone">
+    <p class="phone-label">Option B — Replace with SGD</p>
+    <div class="screen">
+
+      <div class="header">
+        <div class="header-left">
+          <span class="back">← Back</span>
+          <span class="title">Balances</span>
+        </div>
+        <div class="header-btns">
+          <button class="notify-btn">Notify Group</button>
+          <button class="convert-btn on">≈ SGD ✓</button>
+        </div>
+      </div>
+
+      <p class="converted-note">Converted at live rates · tap ≈ SGD to revert</p>
+
+      <p class="section-label">You</p>
+      <div class="card">
+        <div class="row">
+          <p class="name">Kevin</p>
+          <p class="sub red">You owe ≈ SGD 52.10 total</p>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Alice <span style="font-size:10px">(JPY 3,000)</span></p>
+            <p class="amount red">≈ SGD 27.30</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+        <div class="row row-flex">
+          <div>
+            <p class="sub grey">You owe Bob <span style="font-size:10px">(USD 18.50)</span></p>
+            <p class="amount red">≈ SGD 24.80</p>
+          </div>
+          <button class="settle-btn">Settle</button>
+        </div>
+      </div>
+
+      <p class="section-label">Others</p>
+      <div class="card">
+        <div class="row row-flex">
+          <span class="name">Alice</span>
+          <div style="text-align:right">
+            <p class="amount blue" style="font-size:12px">gets back ≈ SGD 27.30</p>
+            <p class="amount-small">(JPY 3,000)</p>
+          </div>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Bob</span>
+          <div style="text-align:right">
+            <p class="amount blue" style="font-size:12px">gets back ≈ SGD 24.80</p>
+            <p class="amount-small">(USD 18.50)</p>
+          </div>
+        </div>
+        <div class="row row-flex">
+          <span class="name">Charlie</span>
+          <span class="grey" style="font-size:12px">Settled</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
