@@ -328,12 +328,12 @@ export function BalancesPage() {
             <button
               onClick={handleNotify}
               disabled={notifying}
-              className="text-sm font-medium px-3 py-1.5 rounded-xl flex-shrink-0"
+              className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
               style={{
-                background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-secondary-bg-color)',
+                background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
                 border: 'none',
                 cursor: notifying ? 'default' : 'pointer',
-                color: notifySent ? '#34c759' : 'var(--tg-theme-text-color)',
+                color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
                 opacity: notifying ? 0.6 : 1,
               }}
             >
