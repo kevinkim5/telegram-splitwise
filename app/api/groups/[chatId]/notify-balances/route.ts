@@ -88,22 +88,37 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     return NextResponse.json({ error: 'Bot not configured' }, { status: 500 })
   }
 
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
   const display = (memberId: number) => {
     const info = memberInfoMap.get(memberId)
     if (!info) return 'Unknown'
-    return info.username ? `@${info.username}` : info.name
+    return info.username ? `@${esc(info.username)}` : esc(info.name)
   }
 
-  const lines = allDebts.map(d =>
-    `${display(d.from_member_id)} owes ${display(d.to_member_id)} ${d.currency} ${d.amount.toFixed(2)}`
-  )
+  // Group debts by debtor
+  const byDebtor = new Map<number, typeof allDebts>()
+  for (const d of allDebts) {
+    if (!byDebtor.has(d.from_member_id)) byDebtor.set(d.from_member_id, [])
+    byDebtor.get(d.from_member_id)!.push(d)
+  }
 
-  const message = [`💰 Outstanding Balances — ${group.title}`, '', ...lines].join('\n')
+  const sections = [...byDebtor.entries()].map(([debtorId, debts]) => {
+    const header = `<b>${display(debtorId)}</b> owes:`
+    const rows = debts.map(d => `  • ${display(d.to_member_id)}  ${d.currency} ${d.amount.toFixed(2)}`)
+    return [header, ...rows].join('\n')
+  })
+
+  const message = [
+    `💰 <b>${esc(group.title as string)}</b> — outstanding balances`,
+    '',
+    sections.join('\n\n'),
+  ].join('\n')
 
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: message }),
+    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }),
   })
   const result = await res.json()
   if (!result.ok) {
