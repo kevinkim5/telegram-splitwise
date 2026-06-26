@@ -263,7 +263,7 @@ export function BalancesPage() {
     : []
   const hasMultipleCurrencies = foreignCurrencies.length > 0
 
-  // Convert amount from a foreign currency to groupCurrency using Yahoo Finance direct rates
+  // Convert amount from a foreign currency to groupCurrency via Frankfurter EUR cross-rates
   const toGroupCurrency = (amount: number, fromCurrency: string): number | null => {
     if (!directRates || !groupCurrency || fromCurrency === groupCurrency) return null
     const rate = directRates[fromCurrency]
