@@ -38,6 +38,7 @@ function routeSql(handlers: Handler[]) {
 }
 
 const sqlTexts = () => mockSql.mock.calls.map(c => (c[0] as unknown as string[]).join('?'))
+const refunded = () => sqlTexts().some(t => t.includes('DELETE FROM receipt_scans'))
 
 const memberOk: Handler[] = [
   [/FROM groups/, [{ id: 5 }]],
@@ -129,7 +130,7 @@ describe('POST /receipts/parse', () => {
 
   it('returns normalized fields and sends the image to the default Gemini alias as JSON-mode inline data', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({
       merchant: 'Din Tai Fung', total: 58.4, currency: 'sgd', date: '2999-01-01', category: 'Food',
     })
@@ -162,7 +163,7 @@ describe('POST /receipts/parse', () => {
   it('turns thinking off and caps output only when pinned to a 2.5 Flash model', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
     process.env.GEMINI_RECEIPT_MODEL = 'gemini-2.5-flash'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({ merchant: 'X', total: 1, currency: null, date: null, category: null })
     expect((await call()).status).toBe(200)
     expect(fetchCalls[0]!.url).toContain('/models/gemini-2.5-flash:generateContent')
@@ -174,7 +175,7 @@ describe('POST /receipts/parse', () => {
   it('honours a GEMINI_RECEIPT_MODEL override and leaves thinking/output limits at Google defaults', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
     process.env.GEMINI_RECEIPT_MODEL = 'gemini-3.8-flash'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({ merchant: 'X', total: 1, currency: null, date: null, category: null })
     expect((await call()).status).toBe(200)
     expect(fetchCalls[0]!.url).toContain('/models/gemini-3.8-flash:generateContent')
@@ -185,14 +186,14 @@ describe('POST /receipts/parse', () => {
 
   it('422s when nothing could be read', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({ merchant: null, total: null, currency: null, date: null, category: null })
     expect((await call()).status).toBe(422)
   })
 
   it('treats a blocked/empty or non-JSON model response as unreadable (422), not a crash', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => new Response(JSON.stringify({ candidates: [] }), { status: 200 })
     expect((await call()).status).toBe(422)
     fetchImpl = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'sorry, I cannot' }] } }] }), { status: 200 })
@@ -201,16 +202,18 @@ describe('POST /receipts/parse', () => {
 
   it('maps Gemini quota exhaustion (429) to a friendly 429', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => new Response('quota', { status: 429 })
     const res = await call()
     expect(res.status).toBe(429)
-    expect((await res.json()).error).toMatch(/busy/i)
+    expect((await res.json()).error).toMatch(/usage limit/i)
+    expect(fetchCalls).toHaveLength(1) // quota errors are not retried
+    expect(refunded()).toBe(true)
   })
 
   it('surfaces a retired/unknown model (404) as a 502 and logs Google\'s message for the operator', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => new Response(JSON.stringify({ error: { code: 404, message: 'This model is no longer available to new users' } }), { status: 404 })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect((await call()).status).toBe(502)
@@ -218,13 +221,80 @@ describe('POST /receipts/parse', () => {
     spy.mockRestore()
   })
 
-  it('502s when the model API errors', async () => {
+  it('502s with a non-retry message when the request itself is rejected (400/403)', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
-    fetchImpl = () => new Response('boom', { status: 500 })
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
+    fetchImpl = () => new Response('bad request', { status: 400 })
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect((await call()).status).toBe(502)
+    const res = await call()
+    expect(res.status).toBe(502)
+    expect((await res.json()).error).toMatch(/fill in the details yourself/i)
+    expect(fetchCalls).toHaveLength(1) // setup problems are not retried
     spy.mockRestore()
+  })
+})
+
+describe('POST /receipts/parse: provider overload', () => {
+  const call = () => parsePOST(imgReq('http://x/receipts/parse', 'POST'), parseProps)
+  const okFields = { merchant: 'Kopi', total: 4.5, currency: 'SGD', date: null, category: null }
+
+  // The route waits ~1.5s before its single retry; drive that timer by hand instead of sleeping.
+  async function callWithTimers() {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    try {
+      const p = call()
+      for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(1000)
+      return await p
+    } finally {
+      vi.useRealTimers()
+    }
+  }
+
+  beforeEach(() => {
+    process.env.GEMINI_API_KEY = 'gem-test'
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
+  })
+
+  it('retries once after a 503 and succeeds without the user noticing', async () => {
+    let n = 0
+    fetchImpl = () => (++n === 1 ? new Response('overloaded', { status: 503 }) : geminiOk(okFields))
+    const res = await callWithTimers()
+    expect(res.status).toBe(200)
+    expect(fetchCalls).toHaveLength(2)
+    expect(refunded()).toBe(false)
+  })
+
+  it('also retries a transient 500', async () => {
+    let n = 0
+    fetchImpl = () => (++n === 1 ? new Response('internal', { status: 500 }) : geminiOk(okFields))
+    expect((await callWithTimers()).status).toBe(200)
+    expect(fetchCalls).toHaveLength(2)
+  })
+
+  it('shows a distinct "overloaded" message after two 503s, and does not count the scan', async () => {
+    fetchImpl = () => new Response('overloaded', { status: 503 })
+    const res = await callWithTimers()
+    expect(res.status).toBe(503)
+    const { error } = await res.json()
+    expect(error).toMatch(/overloaded/i)
+    expect(error).toMatch(/fill in the details yourself/i)
+    expect(error).not.toMatch(/usage limit/i) // different cause, different wording
+    expect(fetchCalls).toHaveLength(2) // exactly one retry, never a loop
+    expect(refunded()).toBe(true)
+  })
+
+  it('gives a distinct message for a timeout and refunds the scan', async () => {
+    fetchImpl = () => { throw new Error('aborted') }
+    const res = await call()
+    expect(res.status).toBe(504)
+    expect((await res.json()).error).toMatch(/took too long/i)
+    expect(refunded()).toBe(true)
+  })
+
+  it('still counts a scan the model read but found nothing in (the user\'s photo, not an outage)', async () => {
+    fetchImpl = () => geminiOk({ merchant: null, total: null, currency: null, date: null, category: null })
+    expect((await call()).status).toBe(422)
+    expect(refunded()).toBe(false)
   })
 })
 

@@ -46,7 +46,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   if ((n as number) >= SCANS_PER_HOUR) {
     return NextResponse.json({ error: 'Too many scans. Try again in a little while.' }, { status: 429 })
   }
-  await sql`INSERT INTO receipt_scans (telegram_user_id) VALUES (${user.id})`
+  const [scan] = await sql`INSERT INTO receipt_scans (telegram_user_id) VALUES (${user.id}) RETURNING id`
 
   try {
     const receipt = await parseReceipt(image.bytes, image.type)
@@ -56,6 +56,8 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     return NextResponse.json(receipt)
   } catch (err) {
     if (err instanceof ReceiptParseError) {
+      // The provider failed (overloaded, quota, timeout): that wasn't the user's scan, so don't count it
+      if (scan?.id) await sql`DELETE FROM receipt_scans WHERE id = ${scan.id}`.catch(() => {})
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
     console.error('Receipt parse error:', err)

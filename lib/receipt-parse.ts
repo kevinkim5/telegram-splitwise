@@ -81,6 +81,11 @@ export function receiptParsingConfigured(): boolean {
 // GEMINI_RECEIPT_MODEL to pin a specific model.
 const DEFAULT_MODEL = 'gemini-flash-latest'
 
+// The route allows 30s in total (maxDuration), so keep everything inside 25s.
+const TOTAL_BUDGET_MS = 25_000
+const RETRY_DELAY_MS = 1_500
+const RETRY_IF_FASTER_THAN_MS = 10_000
+
 // Response schema (Gemini's OpenAPI subset). Category is described rather than enum-constrained:
 // normalizeParsedReceipt maps it onto our labels and drops anything unknown, and a smaller schema
 // is less likely to be rejected by the API.
@@ -135,34 +140,63 @@ export async function parseReceipt(
     generationConfig.maxOutputTokens = 1024
   }
 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
+  const body = JSON.stringify({
+    contents: [{
+      role: 'user',
+      parts: [
+        { inline_data: { mime_type: mediaType, data: Buffer.from(bytes).toString('base64') } },
+        { text: prompt },
+      ],
+    }],
+    generationConfig,
+  })
+
+  const started = Date.now()
+  const callOnce = () => fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+    body,
+    signal: AbortSignal.timeout(Math.max(1000, TOTAL_BUDGET_MS - (Date.now() - started))),
+  })
+  const timedOut = new ReceiptParseError('Receipt scanning took too long. Try again, or fill in the details yourself.', 504)
+
   let res: Response
   try {
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [
-            { inline_data: { mime_type: mediaType, data: Buffer.from(bytes).toString('base64') } },
-            { text: prompt },
-          ],
-        }],
-        generationConfig,
-      }),
-      signal: AbortSignal.timeout(25_000),
-    })
+    res = await callOnce()
   } catch {
-    throw new ReceiptParseError('Receipt scanning timed out. Try again.', 504)
+    throw timedOut
+  }
+
+  // 503 (UNAVAILABLE, "model is overloaded") and 500 are usually brief spikes. Retry once if the
+  // first attempt failed quickly enough for the second to fit in the time budget.
+  if ((res.status === 503 || res.status === 500) && Date.now() - started < RETRY_IF_FASTER_THAN_MS) {
+    await res.body?.cancel().catch(() => {})
+    await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+    try {
+      res = await callOnce()
+    } catch {
+      throw timedOut
+    }
   }
 
   if (res.status === 429) {
-    // Free-tier quota is shared by everyone using this key
-    throw new ReceiptParseError('Receipt scanning is busy right now. Try again in a minute.', 429)
+    // Free-tier quota (per minute or per day) is shared by everyone using this key
+    throw new ReceiptParseError(
+      'Receipt scanning has hit its usage limit for now. Try again in a few minutes, or fill in the details yourself.',
+      429,
+    )
+  }
+  if (res.status === 503 || res.status === 500) {
+    throw new ReceiptParseError(
+      "Google's AI is overloaded right now. Try again in a minute, or fill in the details yourself.",
+      503,
+    )
   }
   if (!res.ok) {
+    // 400/403/404: a setup problem (bad key, retired model, rejected request), not something the user can fix
     console.error('Gemini receipt parse failed:', res.status, await res.text().catch(() => ''))
-    throw new ReceiptParseError('Receipt scanning failed. Try again.', 502)
+    throw new ReceiptParseError("Receipt scanning isn't working right now. You can fill in the details yourself.", 502)
   }
 
   const json = await res.json() as {

@@ -45,6 +45,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [scanning, setScanning] = useState(false)
   const [receiptNote, setReceiptNote] = useState<string | null>(null)
   const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [scanFailed, setScanFailed] = useState(false)
   const showSkeleton = useShowSkeleton(loading)
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export function ExpenseFormPage({ editId }: Props) {
       setReceiptBlob(resized)
       setReceiptPreview(URL.createObjectURL(resized))
       setRemoveReceipt(false)
+      setScanFailed(false)
     } catch (err) {
       setReceiptError(err instanceof Error ? err.message : 'Could not read this image')
     }
@@ -127,6 +129,7 @@ export function ExpenseFormPage({ editId }: Props) {
     setReceiptPreview(null)
     setReceiptNote(null)
     setReceiptError(null)
+    setScanFailed(false)
     if (hadReceipt) setRemoveReceipt(true)
   }
 
@@ -134,6 +137,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const handleAutoFill = async () => {
     if (!receiptBlob) return
     setScanning(true)
+    setScanFailed(false)
     setReceiptError(null)
     setReceiptNote(null)
     try {
@@ -164,6 +168,7 @@ export function ExpenseFormPage({ editId }: Props) {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
     } catch (err) {
       setReceiptError(err instanceof Error ? err.message : 'Receipt scanning failed')
+      setScanFailed(true)
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error')
     } finally {
       setScanning(false)
@@ -360,7 +365,7 @@ export function ExpenseFormPage({ editId }: Props) {
                     {receiptBlob && (
                       <button type="button" onClick={handleAutoFill} disabled={scanning}
                         style={{ ...btn, background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)', opacity: scanning ? 0.6 : 1 }}>
-                        {scanning ? 'Reading receipt…' : '✨ Auto-fill from receipt'}
+                        {scanning ? 'Reading receipt…' : scanFailed ? '↻ Try auto-fill again' : '✨ Auto-fill from receipt'}
                       </button>
                     )}
                     <div className="flex gap-2">
