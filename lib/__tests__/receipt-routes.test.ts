@@ -127,7 +127,7 @@ describe('POST /receipts/parse', () => {
     expect(fetchCalls).toHaveLength(0)
   })
 
-  it('returns normalized fields and sends the image to Gemini as JSON-mode inline data', async () => {
+  it('returns normalized fields and sends the image to the default Gemini alias as JSON-mode inline data', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
     routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({
@@ -145,26 +145,39 @@ describe('POST /receipts/parse', () => {
     expect(sqlTexts().some(t => t.includes('INSERT INTO receipt_scans'))).toBe(true)
 
     const gemini = fetchCalls[0]!
-    expect(gemini.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent')
+    expect(gemini.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent')
     expect(gemini.headers.get('x-goog-api-key')).toBe('gem-test')
     expect(gemini.url).not.toContain('gem-test') // key travels in a header, never the URL
     const sent = JSON.parse(gemini.body as string)
-    expect(sent.generationConfig).toMatchObject({
-      responseMimeType: 'application/json', temperature: 0, thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 1024,
-    })
+    expect(sent.generationConfig).toMatchObject({ responseMimeType: 'application/json', temperature: 0 })
+    // the alias may point at a model that thinks: never cap output or pass model-specific thinking options
+    expect(sent.generationConfig).not.toHaveProperty('thinkingConfig')
+    expect(sent.generationConfig).not.toHaveProperty('maxOutputTokens')
     expect(sent.generationConfig.responseSchema.required).toContain('total')
     const part = sent.contents[0].parts[0].inline_data
     expect(part.mime_type).toBe('image/jpeg')
     expect(Buffer.from(part.data, 'base64')).toEqual(Buffer.from(JPEG))
   })
 
-  it('honours GEMINI_RECEIPT_MODEL (incl. aliases) and leaves thinking/output limits at Google defaults', async () => {
+  it('turns thinking off and caps output only when pinned to a 2.5 Flash model', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    process.env.GEMINI_RECEIPT_MODEL = 'gemini-flash-latest'
+    process.env.GEMINI_RECEIPT_MODEL = 'gemini-2.5-flash'
     routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
     fetchImpl = () => geminiOk({ merchant: 'X', total: 1, currency: null, date: null, category: null })
     expect((await call()).status).toBe(200)
-    expect(fetchCalls[0]!.url).toContain('/models/gemini-flash-latest:generateContent')
+    expect(fetchCalls[0]!.url).toContain('/models/gemini-2.5-flash:generateContent')
+    expect(JSON.parse(fetchCalls[0]!.body as string).generationConfig).toMatchObject({
+      thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 1024,
+    })
+  })
+
+  it('honours a GEMINI_RECEIPT_MODEL override and leaves thinking/output limits at Google defaults', async () => {
+    process.env.GEMINI_API_KEY = 'gem-test'
+    process.env.GEMINI_RECEIPT_MODEL = 'gemini-3.8-flash'
+    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    fetchImpl = () => geminiOk({ merchant: 'X', total: 1, currency: null, date: null, category: null })
+    expect((await call()).status).toBe(200)
+    expect(fetchCalls[0]!.url).toContain('/models/gemini-3.8-flash:generateContent')
     const cfg = JSON.parse(fetchCalls[0]!.body as string).generationConfig
     expect(cfg).not.toHaveProperty('thinkingConfig')
     expect(cfg).not.toHaveProperty('maxOutputTokens') // never truncate JSON for models that may think
@@ -193,6 +206,16 @@ describe('POST /receipts/parse', () => {
     const res = await call()
     expect(res.status).toBe(429)
     expect((await res.json()).error).toMatch(/busy/i)
+  })
+
+  it('surfaces a retired/unknown model (404) as a 502 and logs Google\'s message for the operator', async () => {
+    process.env.GEMINI_API_KEY = 'gem-test'
+    routeSql([...memberOk, [/FROM receipt_scans/, [{ n: 0 }]]])
+    fetchImpl = () => new Response(JSON.stringify({ error: { code: 404, message: 'This model is no longer available to new users' } }), { status: 404 })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(502)
+    expect(spy.mock.calls.flat().join(' ')).toContain('no longer available')
+    spy.mockRestore()
   })
 
   it('502s when the model API errors', async () => {

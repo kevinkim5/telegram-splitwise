@@ -76,7 +76,10 @@ export function receiptParsingConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY
 }
 
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+// An alias that always points at Google's current Flash model. Pinned names get retired for new
+// API keys (gemini-2.5-flash already has), which breaks scanning with a 404. Override with
+// GEMINI_RECEIPT_MODEL to pin a specific model.
+const DEFAULT_MODEL = 'gemini-flash-latest'
 
 // Response schema (Gemini's OpenAPI subset). Category is described rather than enum-constrained:
 // normalizeParsedReceipt maps it onto our labels and drops anything unknown, and a smaller schema
