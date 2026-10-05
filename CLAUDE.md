@@ -30,7 +30,7 @@ Copy `.env.example` to `.env.local` for local development. Key vars:
 
 Schema is auto-migrated on the first POST to `/api/groups/init` via `ensureSchema()` in `lib/db.ts`.
 
-After deploying, register the webhook: `GET /api/bot/setup-webhook?token=<BOT_TOKEN>`.
+After deploying, register the webhook: `curl -X POST https://<your-domain>/api/bot/setup-webhook -H "x-bot-token: <BOT_TOKEN>"`.
 
 ## Architecture
 
