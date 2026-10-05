@@ -6,6 +6,7 @@ import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
+import { signedGetUrl } from '@/lib/r2'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -24,6 +25,13 @@ async function getExpenseWithSplits(expenseId: number) {
     ORDER BY m.first_name
   `
   return { ...exp, splits }
+}
+
+// Replace the internal storage key with has_receipt plus a short-lived signed view URL.
+async function withReceipt(expense: object) {
+  const { receipt_key, ...rest } = expense as { receipt_key?: string | null }
+  const receipt_url = receipt_key ? await signedGetUrl(receipt_key).catch(() => null) : null
+  return { ...rest, has_receipt: !!receipt_key, receipt_url }
 }
 
 export async function GET(
@@ -51,7 +59,7 @@ export async function GET(
     return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
   }
 
-  return NextResponse.json(expense)
+  return NextResponse.json(await withReceipt(expense))
 }
 
 export async function PUT(
@@ -127,7 +135,7 @@ export async function PUT(
   ])
 
   const result = await getExpenseWithSplits(expenseId)
-  return NextResponse.json(result)
+  return NextResponse.json(result ? await withReceipt(result) : result)
 }
 
 export async function DELETE(
