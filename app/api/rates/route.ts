@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch rates' }, { status: 502 })
     }
 
-    const json = await res.json() as { base: string; rates: Record<string, number> }
+    const json = await res.json() as { base: string; date?: string; rates: Record<string, number> }
     const eurRates = json.rates // base is EUR; EUR itself is implicitly 1
 
     // Cross-rate: from → to via EUR
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { rates, to },
+      { rates, to, date: json.date },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=300' } }
     )
   } catch {
