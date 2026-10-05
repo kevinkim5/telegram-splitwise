@@ -110,6 +110,10 @@ function SkeletonBalances() {
   )
 }
 
+// Balances can be converted to this currency on demand. Independent of the group's
+// default currency, which only pre-selects the currency when adding an expense.
+const CONVERT_TO = 'SGD'
+
 export function BalancesPage() {
   const router = useRouter()
   const { chatId, currentMember, apiHeaders } = useAppContext()
@@ -129,6 +133,7 @@ export function BalancesPage() {
   const [showConverted, setShowConverted] = useState(false)
   const [directRates, setDirectRates] = useState<Record<string, number> | null>(null)
   const [convertError, setConvertError] = useState<string | null>(null)
+  const [ratesDate, setRatesDate] = useState<string | null>(null)
 
   const handleNotify = async () => {
     setNotifying(true)
@@ -175,13 +180,14 @@ export function BalancesPage() {
     setConvertError(null)
     try {
       const froms = foreignCurrencies.join(',')
-      const res = await fetch(`/api/rates?from=${froms}&to=${groupCurrency}`)
+      const res = await fetch(`/api/rates?from=${froms}&to=${CONVERT_TO}`)
       if (!res.ok) throw new Error('fetch failed')
-      const json = await res.json() as { rates: Record<string, number> }
+      const json = await res.json() as { rates: Record<string, number>; date?: string }
       setDirectRates(json.rates)
+      setRatesDate(json.date ?? null)
       setShowConverted(true)
     } catch {
-      setConvertError('Could not load exchange rates')
+      setConvertError("Couldn't load exchange rates. Check your connection and try again.")
     } finally {
       setConverting(false)
     }
@@ -254,28 +260,40 @@ export function BalancesPage() {
   const memberName = (id: number) =>
     data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
-  // Group's default currency (target for conversion)
-  const groupCurrency = data?.balances[0]?.currency ?? ''
-
-  // Only show convert button when there are debts in other currencies
+  // Currencies with an outstanding balance that differ from the conversion target
   const foreignCurrencies = data
-    ? Object.keys(data.balances_by_currency).filter(c => c !== groupCurrency)
+    ? Object.entries(data.balances_by_currency)
+        .filter(([cur, bals]) => cur !== CONVERT_TO && bals.some(b => Math.abs(b.net_amount) > 0.005))
+        .map(([cur]) => cur)
     : []
-  const hasMultipleCurrencies = foreignCurrencies.length > 0
 
-  // Convert amount from a foreign currency to groupCurrency via Frankfurter EUR cross-rates
-  const toGroupCurrency = (amount: number, fromCurrency: string): number | null => {
-    if (!directRates || !groupCurrency || fromCurrency === groupCurrency) return null
-    const rate = directRates[fromCurrency]
-    if (!rate) return null
-    return Math.round(amount * rate * 100) / 100
+  // Convert an amount to CONVERT_TO. Null when no rate is available.
+  const toTarget = (amount: number, fromCurrency: string): number | null => {
+    if (fromCurrency === CONVERT_TO) return amount
+    const rate = directRates?.[fromCurrency]
+    return rate ? Math.round(amount * rate * 100) / 100 : null
   }
 
   const approxStr = (amount: number, currency: string): string | null => {
-    if (!showConverted) return null
-    const v = toGroupCurrency(amount, currency)
-    return v !== null ? `≈ ${groupCurrency} ${v.toFixed(2)}` : null
+    if (!showConverted || currency === CONVERT_TO) return null
+    const v = toTarget(amount, currency)
+    return v !== null ? `≈ ${CONVERT_TO} ${v.toFixed(2)}` : null
   }
+
+  // My overall net across currencies in CONVERT_TO, or null if any rate is missing
+  const myNetConverted = (() => {
+    if (!showConverted) return null
+    let total = 0
+    for (const { currency, net } of myCurrencyLines) {
+      const v = toTarget(net, currency)
+      if (v === null) return null
+      total += v
+    }
+    return Math.round(total * 100) / 100
+  })()
+
+  const formatRatesDate = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
@@ -293,38 +311,6 @@ export function BalancesPage() {
         </div>
         {data && !allSettled && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {hasMultipleCurrencies && (
-              <button
-                onClick={() => showConverted ? setShowConverted(false) : fetchRates()}
-                disabled={converting}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: showConverted
-                    ? 'rgba(0,122,255,0.15)'
-                    : 'var(--tg-theme-secondary-bg-color)',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '5px 10px',
-                  color: showConverted ? '#007aff' : 'var(--tg-theme-hint-color)',
-                  cursor: converting ? 'default' : 'pointer',
-                  opacity: converting ? 0.6 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  background: showConverted ? '#007aff' : 'var(--tg-theme-hint-color)',
-                }} />
-                {converting ? '…' : groupCurrency}
-              </button>
-            )}
             <button
               onClick={handleNotify}
               disabled={notifying}
@@ -349,15 +335,47 @@ export function BalancesPage() {
           {notifyError}
         </p>
       )}
-      {convertError && (
-        <p className="text-xs mb-3" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-          {convertError}
-        </p>
-      )}
-      {showConverted && (
-        <p className="text-xs mb-3 text-center" style={{ color: 'var(--tg-theme-hint-color)', marginTop: -12 }}>
-          ≈ Converted at real-time rates
-        </p>
+      {data && !allSettled && foreignCurrencies.length > 0 && (
+        <div className="mb-5">
+          <div
+            className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
+            style={{ background: showConverted ? 'rgba(0,122,255,0.1)' : 'var(--tg-theme-secondary-bg-color)' }}
+          >
+            <div className="min-w-0 text-xs leading-snug">
+              <p className="font-semibold">
+                {showConverted ? `Showing ≈ ${CONVERT_TO}` : 'Amounts in multiple currencies'}
+              </p>
+              <p style={{ color: 'var(--tg-theme-hint-color)' }}>
+                {showConverted
+                  ? `ECB rates${ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}`
+                  : `${foreignCurrencies.join(', ')} · tap to see everything in ${CONVERT_TO}`}
+              </p>
+            </div>
+            <button
+              onClick={() => (showConverted ? setShowConverted(false) : fetchRates())}
+              disabled={converting}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0"
+              style={{
+                background: showConverted ? 'var(--tg-theme-bg-color)' : 'var(--tg-theme-button-color)',
+                color: showConverted ? 'var(--tg-theme-link-color)' : 'var(--tg-theme-button-text-color)',
+                border: 'none',
+                cursor: converting ? 'default' : 'pointer',
+                opacity: converting ? 0.6 : 1,
+              }}
+            >
+              {converting
+                ? 'Converting…'
+                : showConverted
+                  ? 'Show original'
+                  : convertError ? 'Retry' : `Convert to ${CONVERT_TO}`}
+            </button>
+          </div>
+          {convertError && !showConverted && (
+            <p className="text-xs mt-2 px-1" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
+              {convertError}
+            </p>
+          )}
+        </div>
       )}
 
       {showSkeleton && <SkeletonBalances />}
@@ -407,6 +425,11 @@ export function BalancesPage() {
                       </div>
                     )
                   })
+                )}
+                {myNetConverted !== null && myCurrencyLines.some(l => l.currency !== CONVERT_TO) && Math.abs(myNetConverted) > 0.004 && (
+                  <p className="text-xs font-semibold mt-1.5">
+                    Total ≈ {CONVERT_TO} {Math.abs(myNetConverted).toFixed(2)} {myNetConverted > 0 ? 'owed to you' : 'you owe'}
+                  </p>
                 )}
               </div>
 
