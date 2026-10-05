@@ -47,6 +47,7 @@ export function ExpenseFormPage({ editId }: Props) {
   const [receiptError, setReceiptError] = useState<string | null>(null)
   const [scanFailed, setScanFailed] = useState(false)
   const [scanDone, setScanDone] = useState(false)
+  const [scanUnreadable, setScanUnreadable] = useState(false) // the photo itself is the problem
   const showSkeleton = useShowSkeleton(loading)
 
   useEffect(() => {
@@ -121,6 +122,7 @@ export function ExpenseFormPage({ editId }: Props) {
       setRemoveReceipt(false)
       setScanFailed(false)
       setScanDone(false)
+      setScanUnreadable(false)
     } catch (err) {
       setReceiptError(err instanceof Error ? err.message : 'Could not read this image')
     }
@@ -133,6 +135,7 @@ export function ExpenseFormPage({ editId }: Props) {
     setReceiptError(null)
     setScanFailed(false)
     setScanDone(false)
+    setScanUnreadable(false)
     if (hadReceipt) setRemoveReceipt(true)
   }
 
@@ -142,6 +145,7 @@ export function ExpenseFormPage({ editId }: Props) {
     setScanning(true)
     setScanFailed(false)
     setScanDone(false)
+    setScanUnreadable(false)
     setReceiptError(null)
     setReceiptNote(null)
     try {
@@ -155,7 +159,10 @@ export function ExpenseFormPage({ editId }: Props) {
         merchant?: string | null; total?: number | null; currency?: string | null
         date?: string | null; category?: string | null
       }
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      if (!res.ok) {
+        setScanUnreadable(res.status === 422) // retrying the same photo won't help; pick a better one
+        throw new Error(data.error ?? `HTTP ${res.status}`)
+      }
 
       const filled: string[] = []
       if (data.merchant) { setDescription(data.merchant); filled.push('shop') }
@@ -384,7 +391,13 @@ export function ExpenseFormPage({ editId }: Props) {
                     </svg>
                   </button>
                 </div>
-                {receiptBlob && (
+                {receiptBlob && scanUnreadable && !scanning && (
+                  <label className="tg-btn mt-2" style={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
+                    📷 Choose a clearer photo
+                    <input type="file" accept="image/*" onChange={handleReceiptPicked} style={{ display: 'none' }} />
+                  </label>
+                )}
+                {receiptBlob && !(scanUnreadable && !scanning) && (
                   <button
                     type="button"
                     onClick={handleAutoFill}
