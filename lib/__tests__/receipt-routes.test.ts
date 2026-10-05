@@ -2,15 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
+vi.mock('@vercel/blob', () => {
+  class BlobNotFoundError extends Error {}
+  return { put: vi.fn(), get: vi.fn(), del: vi.fn(), BlobNotFoundError }
+})
 
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
+import { del, get, put } from '@vercel/blob'
+import { receiptViewUrl } from '@/lib/receipt-storage'
 import { POST as parsePOST } from '../../app/api/groups/[chatId]/receipts/parse/route'
-import { PUT as receiptPUT, DELETE as receiptDELETE } from '../../app/api/groups/[chatId]/expenses/[id]/receipt/route'
+import { GET as receiptGET, PUT as receiptPUT, DELETE as receiptDELETE } from '../../app/api/groups/[chatId]/expenses/[id]/receipt/route'
 import { GET as expenseGET } from '../../app/api/groups/[chatId]/expenses/[id]/route'
 
 const mockSql = vi.mocked(sql)
 const mockGetAuthUser = vi.mocked(getAuthUser)
+const mockPut = vi.mocked(put)
+const mockGet = vi.mocked(get)
+const mockDel = vi.mocked(del)
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46])
 const USER = { id: 99, first_name: 'Kev' }
@@ -61,16 +70,16 @@ function stubFetch() {
   }))
 }
 
-const R2_ENV = {
-  R2_ACCOUNT_ID: 'acct123', R2_ACCESS_KEY_ID: 'AKIATEST', R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET: 'bkt',
-}
-const envKeys = ['GEMINI_API_KEY', 'GEMINI_RECEIPT_MODEL', ...Object.keys(R2_ENV)]
+const BLOB_ENV = { BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_test_token' }
+const envKeys = ['GEMINI_API_KEY', 'GEMINI_RECEIPT_MODEL', ...Object.keys(BLOB_ENV)]
 const savedEnv: Record<string, string | undefined> = {}
 
 beforeEach(() => {
   vi.clearAllMocks()
   for (const k of envKeys) { savedEnv[k] = process.env[k]; delete process.env[k] }
   mockGetAuthUser.mockReturnValue(USER as never)
+  mockPut.mockResolvedValue({} as never)
+  mockDel.mockResolvedValue(undefined as never)
   stubFetch()
 })
 afterEach(() => {
@@ -199,143 +208,212 @@ describe('POST /receipts/parse', () => {
 // ─── PUT/DELETE /expenses/[id]/receipt ────────────────────────────────────────
 
 describe('PUT /expenses/[id]/receipt', () => {
-  const put = (body: Uint8Array = JPEG) => receiptPUT(imgReq('http://x/receipt', 'PUT', body), receiptProps)
+  const put_ = (body: Uint8Array = JPEG) => receiptPUT(imgReq('http://x/receipt', 'PUT', body), receiptProps)
   const expenseRow = (receipt_key: string | null): Handler => [/FROM expenses/, [{ id: 42, receipt_key }]]
 
   it('503s when storage is not configured', async () => {
     routeSql([...memberOk, expenseRow(null)])
-    expect((await put()).status).toBe(503)
-    expect(fetchCalls).toHaveLength(0)
+    expect((await put_()).status).toBe(503)
+    expect(mockPut).not.toHaveBeenCalled()
   })
 
   it('404s for an unknown or other-group expense', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([...memberOk, [/FROM expenses/, []]])
-    expect((await put()).status).toBe(404)
+    expect((await put_()).status).toBe(404)
   })
 
   it('403s for a non-member', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([[/FROM groups/, [{ id: 5 }]], [/FROM members/, []]])
-    expect((await put()).status).toBe(403)
+    expect((await put_()).status).toBe(403)
   })
 
-  it('rejects a non-image before uploading anything', async () => {
-    Object.assign(process.env, R2_ENV)
+  it('rejects a non-image before storing anything', async () => {
+    Object.assign(process.env, BLOB_ENV)
     routeSql([...memberOk, expenseRow(null)])
-    expect((await put(new TextEncoder().encode('<html>'))).status).toBe(415)
-    expect(fetchCalls).toHaveLength(0)
+    expect((await put_(new TextEncoder().encode('<html>'))).status).toBe(415)
+    expect(mockPut).not.toHaveBeenCalled()
   })
 
-  it('stores the image under the group, saves the key, and returns a signed URL', async () => {
-    Object.assign(process.env, R2_ENV)
+  it('stores a PRIVATE image under the group, saves the key, and returns a signed view link', async () => {
+    Object.assign(process.env, BLOB_ENV)
     const updates: unknown[][] = []
     routeSql([
       ...memberOk, expenseRow(null),
       [/UPDATE expenses SET receipt_key/, (vals: unknown[]) => { updates.push(vals); return [] }],
     ])
-    fetchImpl = () => new Response(null, { status: 200 })
 
-    const res = await put()
+    const res = await put_()
     expect(res.status).toBe(200)
 
-    const upload = fetchCalls[0]!
-    expect(upload.method).toBe('PUT')
-    expect(upload.url).toMatch(/^https:\/\/acct123\.r2\.cloudflarestorage\.com\/bkt\/receipts\/5\/42-[0-9a-f-]{36}\.jpg$/)
-    expect(upload.headers.get('content-type')).toBe('image/jpeg')
-    expect(upload.headers.get('authorization')).toContain('AWS4-HMAC-SHA256')
+    const [key, body, opts] = mockPut.mock.calls[0]!
+    expect(key).toMatch(/^receipts\/5\/42-[0-9a-f-]{36}\.jpg$/)
+    expect(Buffer.from(body as Buffer)).toEqual(Buffer.from(JPEG))
+    expect(opts).toMatchObject({ access: 'private', contentType: 'image/jpeg', addRandomSuffix: false, allowOverwrite: false })
+    expect(updates[0]![0]).toBe(key)
 
-    const key = updates[0]![0] as string
-    expect(upload.url.endsWith(key)).toBe(true)
-    expect((await res.json()).receipt_url).toContain('X-Amz-Signature=')
-    expect(fetchCalls).toHaveLength(1) // no previous receipt to clean up
+    expect((await res.json()).receipt_url).toMatch(/^\/api\/groups\/-100123\/expenses\/42\/receipt\?exp=\d+&sig=[0-9a-f]{64}$/)
+    expect(mockDel).not.toHaveBeenCalled() // nothing to clean up
   })
 
   it('deletes the previous image only after the new one is saved', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([...memberOk, expenseRow('receipts/5/42-old.jpg')])
-    fetchImpl = () => new Response(null, { status: 200 })
+    const order: string[] = []
+    mockPut.mockImplementation((async () => { order.push('put') }) as never)
+    mockDel.mockImplementation((async () => { order.push('del') }) as never)
 
-    expect((await put()).status).toBe(200)
-    expect(fetchCalls.map(c => c.method)).toEqual(['PUT', 'DELETE'])
-    expect(fetchCalls[1]!.url).toContain('/bkt/receipts/5/42-old.jpg')
+    expect((await put_()).status).toBe(200)
+    expect(order).toEqual(['put', 'del'])
+    expect(mockDel).toHaveBeenCalledWith('receipts/5/42-old.jpg')
   })
 
-  it('502s and leaves the database untouched when the upload fails', async () => {
-    Object.assign(process.env, R2_ENV)
+  it('502s and leaves the database and old image untouched when storing fails', async () => {
+    Object.assign(process.env, BLOB_ENV)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     routeSql([...memberOk, expenseRow('receipts/5/42-old.jpg')])
-    fetchImpl = () => new Response('denied', { status: 403 })
+    mockPut.mockRejectedValue(new Error('store down'))
 
-    expect((await put()).status).toBe(502)
+    expect((await put_()).status).toBe(502)
     expect(sqlTexts().some(t => t.includes('UPDATE expenses SET receipt_key'))).toBe(false)
-    expect(fetchCalls.every(c => c.method === 'PUT')).toBe(true) // old image kept
+    expect(mockDel).not.toHaveBeenCalled()
     spy.mockRestore()
   })
 
-  it('removes the just-uploaded object if saving the key fails', async () => {
-    Object.assign(process.env, R2_ENV)
+  it('removes the just-stored object if saving the key fails', async () => {
+    Object.assign(process.env, BLOB_ENV)
     routeSql([
       ...memberOk, expenseRow(null),
       [/UPDATE expenses SET receipt_key/, () => { throw new Error('db down') }],
     ])
-    fetchImpl = () => new Response(null, { status: 200 })
 
-    await expect(put()).rejects.toThrow('db down')
-    expect(fetchCalls.map(c => c.method)).toEqual(['PUT', 'DELETE'])
-    expect(fetchCalls[1]!.url).toBe(fetchCalls[0]!.url)
+    await expect(put_()).rejects.toThrow('db down')
+    expect(mockDel).toHaveBeenCalledTimes(1)
+    expect(mockDel).toHaveBeenCalledWith(mockPut.mock.calls[0]![0])
   })
 })
 
 describe('DELETE /expenses/[id]/receipt', () => {
-  const del = () => receiptDELETE(new Request('http://x/receipt', { method: 'DELETE' }), receiptProps)
+  const del_ = () => receiptDELETE(new Request('http://x/receipt', { method: 'DELETE' }), receiptProps)
 
   it('clears the key and deletes the stored object', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([...memberOk, [/FROM expenses/, [{ id: 42, receipt_key: 'receipts/5/42-abc.jpg' }]]])
-    fetchImpl = () => new Response(null, { status: 204 })
 
-    expect((await del()).status).toBe(200)
+    expect((await del_()).status).toBe(200)
     expect(sqlTexts().some(t => t.includes('SET receipt_key = NULL'))).toBe(true)
-    expect(fetchCalls.map(c => c.method)).toEqual(['DELETE'])
+    expect(mockDel).toHaveBeenCalledWith('receipts/5/42-abc.jpg')
   })
 
   it('is a no-op when there is no receipt', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([...memberOk, [/FROM expenses/, [{ id: 42, receipt_key: null }]]])
-    expect((await del()).status).toBe(200)
-    expect(fetchCalls).toHaveLength(0)
+    expect((await del_()).status).toBe(200)
+    expect(mockDel).not.toHaveBeenCalled()
   })
 })
 
-// ─── GET /expenses/[id] exposes a signed URL, never the storage key ───────────
+// ─── GET /expenses/[id]/receipt (signed link, no Telegram headers) ────────────
+
+describe('GET /expenses/[id]/receipt', () => {
+  const KEY = 'receipts/5/42-abc.jpg'
+  const withKey = (key: string | null): Handler[] => [[/FROM expenses e JOIN groups g/, key ? [{ receipt_key: key }] : []]]
+  const fileStream = () => new Response(JPEG).body!
+  const okBlob = () => mockGet.mockResolvedValue({
+    statusCode: 200, stream: fileStream(), headers: new Headers(), blob: { contentType: 'image/jpeg', size: JPEG.length },
+  } as never)
+  const fetchLink = (url: string) => receiptGET(new Request(`http://x${url}`), receiptProps)
+
+  beforeEach(() => { Object.assign(process.env, BLOB_ENV) })
+
+  it('streams the image for a valid link, without needing Telegram auth', async () => {
+    mockGetAuthUser.mockReturnValue(null) // no headers: <img src> can't send any
+    routeSql(withKey(KEY))
+    okBlob()
+
+    const res = await fetchLink(receiptViewUrl('-100123', 42, KEY))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/jpeg')
+    expect(res.headers.get('cache-control')).toContain('private')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+    expect(mockGet).toHaveBeenCalledWith(KEY, { access: 'private' })
+  })
+
+  it('403s for a tampered signature, a missing signature, or an expired link', async () => {
+    routeSql(withKey(KEY))
+    okBlob()
+    const good = receiptViewUrl('-100123', 42, KEY)
+    expect((await fetchLink(good.replace(/sig=.{4}/, 'sig=0000'))).status).toBe(403)
+    expect((await fetchLink(good.split('&sig=')[0]!)).status).toBe(403)
+    expect((await fetchLink(receiptViewUrl('-100123', 42, KEY, -10))).status).toBe(403)
+    expect(mockGet).not.toHaveBeenCalled()
+  })
+
+  it('does not accept a link issued for a different expense or group', async () => {
+    routeSql(withKey(KEY))
+    okBlob()
+    expect((await fetchLink(receiptViewUrl('-100123', 43, KEY))).status).toBe(403)
+    expect((await fetchLink(receiptViewUrl('-999', 42, KEY))).status).toBe(403)
+  })
+
+  it('invalidates old links once the receipt is replaced', async () => {
+    const oldLink = receiptViewUrl('-100123', 42, KEY)
+    routeSql(withKey('receipts/5/42-new.jpg')) // DB now points at the replacement
+    okBlob()
+    expect((await fetchLink(oldLink)).status).toBe(403)
+  })
+
+  it('404s when the expense has no receipt (e.g. after removal)', async () => {
+    routeSql(withKey(null))
+    expect((await fetchLink(receiptViewUrl('-100123', 42, KEY))).status).toBe(404)
+  })
+
+  it('404s when the stored object is missing', async () => {
+    routeSql(withKey(KEY))
+    mockGet.mockResolvedValue(null as never)
+    expect((await fetchLink(receiptViewUrl('-100123', 42, KEY))).status).toBe(404)
+  })
+
+  it('refuses links signed with another environment\'s token', async () => {
+    const link = receiptViewUrl('-100123', 42, KEY)
+    process.env.BLOB_READ_WRITE_TOKEN = 'a_different_store_token'
+    routeSql(withKey(KEY))
+    okBlob()
+    expect((await fetchLink(link)).status).toBe(403)
+  })
+})
+
+// ─── GET /expenses/[id] exposes a signed link, never the storage key ──────────
 
 describe('GET /expenses/[id] receipt fields', () => {
-  const get = () => expenseGET(new Request('http://x/expenses/42'), receiptProps)
+  const get_ = () => expenseGET(new Request('http://x/expenses/42'), receiptProps)
 
   it('returns has_receipt and a signed receipt_url, and hides receipt_key', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([
       [/FROM groups/, [{ id: 5 }]],
       [/FROM members WHERE group_id/, [{ id: 7 }]],
       [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: 'receipts/5/42-abc.jpg' }]],
       [/FROM expense_splits/, []],
     ])
-    const body = await (await get()).json()
+    const body = await (await get_()).json()
     expect(body.has_receipt).toBe(true)
-    expect(body.receipt_url).toContain('/bkt/receipts/5/42-abc.jpg?')
+    expect(body.receipt_url).toMatch(/^\/api\/groups\/-100123\/expenses\/42\/receipt\?exp=\d+&sig=[0-9a-f]{64}$/)
+    expect(JSON.stringify(body)).not.toContain('receipts/5/42-abc')
     expect(body).not.toHaveProperty('receipt_key')
   })
 
   it('returns has_receipt false and no URL for an expense without a receipt', async () => {
-    Object.assign(process.env, R2_ENV)
+    Object.assign(process.env, BLOB_ENV)
     routeSql([
       [/FROM groups/, [{ id: 5 }]],
       [/FROM members WHERE group_id/, [{ id: 7 }]],
       [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: null }]],
       [/FROM expense_splits/, []],
     ])
-    const body = await (await get()).json()
+    const body = await (await get_()).json()
     expect(body).toMatchObject({ has_receipt: false, receipt_url: null })
   })
 })

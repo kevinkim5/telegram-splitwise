@@ -26,7 +26,7 @@ Copy `.env.example` to `.env.local` for local development. Key vars:
 | `TELEGRAM_APP_URL` | `https://t.me/<bot>/<app>` Mini App link (enables the group chat inline button) |
 | `WEBHOOK_SECRET_TOKEN` | Secret checked on incoming webhook calls; if absent, all webhook requests are accepted |
 | `GEMINI_API_KEY` | Google Gemini key used to read receipt photos (optional; one per environment). `GEMINI_RECEIPT_MODEL` overrides the default `gemini-2.5-flash` |
-| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Cloudflare R2 (S3-compatible) bucket for receipt images (optional; keep the bucket private) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store) for receipt images (optional). Added automatically when a Blob store is connected; also used to sign receipt view links |
 | `ADMIN_GITHUB_ID` | Numeric GitHub user ID allowed to access `/admin` routes |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | NextAuth GitHub OAuth credentials |
 
@@ -59,10 +59,10 @@ All routes under `app/` (except `/admin`) are the Mini App embedded in Telegram.
 
 ### Receipts (optional feature)
 
-An expense can have at most one receipt image, stored in a private R2 bucket (`expenses.receipt_key`).
+An expense can have at most one receipt image, stored in a private Vercel Blob store (`expenses.receipt_key` holds the pathname).
 - Add/Edit form: the user picks a photo, which is downscaled client-side (`lib/image-resize.ts`). **Auto-fill** is a separate, optional tap: `POST /api/groups/[chatId]/receipts/parse` sends the image to Gemini (`lib/receipt-parse.ts`), validates the model output, and returns merchant/total/currency/date/category to pre-fill the form. Nothing is stored at this step. Rate limited per user via the `receipt_scans` table.
-- The image is uploaded only after the expense is saved: `PUT /api/groups/[chatId]/expenses/[id]/receipt` (replaces any previous image), `DELETE` to remove. Storage is `lib/r2.ts` (aws4fetch, server-side).
-- Viewing: expense GET returns `has_receipt` and a 15-minute signed `receipt_url`; the list returns only `has_receipt`. The raw storage key is never sent to clients. Deleting an expense is a soft delete, so its image is kept.
+- The image is uploaded only after the expense is saved: `PUT /api/groups/[chatId]/expenses/[id]/receipt` (replaces any previous image), `DELETE` to remove. Storage is `lib/receipt-storage.ts` (`@vercel/blob`, server-side).
+- Viewing: expense GET returns `has_receipt` and a 15-minute `receipt_url`, a same-origin link to `GET /api/groups/[chatId]/expenses/[id]/receipt?exp=…&sig=…` (HMAC-signed, bound to the expense and current image) that streams the private blob, so `<img src>` works without Telegram headers. The list returns only `has_receipt`. The storage key is never sent to clients. Deleting an expense is a soft delete, so its image is kept.
 - Receipt photos reach Google when Auto-fill is tapped. On Gemini's free tier Google may use submitted content to improve its products.
 
 ### 2. Admin dashboard (`/admin`)
