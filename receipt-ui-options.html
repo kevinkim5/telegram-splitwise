@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Receipt UI options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --blue:#2481cc; --hint:#8e8e93; --sec:#f0f0f4; --red:#ff3b30; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e4e4ea; padding:26px 14px 60px; color:#000; }
+  h1 { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8e8e93; text-align:center; margin-bottom:4px; }
+  .sub { font-size:12px; color:#8e8e93; text-align:center; margin-bottom:8px; }
+  h2 { font-size:13px; font-weight:700; margin:34px 0 4px; text-align:center; }
+  h2 .rec { font-size:10px; color:#1c9c48; background:rgba(52,199,89,.16); border-radius:999px; padding:2px 8px; margin-left:8px; letter-spacing:.04em; }
+  .desc { max-width:760px; margin:0 auto 14px; font-size:12px; color:#6c6c70; line-height:1.5; text-align:center; }
+  .row { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; }
+  .card { width:340px; background:#f2f2f7; border-radius:20px; padding:14px 14px 18px; box-shadow:0 3px 18px rgba(0,0,0,.12); }
+  .cap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#8e8e93; text-align:center; margin-bottom:10px; }
+  .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:0 4px 6px; }
+  .hint { font-size:11.5px; color:#8e8e93; margin:8px 4px 0; line-height:1.4; }
+  .stub { height:46px; background:#fff; border-radius:12px; margin-top:12px; display:flex; align-items:center; padding:0 14px; font-size:13px; color:#b0b0b6; }
+
+  /* receipt-looking paper */
+  .paper { background:#fafaf5; position:relative; overflow:hidden;
+    background-image:repeating-linear-gradient(#fafaf5 0 9px, #fafaf5 9px 10px);
+  }
+  .paper::before { content:''; position:absolute; left:14%; right:14%; top:18px; bottom:10px;
+    background:
+      linear-gradient(#444,#444) 0 0/55% 5px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 14px/80% 4px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 26px/70% 4px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 38px/76% 4px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 50px/64% 4px no-repeat,
+      linear-gradient(#444,#444) 0 70px/46% 5px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 84px/72% 4px no-repeat,
+      linear-gradient(#bbb,#bbb) 0 96px/58% 4px no-repeat; }
+
+  .btn { border:none; border-radius:11px; font-weight:600; font-size:14px; padding:11px 14px; }
+  .primary { background:var(--blue); color:#fff; }
+  .ghost { background:var(--sec); color:#222; }
+  .danger { background:rgba(255,59,48,.1); color:var(--red); }
+  .center { text-align:center; }
+  .spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .note { font-size:11.5px; color:#8e8e93; margin:8px 4px 0; }
+  .ok { color:#1c9c48; }
+
+  /* ─ Baseline (current) ─ */
+  .cur { background:#fff; border-radius:12px; padding:12px; display:flex; gap:12px; }
+  .cur .paper { width:72px; height:96px; border-radius:8px; flex:none; }
+  .cur .col { display:flex; flex-direction:column; gap:8px; }
+  .cur .btn { font-size:13px; padding:7px 12px; border-radius:10px; }
+  .cur .pair { display:flex; gap:8px; }
+
+  /* ─ B: full-width preview ─ */
+  .bwrap { background:#fff; border-radius:14px; overflow:hidden; }
+  .bimg { height:150px; position:relative; }
+  .bimg .chips { position:absolute; top:10px; right:10px; display:flex; gap:8px; z-index:2; }
+  .chip { width:32px; height:32px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .bimg .fade { position:absolute; left:0; right:0; bottom:0; height:44px; background:linear-gradient(transparent,rgba(250,250,245,.95)); z-index:1; }
+  .bbody { padding:12px; }
+  .bbody .btn { width:100%; }
+  .badge { position:absolute; left:10px; bottom:8px; z-index:2; font-size:11px; font-weight:600; color:#1c9c48; background:rgba(255,255,255,.92); border-radius:999px; padding:3px 9px; }
+
+  /* ─ C: compact list row ─ */
+  .crow { background:#fff; border-radius:14px; padding:10px 12px; display:flex; align-items:center; gap:12px; }
+  .crow .paper { width:44px; height:58px; border-radius:7px; flex:none; border:1px solid rgba(0,0,0,.07); }
+  .crow .info { flex:1; min-width:0; }
+  .crow .t { font-size:14px; font-weight:600; }
+  .crow .s { font-size:12px; color:#8e8e93; margin-top:2px; }
+  .crow .acts { display:flex; gap:6px; }
+  .ic { width:32px; height:32px; border-radius:10px; background:var(--sec); display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .ic.red { background:rgba(255,59,48,.1); }
+  .cbtn { margin-top:10px; width:100%; }
+
+  /* ─ D: centred, stacked ─ */
+  .dempty { border:1.5px dashed #b4b4bc; border-radius:16px; padding:22px 14px; text-align:center; background:rgba(255,255,255,.5); }
+  .dempty .big { font-size:30px; }
+  .dempty .t { font-size:15px; font-weight:600; color:var(--blue); margin-top:6px; }
+  .dempty .s { font-size:12px; color:#8e8e93; margin-top:3px; }
+  .dfull { background:#fff; border-radius:16px; padding:16px 14px 12px; text-align:center; }
+  .dfull .paper { width:120px; height:150px; border-radius:10px; margin:0 auto 14px; box-shadow:0 4px 14px rgba(0,0,0,.18); transform:rotate(-1.5deg); }
+  .dfull .btn { width:100%; }
+  .links { margin-top:10px; font-size:13px; display:flex; justify-content:center; gap:18px; }
+  .links a { color:var(--blue); font-weight:500; }
+  .links a.r { color:var(--red); }
+</style>
+</head>
+<body>
+
+<h1>Receipt upload — UI options</h1>
+<p class="sub">Same behaviour in every option — only the layout changes. States: empty · photo attached · after auto-fill.</p>
+
+<!-- ───────── CURRENT ───────── -->
+<h2>Current</h2>
+<p class="desc">Small thumbnail with a left-hugging stack of buttons: nothing is aligned to the form's edges, the primary action is narrower than every other control on the page, and a large empty area is left on the right.</p>
+<div class="row">
+  <div class="card"><p class="cap">Attached</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="cur"><div class="paper"></div>
+      <div class="col"><button class="btn primary">✨ Auto-fill from receipt</button>
+        <div class="pair"><button class="btn ghost">Replace</button><button class="btn danger">Remove</button></div></div></div>
+    <p class="hint">Auto-fill sends this photo to Google Gemini to read it. The photo is only stored if you save the expense.</p>
+    <div class="stub">Description</div>
+  </div>
+</div>
+
+<!-- ───────── B ───────── -->
+<h2>B — Full-width preview, one big button <span class="rec">RECOMMENDED</span></h2>
+<p class="desc">The receipt becomes a wide, cropped preview that matches the width of every other field. Replace and remove are small round icon buttons on the photo (the usual pattern for attachments), so the only text button left is the one that matters: a full-width Auto-fill.</p>
+<div class="row">
+  <div class="card"><p class="cap">Empty</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="dempty" style="background:#fff"><div class="big">📷</div><div class="t">Add receipt photo</div><div class="s">Optional — auto-fill can read it for you</div></div>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">Photo attached</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="bwrap"><div class="bimg paper"><div class="chips"><span class="chip">↻</span><span class="chip">✕</span></div><div class="fade"></div></div>
+      <div class="bbody"><button class="btn primary">✨ Auto-fill from receipt</button></div></div>
+    <p class="hint">Auto-fill sends this photo to Google Gemini to read it. The photo is only stored if you save the expense.</p>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">Reading… / done</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="bwrap"><div class="bimg paper"><div class="chips"><span class="chip">↻</span><span class="chip">✕</span></div><div class="fade"></div><span class="badge">✓ Filled from receipt</span></div>
+      <div class="bbody"><button class="btn primary" style="opacity:.65"><span class="spin"></span>Reading receipt…</button></div></div>
+    <p class="note ok">Filled shop, amount, currency, date, category. Please check before saving.</p>
+    <div class="stub">Description</div></div>
+</div>
+
+<!-- ───────── C ───────── -->
+<h2>C — Compact attachment row</h2>
+<p class="desc">Takes the least vertical space: a small thumbnail with a title and size, and icon buttons on the right edge. Auto-fill sits underneath as a full-width button. Best if you want the form to stay short; the receipt is harder to inspect at that size.</p>
+<div class="row">
+  <div class="card"><p class="cap">Empty</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="crow" style="border:1.5px dashed #b4b4bc;background:rgba(255,255,255,.5);justify-content:center;color:#2481cc;font-weight:600;font-size:14px;padding:16px">📷&nbsp; Add receipt photo</div>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">Photo attached</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="crow"><div class="paper"></div><div class="info"><div class="t">Receipt photo</div><div class="s">1200 × 1600 · 184 KB</div></div>
+      <div class="acts"><span class="ic">↻</span><span class="ic red">🗑</span></div></div>
+    <button class="btn primary cbtn">✨ Auto-fill from receipt</button>
+    <p class="hint">Auto-fill sends this photo to Google Gemini to read it.</p>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">After auto-fill</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="crow"><div class="paper"></div><div class="info"><div class="t">Receipt photo</div><div class="s ok">✓ Filled from receipt</div></div>
+      <div class="acts"><span class="ic">↻</span><span class="ic red">🗑</span></div></div>
+    <p class="note">Filled shop, amount, currency, date, category. Please check before saving.</p>
+    <div class="stub">Description</div></div>
+</div>
+
+<!-- ───────── D ───────── -->
+<h2>D — Centred hero</h2>
+<p class="desc">A larger, centred "paper" thumbnail with a full-width Auto-fill below and quiet text links for Replace / Remove. Friendliest and most prominent, but it is also the tallest option and pushes the form down the most.</p>
+<div class="row">
+  <div class="card"><p class="cap">Empty</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="dempty"><div class="big">🧾</div><div class="t">Add receipt photo</div><div class="s">Take a photo or choose one · optional</div></div>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">Photo attached</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="dfull"><div class="paper"></div><button class="btn primary">✨ Auto-fill from receipt</button>
+      <div class="links"><a>Replace photo</a><a class="r">Remove</a></div></div>
+    <p class="hint">Auto-fill sends this photo to Google Gemini to read it.</p>
+    <div class="stub">Description</div></div>
+
+  <div class="card"><p class="cap">After auto-fill</p>
+    <p class="lbl">Receipt (optional)</p>
+    <div class="dfull"><div class="paper"></div><button class="btn ghost" style="color:#1c9c48">✓ Filled from receipt</button>
+      <div class="links"><a>Replace photo</a><a class="r">Remove</a></div></div>
+    <p class="note">Filled shop, amount, currency, date, category. Please check before saving.</p>
+    <div class="stub">Description</div></div>
+</div>
+
+<p class="desc" style="margin-top:34px"><b>Edit mode</b> (receipt already saved): the same layouts apply, without the Auto-fill button (the original photo isn't kept on the device), and the receipt tap-to-enlarge stays as it is on the expense view.</p>
+
+</body>
+</html>
