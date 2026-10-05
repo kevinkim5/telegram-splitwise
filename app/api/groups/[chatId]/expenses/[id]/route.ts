@@ -6,7 +6,7 @@ import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
-import { receiptViewUrl } from '@/lib/receipt-storage'
+import { ownsKey, receiptViewUrl } from '@/lib/receipt-storage'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -30,7 +30,7 @@ async function getExpenseWithSplits(expenseId: number) {
 // Replace the internal storage key with has_receipt plus a short-lived signed view URL.
 function withReceipt(expense: object, chatId: string) {
   const { receipt_key, ...rest } = expense as { receipt_key?: string | null; id?: number }
-  const receipt_url = receipt_key && rest.id ? receiptViewUrl(chatId, rest.id, receipt_key) : null
+  const receipt_url = receipt_key && rest.id && ownsKey(receipt_key) ? receiptViewUrl(chatId, rest.id, receipt_key) : null
   return { ...rest, has_receipt: !!receipt_key, receipt_url }
 }
 

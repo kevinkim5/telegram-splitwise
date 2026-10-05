@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { receiptKey, receiptViewUrl, storageConfigured, verifyReceiptLink } from '@/lib/receipt-storage'
+import { ownsKey, receiptKey, receiptViewUrl, storageConfigured, storageFolder, verifyReceiptLink } from '@/lib/receipt-storage'
 
 let saved: string | undefined
-beforeEach(() => { saved = process.env.BLOB_READ_WRITE_TOKEN; process.env.BLOB_READ_WRITE_TOKEN = 'token_one' })
-afterEach(() => { if (saved === undefined) delete process.env.BLOB_READ_WRITE_TOKEN; else process.env.BLOB_READ_WRITE_TOKEN = saved })
+let savedEnv: string | undefined
+beforeEach(() => {
+  saved = process.env.BLOB_READ_WRITE_TOKEN; savedEnv = process.env.VERCEL_ENV
+  process.env.BLOB_READ_WRITE_TOKEN = 'token_one'
+})
+afterEach(() => {
+  if (saved === undefined) delete process.env.BLOB_READ_WRITE_TOKEN; else process.env.BLOB_READ_WRITE_TOKEN = saved
+  if (savedEnv === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = savedEnv
+})
 
 const parts = (url: string) => {
   const q = new URL(`http://x${url}`).searchParams
@@ -18,16 +25,41 @@ describe('storageConfigured', () => {
   })
 })
 
+describe('storage folders', () => {
+  it('uses production/ only for production deployments, staging/ for everything else', () => {
+    process.env.VERCEL_ENV = 'production'
+    expect(storageFolder()).toBe('production')
+    for (const v of ['preview', 'development', '', undefined]) {
+      if (v === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = v
+      expect(storageFolder()).toBe('staging')
+    }
+  })
+
+  it('only owns keys in its own folder (and not lookalike prefixes)', () => {
+    process.env.VERCEL_ENV = 'production'
+    expect(ownsKey('production/receipts/1/2-a.jpg')).toBe(true)
+    expect(ownsKey('staging/receipts/1/2-a.jpg')).toBe(false)
+    expect(ownsKey('production-old/receipts/1/2-a.jpg')).toBe(false)
+    expect(ownsKey('receipts/1/2-a.jpg')).toBe(false)
+    process.env.VERCEL_ENV = 'preview'
+    expect(ownsKey('staging/receipts/1/2-a.jpg')).toBe(true)
+    expect(ownsKey('production/receipts/1/2-a.jpg')).toBe(false)
+  })
+})
+
 describe('receiptKey', () => {
-  it('is group scoped and unique per call', () => {
+  it('is folder and group scoped, and unique per call', () => {
+    process.env.VERCEL_ENV = 'production'
     const a = receiptKey(7, 42, 'jpg')
-    expect(a).toMatch(/^receipts\/7\/42-[0-9a-f-]{36}\.jpg$/)
+    expect(a).toMatch(/^production\/receipts\/7\/42-[0-9a-f-]{36}\.jpg$/)
     expect(receiptKey(7, 42, 'jpg')).not.toBe(a)
+    process.env.VERCEL_ENV = 'preview'
+    expect(receiptKey(7, 42, 'jpg')).toMatch(/^staging\/receipts\/7\/42-/)
   })
 })
 
 describe('receipt view links', () => {
-  const KEY = 'receipts/7/42-abc.jpg'
+  const KEY = 'staging/receipts/7/42-abc.jpg'
 
   it('verifies a freshly issued link', () => {
     const { exp, sig } = parts(receiptViewUrl('-100', 42, KEY))
@@ -46,7 +78,7 @@ describe('receipt view links', () => {
     const { exp, sig } = parts(receiptViewUrl('-100', 42, KEY))
     expect(verifyReceiptLink('-101', 42, KEY, exp, sig)).toBe(false)
     expect(verifyReceiptLink('-100', 43, KEY, exp, sig)).toBe(false)
-    expect(verifyReceiptLink('-100', 42, 'receipts/7/42-other.jpg', exp, sig)).toBe(false)
+    expect(verifyReceiptLink('-100', 42, 'staging/receipts/7/42-other.jpg', exp, sig)).toBe(false)
   })
 
   it('cannot be extended by editing exp', () => {

@@ -71,7 +71,7 @@ function stubFetch() {
 }
 
 const BLOB_ENV = { BLOB_READ_WRITE_TOKEN: 'vercel_blob_rw_test_token' }
-const envKeys = ['GEMINI_API_KEY', 'GEMINI_RECEIPT_MODEL', ...Object.keys(BLOB_ENV)]
+const envKeys = ['GEMINI_API_KEY', 'GEMINI_RECEIPT_MODEL', 'VERCEL_ENV', ...Object.keys(BLOB_ENV)]
 const savedEnv: Record<string, string | undefined> = {}
 
 beforeEach(() => {
@@ -248,7 +248,7 @@ describe('PUT /expenses/[id]/receipt', () => {
     expect(res.status).toBe(200)
 
     const [key, body, opts] = mockPut.mock.calls[0]!
-    expect(key).toMatch(/^receipts\/5\/42-[0-9a-f-]{36}\.jpg$/)
+    expect(key).toMatch(/^staging\/receipts\/5\/42-[0-9a-f-]{36}\.jpg$/)
     expect(Buffer.from(body as Buffer)).toEqual(Buffer.from(JPEG))
     expect(opts).toMatchObject({ access: 'private', contentType: 'image/jpeg', addRandomSuffix: false, allowOverwrite: false })
     expect(updates[0]![0]).toBe(key)
@@ -259,20 +259,20 @@ describe('PUT /expenses/[id]/receipt', () => {
 
   it('deletes the previous image only after the new one is saved', async () => {
     Object.assign(process.env, BLOB_ENV)
-    routeSql([...memberOk, expenseRow('receipts/5/42-old.jpg')])
+    routeSql([...memberOk, expenseRow('staging/receipts/5/42-old.jpg')])
     const order: string[] = []
     mockPut.mockImplementation((async () => { order.push('put') }) as never)
     mockDel.mockImplementation((async () => { order.push('del') }) as never)
 
     expect((await put_()).status).toBe(200)
     expect(order).toEqual(['put', 'del'])
-    expect(mockDel).toHaveBeenCalledWith('receipts/5/42-old.jpg')
+    expect(mockDel).toHaveBeenCalledWith('staging/receipts/5/42-old.jpg')
   })
 
   it('502s and leaves the database and old image untouched when storing fails', async () => {
     Object.assign(process.env, BLOB_ENV)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    routeSql([...memberOk, expenseRow('receipts/5/42-old.jpg')])
+    routeSql([...memberOk, expenseRow('staging/receipts/5/42-old.jpg')])
     mockPut.mockRejectedValue(new Error('store down'))
 
     expect((await put_()).status).toBe(502)
@@ -299,11 +299,11 @@ describe('DELETE /expenses/[id]/receipt', () => {
 
   it('clears the key and deletes the stored object', async () => {
     Object.assign(process.env, BLOB_ENV)
-    routeSql([...memberOk, [/FROM expenses/, [{ id: 42, receipt_key: 'receipts/5/42-abc.jpg' }]]])
+    routeSql([...memberOk, [/FROM expenses/, [{ id: 42, receipt_key: 'staging/staging/receipts/5/42-abc.jpg' }]]])
 
     expect((await del_()).status).toBe(200)
     expect(sqlTexts().some(t => t.includes('SET receipt_key = NULL'))).toBe(true)
-    expect(mockDel).toHaveBeenCalledWith('receipts/5/42-abc.jpg')
+    expect(mockDel).toHaveBeenCalledWith('staging/staging/receipts/5/42-abc.jpg')
   })
 
   it('is a no-op when there is no receipt', async () => {
@@ -317,7 +317,7 @@ describe('DELETE /expenses/[id]/receipt', () => {
 // ─── GET /expenses/[id]/receipt (signed link, no Telegram headers) ────────────
 
 describe('GET /expenses/[id]/receipt', () => {
-  const KEY = 'receipts/5/42-abc.jpg'
+  const KEY = 'staging/staging/receipts/5/42-abc.jpg'
   const withKey = (key: string | null): Handler[] => [[/FROM expenses e JOIN groups g/, key ? [{ receipt_key: key }] : []]]
   const fileStream = () => new Response(JPEG).body!
   const okBlob = () => mockGet.mockResolvedValue({
@@ -360,7 +360,7 @@ describe('GET /expenses/[id]/receipt', () => {
 
   it('invalidates old links once the receipt is replaced', async () => {
     const oldLink = receiptViewUrl('-100123', 42, KEY)
-    routeSql(withKey('receipts/5/42-new.jpg')) // DB now points at the replacement
+    routeSql(withKey('staging/receipts/5/42-new.jpg')) // DB now points at the replacement
     okBlob()
     expect((await fetchLink(oldLink)).status).toBe(403)
   })
@@ -385,6 +385,68 @@ describe('GET /expenses/[id]/receipt', () => {
   })
 })
 
+// ─── Environment folders (one shared store) ───────────────────────────────────
+
+describe('environment folders', () => {
+  const put_ = () => receiptPUT(imgReq('http://x/receipt', 'PUT'), receiptProps)
+  const rowWith = (key: string | null): Handler[] => [...memberOk, [/FROM expenses/, [{ id: 42, receipt_key: key }]]]
+
+  beforeEach(() => { Object.assign(process.env, BLOB_ENV) })
+
+  it('uploads under production/ on a production deployment', async () => {
+    process.env.VERCEL_ENV = 'production'
+    routeSql(rowWith(null))
+    expect((await put_()).status).toBe(200)
+    expect(mockPut.mock.calls[0]![0]).toMatch(/^production\/receipts\/5\/42-/)
+  })
+
+  it('uploads under staging/ for preview deployments and when VERCEL_ENV is unset', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    routeSql(rowWith(null))
+    await put_()
+    delete process.env.VERCEL_ENV
+    await put_()
+    expect(mockPut.mock.calls.map(c => c[0])).toEqual([
+      expect.stringMatching(/^staging\//), expect.stringMatching(/^staging\//),
+    ])
+  })
+
+  it('staging never deletes a production file, even if its database copy points at one', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    routeSql(rowWith('production/receipts/5/42-real.jpg'))
+    expect((await receiptDELETE(new Request('http://x/r', { method: 'DELETE' }), receiptProps)).status).toBe(200)
+    expect(mockDel).not.toHaveBeenCalled()
+
+    // replacing it must not delete the production original either
+    expect((await put_()).status).toBe(200)
+    expect(mockDel).not.toHaveBeenCalled()
+  })
+
+  it('production never touches a staging file', async () => {
+    process.env.VERCEL_ENV = 'production'
+    routeSql(rowWith('staging/receipts/5/42-test.jpg'))
+    await receiptDELETE(new Request('http://x/r', { method: 'DELETE' }), receiptProps)
+    expect(mockDel).not.toHaveBeenCalled()
+  })
+
+  it('will not stream or link another environment\'s file', async () => {
+    process.env.VERCEL_ENV = 'preview'
+    const foreign = 'production/receipts/5/42-real.jpg'
+    routeSql([[/FROM expenses e JOIN groups g/, [{ receipt_key: foreign }]]])
+    const link = receiptViewUrl('-100123', 42, foreign)
+    expect((await receiptGET(new Request(`http://x${link}`), receiptProps)).status).toBe(404)
+    expect(mockGet).not.toHaveBeenCalled()
+
+    routeSql([
+      [/FROM groups/, [{ id: 5 }]], [/FROM members WHERE group_id/, [{ id: 7 }]],
+      [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'x', receipt_key: foreign }]],
+      [/FROM expense_splits/, []],
+    ])
+    const body = await (await expenseGET(new Request('http://x/expenses/42'), receiptProps)).json()
+    expect(body).toMatchObject({ has_receipt: true, receipt_url: null })
+  })
+})
+
 // ─── GET /expenses/[id] exposes a signed link, never the storage key ──────────
 
 describe('GET /expenses/[id] receipt fields', () => {
@@ -395,13 +457,13 @@ describe('GET /expenses/[id] receipt fields', () => {
     routeSql([
       [/FROM groups/, [{ id: 5 }]],
       [/FROM members WHERE group_id/, [{ id: 7 }]],
-      [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: 'receipts/5/42-abc.jpg' }]],
+      [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: 'staging/staging/receipts/5/42-abc.jpg' }]],
       [/FROM expense_splits/, []],
     ])
     const body = await (await get_()).json()
     expect(body.has_receipt).toBe(true)
     expect(body.receipt_url).toMatch(/^\/api\/groups\/-100123\/expenses\/42\/receipt\?exp=\d+&sig=[0-9a-f]{64}$/)
-    expect(JSON.stringify(body)).not.toContain('receipts/5/42-abc')
+    expect(JSON.stringify(body)).not.toContain('staging/receipts/5/42-abc')
     expect(body).not.toHaveProperty('receipt_key')
   })
 

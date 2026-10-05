@@ -59,9 +59,9 @@ All routes under `app/` (except `/admin`) are the Mini App embedded in Telegram.
 
 ### Receipts (optional feature)
 
-An expense can have at most one receipt image, stored in a private Vercel Blob store (`expenses.receipt_key` holds the pathname).
+An expense can have at most one receipt image, stored in a private Vercel Blob store (`expenses.receipt_key` holds the pathname, including the environment folder).
 - Add/Edit form: the user picks a photo, which is downscaled client-side (`lib/image-resize.ts`). **Auto-fill** is a separate, optional tap: `POST /api/groups/[chatId]/receipts/parse` sends the image to Gemini (`lib/receipt-parse.ts`), validates the model output, and returns merchant/total/currency/date/category to pre-fill the form. Nothing is stored at this step. Rate limited per user via the `receipt_scans` table.
-- The image is uploaded only after the expense is saved: `PUT /api/groups/[chatId]/expenses/[id]/receipt` (replaces any previous image), `DELETE` to remove. Storage is `lib/receipt-storage.ts` (`@vercel/blob`, server-side).
+- The image is uploaded only after the expense is saved: `PUT /api/groups/[chatId]/expenses/[id]/receipt` (replaces any previous image), `DELETE` to remove. Storage is `lib/receipt-storage.ts` (`@vercel/blob`, server-side). One store is shared by all environments, split by top-level folder: `production/…` for production deployments (`VERCEL_ENV=production`), `staging/…` for everything else. Each environment only reads/deletes inside its own folder, so a staging database copied from production can never delete or serve production receipts.
 - Viewing: expense GET returns `has_receipt` and a 15-minute `receipt_url`, a same-origin link to `GET /api/groups/[chatId]/expenses/[id]/receipt?exp=…&sig=…` (HMAC-signed, bound to the expense and current image) that streams the private blob, so `<img src>` works without Telegram headers. The list returns only `has_receipt`. The storage key is never sent to clients. Deleting an expense is a soft delete, so its image is kept.
 - Receipt photos reach Google when Auto-fill is tapped. On Gemini's free tier Google may use submitted content to improve its products.
 
