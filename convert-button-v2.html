@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Convert Button v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #e9e9ee; padding: 28px 16px 48px; color: #000; }
+  h1 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #8e8e93; text-align: center; margin-bottom: 6px; }
+  .sub { font-size: 12px; color: #8e8e93; text-align: center; margin-bottom: 26px; }
+  h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #8e8e93; margin: 28px 0 10px; text-align: center; }
+
+  .row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+  .phone { width: 340px; background: #f2f2f7; border-radius: 22px; box-shadow: 0 4px 24px rgba(0,0,0,.13); overflow: hidden; border: 1px solid rgba(0,0,0,.08); }
+  .plabel { text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #8e8e93; padding: 13px 0 6px; background: #f2f2f7; }
+  .screen { padding: 14px 16px 22px; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+  .hl { display: flex; align-items: center; gap: 10px; }
+  .back { font-size: 13px; font-weight: 500; color: #007aff; }
+  .title { font-size: 17px; font-weight: 700; }
+  .hr { display: flex; gap: 6px; align-items: center; }
+
+  .notify { font-size: 13px; font-weight: 600; background: #007aff; color: #fff; border: none; border-radius: 12px; padding: 6px 12px; }
+
+  /* generic pills */
+  .pill { font-size: 12px; font-weight: 600; border: none; border-radius: 10px; padding: 6px 10px; background: #e5e5ea; color: #3c3c43; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .pill.on { background: rgba(0,122,255,.15); color: #007aff; }
+  .pill .ico { font-size: 13px; line-height: 1; }
+
+  /* segmented */
+  .seg { display: inline-flex; background: #e5e5ea; border-radius: 9px; padding: 2px; }
+  .seg span { font-size: 11px; font-weight: 600; padding: 5px 9px; border-radius: 7px; color: #3c3c43; }
+  .seg span.act { background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+
+  /* banner */
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 16px; }
+  .banner .t { font-size: 12px; color: #3c3c43; line-height: 1.35; }
+  .banner .t b { font-weight: 600; color: #000; display: block; }
+  .banner.on { background: rgba(0,122,255,.1); }
+  .banner.on .t { color: #3c3c43; }
+  .banner .act { font-size: 12px; font-weight: 700; background: #007aff; color: #fff; border: none; border-radius: 9px; padding: 6px 11px; white-space: nowrap; }
+  .banner .act.ghost { background: #fff; color: #007aff; }
+
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #8e8e93; margin: 0 4px 6px; }
+  .card { background: #fff; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+  .item { padding: 11px 16px; border-bottom: .5px solid rgba(0,0,0,.08); }
+  .item:last-child { border-bottom: none; }
+  .flex { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .name { font-size: 13px; font-weight: 600; }
+  .hint { font-size: 12px; color: #8e8e93; }
+  .red { color: #ff3b30; } .blue { color: #007aff; }
+  .amt { font-size: 13px; font-weight: 700; }
+  .approx { font-size: 11px; color: #8e8e93; margin-top: 1px; }
+  .settle { font-size: 11px; font-weight: 600; background: #007aff; color: #fff; border: none; border-radius: 9px; padding: 5px 10px; }
+
+  /* comparison table of button options */
+  .opts { max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
+  .opt { background: #fff; border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .opt .name2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #8e8e93; margin-bottom: 10px; }
+  .strip { display: flex; align-items: center; justify-content: space-between; background: #f2f2f7; border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; }
+  .strip .st { font-size: 10px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: .05em; margin-left: 8px; }
+  .desc { font-size: 12px; color: #6c6c70; line-height: 1.5; margin-top: 6px; }
+  .rec { display: inline-block; font-size: 10px; font-weight: 700; color: #34c759; background: rgba(52,199,89,.15); border-radius: 999px; padding: 2px 8px; margin-left: 8px; letter-spacing: .04em; }
+  .note { max-width: 760px; margin: 26px auto 0; background: #fff; border-radius: 14px; padding: 14px 18px; font-size: 12px; color: #3c3c43; line-height: 1.6; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .note b { font-weight: 700; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(0,122,255,.3); border-top-color: #007aff; border-radius: 50%; }
+  .err { font-size: 12px; color: #ff3b30; margin: -6px 4px 12px; }
+</style>
+</head>
+<body>
+
+<h1>Convert button — v2</h1>
+<p class="sub">Always converts to SGD · independent of the group's default currency</p>
+
+<!-- ───────── Header button options ───────── -->
+<h2>Button options (off → on)</h2>
+<div class="opts">
+
+  <div class="opt">
+    <p class="name2">A — Labelled pill in header</p>
+    <div class="strip"><span class="hl"><span class="title" style="font-size:15px">Balances</span><span class="st">Off</span></span>
+      <span class="hr"><button class="pill"><span class="ico">⇄</span>Convert to SGD</button></span></div>
+    <div class="strip"><span class="hl"><span class="title" style="font-size:15px">Balances</span><span class="st">Loading</span></span>
+      <span class="hr"><button class="pill" style="opacity:.6"><span class="spin"></span>Converting…</button></span></div>
+    <div class="strip"><span class="hl"><span class="title" style="font-size:15px">Balances</span><span class="st">On</span></span>
+      <span class="hr"><button class="pill on"><span class="ico">✓</span>In SGD · Undo</button></span></div>
+    <p class="desc">Explicit wording, but "Convert to SGD" + "Notify Group" + title + Back is tight on a 360px screen.</p>
+  </div>
+
+  <div class="opt">
+    <p class="name2">B — Segmented switch</p>
+    <div class="strip"><span class="hl"><span class="title" style="font-size:15px">Balances</span><span class="st">Off</span></span>
+      <span class="seg"><span class="act">Original</span><span>In SGD</span></span></div>
+    <div class="strip"><span class="hl"><span class="title" style="font-size:15px">Balances</span><span class="st">On</span></span>
+      <span class="seg"><span>Original</span><span class="act">In SGD</span></span></div>
+    <p class="desc">Both states visible; reverting is obvious. Reads as "view mode" rather than an action. Compact.</p>
+  </div>
+
+  <div class="opt">
+    <p class="name2">C — Banner row under the header <span class="rec">RECOMMENDED</span></p>
+    <div style="background:#f2f2f7;border-radius:10px;padding:10px 10px 2px;margin-bottom:8px">
+      <div class="banner"><div class="t"><b>Amounts in multiple currencies</b>JPY, USD · tap to see everything in SGD</div><button class="act">Convert to SGD</button></div>
+    </div>
+    <div style="background:#f2f2f7;border-radius:10px;padding:10px 10px 2px;margin-bottom:8px">
+      <div class="banner on"><div class="t"><b>Showing ≈ SGD</b>ECB rates · 3 Oct 2026</div><button class="act ghost">Show original</button></div>
+    </div>
+    <p class="desc">Header stays clean (Back · Balances · Notify Group). The banner only appears when there are non-SGD amounts, so it explains <i>why</i> the button exists, names the currencies involved, and shows the rate date once converted.</p>
+  </div>
+
+</div>
+
+<!-- ───────── Full-page mockups of recommended option ───────── -->
+<h2>Option C — full page</h2>
+<div class="row">
+
+  <!-- OFF -->
+  <div class="phone">
+    <p class="plabel">Before converting</p>
+    <div class="screen">
+      <div class="header">
+        <div class="hl"><span class="back">← Back</span><span class="title">Balances</span></div>
+        <div class="hr"><button class="notify">Notify Group</button></div>
+      </div>
+
+      <div class="banner">
+        <div class="t"><b>Amounts in multiple currencies</b>JPY, USD · tap to see everything in SGD</div>
+        <button class="act">Convert to SGD</button>
+      </div>
+
+      <p class="label">You</p>
+      <div class="card">
+        <div class="item"><p class="name">Kevin</p>
+          <p class="hint red">You owe JPY 3,000.00</p>
+          <p class="hint red">You owe USD 18.50</p></div>
+        <div class="item flex"><div><p class="hint">You owe Alice</p><p class="amt red">JPY 3,000.00</p></div><button class="settle">Settle</button></div>
+        <div class="item flex"><div><p class="hint">You owe Bob</p><p class="amt red">USD 18.50</p></div><button class="settle">Settle</button></div>
+      </div>
+
+      <p class="label">Others</p>
+      <div class="card">
+        <div class="item flex"><span class="name">Alice</span><span class="amt blue" style="font-size:12px">gets back JPY 3,000.00</span></div>
+        <div class="item flex"><span class="name">Bob</span><span class="amt blue" style="font-size:12px">gets back USD 18.50</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ON -->
+  <div class="phone">
+    <p class="plabel">After converting</p>
+    <div class="screen">
+      <div class="header">
+        <div class="hl"><span class="back">← Back</span><span class="title">Balances</span></div>
+        <div class="hr"><button class="notify">Notify Group</button></div>
+      </div>
+
+      <div class="banner on">
+        <div class="t"><b>Showing ≈ SGD</b>ECB rates · 3 Oct 2026</div>
+        <button class="act ghost">Show original</button>
+      </div>
+
+      <p class="label">You</p>
+      <div class="card">
+        <div class="item"><p class="name">Kevin</p>
+          <p class="hint red">You owe JPY 3,000.00</p><p class="approx">≈ SGD 27.30</p>
+          <p class="hint red" style="margin-top:3px">You owe USD 18.50</p><p class="approx">≈ SGD 24.80</p>
+          <p class="hint" style="margin-top:5px;font-weight:600;color:#3c3c43">Total ≈ SGD 52.10</p></div>
+        <div class="item flex"><div><p class="hint">You owe Alice</p><p class="amt red">JPY 3,000.00</p><p class="approx">≈ SGD 27.30</p></div><button class="settle">Settle</button></div>
+        <div class="item flex"><div><p class="hint">You owe Bob</p><p class="amt red">USD 18.50</p><p class="approx">≈ SGD 24.80</p></div><button class="settle">Settle</button></div>
+      </div>
+
+      <p class="label">Others</p>
+      <div class="card">
+        <div class="item flex"><span class="name">Alice</span><div style="text-align:right"><p class="amt blue" style="font-size:12px">gets back JPY 3,000.00</p><p class="approx">≈ SGD 27.30</p></div></div>
+        <div class="item flex"><span class="name">Bob</span><div style="text-align:right"><p class="amt blue" style="font-size:12px">gets back USD 18.50</p><p class="approx">≈ SGD 24.80</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ERROR / no foreign -->
+  <div class="phone">
+    <p class="plabel">Failed · and all-SGD group</p>
+    <div class="screen">
+      <div class="header">
+        <div class="hl"><span class="back">← Back</span><span class="title">Balances</span></div>
+        <div class="hr"><button class="notify">Notify Group</button></div>
+      </div>
+
+      <div class="banner">
+        <div class="t"><b>Amounts in multiple currencies</b>JPY, USD · tap to see everything in SGD</div>
+        <button class="act">Retry</button>
+      </div>
+      <p class="err">Couldn't load exchange rates. Check your connection and try again.</p>
+
+      <p class="hint" style="text-align:center;margin:18px 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em">If everything is already in SGD</p>
+      <div style="background:#fff;border-radius:12px;padding:14px;text-align:center" class="hint">
+        No banner is shown — there is nothing to convert.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Behaviour changes in this version</b><br>
+  • <b>Target is always SGD.</b> It no longer follows the group's default currency (which now only sets the currency pre-selected when adding a new expense).<br>
+  • The control appears only when at least one balance is in a currency other than SGD; the banner lists those currencies.<br>
+  • Wording: "Convert to SGD" → "Showing ≈ SGD" + "Show original". The button label always says what tapping it will do.<br>
+  • Rates still fetched only on first tap, then toggled locally. Banner shows the rate date (ECB publishes once per business day, so "today's rate" may be yesterday's close — stating the date avoids the "looks delayed" confusion).
+</div>
+
+</body>
+</html>
