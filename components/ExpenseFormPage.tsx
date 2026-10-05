@@ -6,24 +6,13 @@ import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker, CURRENCIES } from '@/components/CurrencyPicker'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import { computeShareSplits } from '@/lib/splits'
+import { CATEGORIES } from '@/lib/categories'
+import { resizeImage } from '@/lib/image-resize'
 import type { Expense } from '@/types'
 
 interface Props {
   editId?: string
 }
-
-const CATEGORIES = [
-  '🍜 Food',
-  '🍺 Drinks',
-  '🏨 Stay',
-  '✈️ Flights',
-  '🚌 Transport',
-  '🚕 Taxi',
-  '🎡 Activities',
-  '🛒 Shopping',
-  '💊 Medical',
-  '📦 Other',
-]
 
 export function ExpenseFormPage({ editId }: Props) {
   const router = useRouter()
@@ -46,6 +35,19 @@ export function ExpenseFormPage({ editId }: Props) {
   const [loading, setLoading] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
+
+  // Receipt (optional, max one image per expense)
+  const [receiptBlob, setReceiptBlob] = useState<Blob | null>(null)       // newly picked image
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
+  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null) // edit mode
+  const [hadReceipt, setHadReceipt] = useState(false)
+  const [removeReceipt, setRemoveReceipt] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [receiptNote, setReceiptNote] = useState<string | null>(null)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [scanFailed, setScanFailed] = useState(false)
+  const [scanDone, setScanDone] = useState(false)
+  const [scanUnreadable, setScanUnreadable] = useState(false) // the photo itself is the problem
   const showSkeleton = useShowSkeleton(loading)
 
   useEffect(() => {
@@ -63,6 +65,8 @@ export function ExpenseFormPage({ editId }: Props) {
         setSplitType(exp.split_type === 'shares' ? 'custom' : exp.split_type)
         setCategory(exp.category ?? '')
         setExpenseCurrency(exp.currency ?? 'SGD')
+        setHadReceipt(!!exp.has_receipt)
+        setExistingReceiptUrl(exp.receipt_url ?? null)
         const ids = (exp.splits ?? []).map(s => s.member_id)
         setSelectedMembers(ids.length ? ids : members.map(m => m.id))
         if (exp.split_type === 'custom' || exp.split_type === 'shares') {
@@ -98,6 +102,113 @@ export function ExpenseFormPage({ editId }: Props) {
     setExpenseCurrency(currency)
     window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
     setShowCurrencyPicker(false)
+  }
+
+  // Free the object URL when the preview changes or the form unmounts
+  useEffect(() => {
+    return () => { if (receiptPreview) URL.revokeObjectURL(receiptPreview) }
+  }, [receiptPreview])
+
+  const handleReceiptPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow picking the same file again
+    if (!file) return
+    setReceiptError(null)
+    setReceiptNote(null)
+    try {
+      const resized = await resizeImage(file)
+      setReceiptBlob(resized)
+      setReceiptPreview(URL.createObjectURL(resized))
+      setRemoveReceipt(false)
+      setScanFailed(false)
+      setScanDone(false)
+      setScanUnreadable(false)
+    } catch (err) {
+      setReceiptError(err instanceof Error ? err.message : 'Could not read this image')
+    }
+  }
+
+  const handleReceiptRemove = () => {
+    setReceiptBlob(null)
+    setReceiptPreview(null)
+    setReceiptNote(null)
+    setReceiptError(null)
+    setScanFailed(false)
+    setScanDone(false)
+    setScanUnreadable(false)
+    if (hadReceipt) setRemoveReceipt(true)
+  }
+
+  // Optional: read the photo and pre-fill the form. Everything stays editable.
+  const handleAutoFill = async () => {
+    if (!receiptBlob) return
+    setScanning(true)
+    setScanFailed(false)
+    setScanDone(false)
+    setScanUnreadable(false)
+    setReceiptError(null)
+    setReceiptNote(null)
+    try {
+      const res = await fetch(`/api/groups/${chatId}/receipts/parse`, {
+        method: 'POST',
+        headers: { ...apiHeaders, 'Content-Type': receiptBlob.type || 'image/jpeg' },
+        body: receiptBlob,
+      })
+      const data = await res.json().catch(() => ({})) as {
+        error?: string
+        merchant?: string | null; total?: number | null; currency?: string | null
+        date?: string | null; category?: string | null
+      }
+      if (!res.ok) {
+        setScanUnreadable(res.status === 422) // retrying the same photo won't help; pick a better one
+        throw new Error(data.error ?? `HTTP ${res.status}`)
+      }
+
+      const filled: string[] = []
+      if (data.merchant) { setDescription(data.merchant); filled.push('shop') }
+      if (data.total) { setAmount(String(data.total)); filled.push('amount') }
+      if (data.currency && CURRENCIES.some(c => c.code === data.currency)) {
+        setExpenseCurrency(data.currency); filled.push('currency')
+      }
+      if (data.date) { setDate(data.date); filled.push('date') }
+      if (data.category) { setCategory(data.category); filled.push('category') }
+      setReceiptNote(filled.length ? `Filled ${filled.join(', ')} from the receipt. Please check before saving.` : null)
+      if (data.currency && !CURRENCIES.some(c => c.code === data.currency)) {
+        setReceiptNote(n => `${n ?? ''} Receipt currency ${data.currency} isn't in the list, so the currency was left as is.`.trim())
+      }
+      setScanDone(filled.length > 0)
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    } catch (err) {
+      setReceiptError(err instanceof Error ? err.message : 'Receipt scanning failed')
+      setScanFailed(true)
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error')
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  // Runs after the expense is saved. Returns true if the receipt step failed.
+  const syncReceipt = async (expenseId: number): Promise<boolean> => {
+    try {
+      if (receiptBlob) {
+        const res = await fetch(`/api/groups/${chatId}/expenses/${expenseId}/receipt`, {
+          method: 'PUT',
+          headers: { ...apiHeaders, 'Content-Type': receiptBlob.type || 'image/jpeg' },
+          body: receiptBlob,
+        })
+        return !res.ok
+      }
+      if (removeReceipt && hadReceipt) {
+        const res = await fetch(`/api/groups/${chatId}/expenses/${expenseId}/receipt`, {
+          method: 'DELETE',
+          headers: apiHeaders,
+        })
+        return !res.ok
+      }
+      return false
+    } catch {
+      return true
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,7 +267,18 @@ export function ExpenseFormPage({ editId }: Props) {
         const data = await res.json().catch(() => ({}))
         throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`)
       }
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+      const saved = await res.json().catch(() => null) as { id?: number } | null
+      const expenseId = isEdit ? Number(editId) : saved?.id
+      const receiptFailed = expenseId ? await syncReceipt(expenseId) : !!receiptBlob
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred(receiptFailed ? 'warning' : 'success')
+      if (receiptFailed) {
+        // The expense is already saved, so don't stay on the form (a resubmit would duplicate it)
+        const msg = 'Expense saved, but the receipt could not be uploaded. Open the expense and edit it to try again.'
+        const tg = window.Telegram?.WebApp
+        if (tg?.showAlert) tg.showAlert(msg, () => navigate('/'))
+        else { window.alert(msg); navigate('/') }
+        return
+      }
       navigate('/')
     } catch (e) {
       setError(String(e))
@@ -218,6 +340,90 @@ export function ExpenseFormPage({ editId }: Props) {
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        {/* Receipt (optional) */}
+        <div>
+          <p className="tg-label">Receipt (optional)</p>
+          {(() => {
+            const shownUrl = receiptPreview ?? (removeReceipt ? null : existingReceiptUrl)
+            const hasSavedReceipt = !receiptPreview && !removeReceipt && hadReceipt
+            if (!shownUrl && !hasSavedReceipt) {
+              return (
+                <label
+                  className="flex items-center justify-center gap-2 text-sm font-semibold"
+                  style={{
+                    border: '1.5px dashed var(--tg-theme-hint-color)', borderRadius: 12, padding: '16px 12px',
+                    cursor: 'pointer', color: 'var(--tg-theme-link-color)',
+                  }}
+                >
+                  <span>📷</span> Add receipt photo
+                  <input type="file" accept="image/*" onChange={handleReceiptPicked} style={{ display: 'none' }} />
+                </label>
+              )
+            }
+            const status = scanDone
+              ? '✓ Filled from receipt'
+              : receiptBlob ? `${Math.max(1, Math.round(receiptBlob.size / 1024))} KB · saved with the expense` : 'Saved with this expense'
+            return (
+              <>
+                <div className="tg-section flex items-center gap-3" style={{ padding: '10px 12px' }}>
+                  {shownUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={shownUrl} alt="Receipt" style={{ width: 44, height: 58, objectFit: 'cover', borderRadius: 7, flexShrink: 0, border: '1px solid rgba(0,0,0,0.07)' }} />
+                  ) : (
+                    <div style={{ width: 44, height: 58, borderRadius: 7, background: 'var(--tg-theme-secondary-bg-color)', flexShrink: 0 }} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">Receipt photo</p>
+                    <p className="text-xs mt-0.5" style={{ color: scanDone ? '#1c9c48' : 'var(--tg-theme-hint-color)' }}>{status}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReceiptRemove}
+                    aria-label="Remove receipt"
+                    className="flex items-center justify-center flex-shrink-0"
+                    style={{ width: 34, height: 34, borderRadius: 10, border: 'none', cursor: 'pointer', background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
+                  </button>
+                </div>
+                {receiptBlob && scanUnreadable && !scanning && (
+                  <label className="tg-btn mt-2" style={{ cursor: 'pointer', display: 'block', textAlign: 'center' }}>
+                    📷 Choose a clearer photo
+                    <input type="file" accept="image/*" onChange={handleReceiptPicked} style={{ display: 'none' }} />
+                  </label>
+                )}
+                {receiptBlob && !(scanUnreadable && !scanning) && (
+                  <button
+                    type="button"
+                    onClick={handleAutoFill}
+                    disabled={scanning}
+                    className="tg-btn mt-2"
+                    style={{ opacity: scanning ? 0.65 : 1, cursor: scanning ? 'default' : 'pointer' }}
+                  >
+                    {scanning ? 'Reading receipt…' : scanFailed ? '↻ Try auto-fill again' : scanDone ? '↻ Auto-fill again' : '✨ Auto-fill from receipt'}
+                  </button>
+                )}
+              </>
+            )
+          })()}
+          {receiptBlob && !receiptNote && !scanning && !receiptError && (
+            <p className="text-xs mt-2 px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              Auto-fill sends this photo to Google Gemini to read it. The photo is only stored if you save the expense.
+            </p>
+          )}
+          {receiptNote && (
+            <p className="text-xs mt-2 px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>{receiptNote}</p>
+          )}
+          {receiptError && (
+            <p className="text-xs mt-2 px-1" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{receiptError}</p>
+          )}
+        </div>
+
         {/* Description */}
         <div>
           <p className="tg-label">Description</p>

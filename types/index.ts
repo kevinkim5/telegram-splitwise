@@ -37,6 +37,8 @@ export interface Expense {
   date: string
   category?: string
   created_at: string
+  has_receipt?: boolean
+  receipt_url?: string | null
   paid_by_name?: string
   my_split_amount?: number
   splits?: ExpenseSplit[]

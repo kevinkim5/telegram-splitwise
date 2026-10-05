@@ -56,7 +56,7 @@ function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name:
 }
 
 type DetailState =
-  | { kind: 'expense'; item: Expense; splits: ExpenseSplit[] | null }
+  | { kind: 'expense'; item: Expense; splits: ExpenseSplit[] | null; receiptUrl?: string | null } // receiptUrl: undefined = still loading
   | { kind: 'settlement'; item: Settlement }
 
 function PencilIcon() {
@@ -114,6 +114,8 @@ function DetailPanel({
   const [editCurrency, setEditCurrency] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [receiptOpen, setReceiptOpen] = useState(false)
+  const [receiptBroken, setReceiptBroken] = useState(false)
 
   const memberName = (m: Member) => `${m.first_name}${m.last_name ? ` ${m.last_name}` : ''}`
 
@@ -247,6 +249,37 @@ function DetailPanel({
                 </p>
               </div>
 
+              {detail.item.has_receipt && (
+                <div className="mb-5">
+                  <p className="tg-label mb-2">Receipt</p>
+                  {detail.receiptUrl === undefined ? (
+                    <div style={{ height: 120, borderRadius: 12, background: 'rgba(0,0,0,0.07)' }} />
+                  ) : detail.receiptUrl === null || receiptBroken ? (
+                    <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                      Receipt unavailable. Close and reopen this expense to retry.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setReceiptOpen(true)}
+                      aria-label="View receipt"
+                      style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={detail.receiptUrl}
+                        alt="Receipt"
+                        onError={() => setReceiptBroken(true)}
+                        style={{ width: '100%', maxHeight: 180, objectFit: 'cover', objectPosition: 'top', borderRadius: 12 }}
+                      />
+                    </button>
+                  )}
+                  {detail.receiptUrl && !receiptBroken && (
+                    <p className="text-xs mt-1.5 px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Tap to enlarge</p>
+                  )}
+                </div>
+              )}
+
               <p className="tg-label mb-2">Split</p>
               <div className="tg-section">
                 {detail.splits === null ? (
@@ -370,6 +403,29 @@ function DetailPanel({
           )}
         </div>
       </div>
+
+      {receiptOpen && detail.kind === 'expense' && detail.receiptUrl && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.92)', zIndex: 60 }}
+          onClick={() => setReceiptOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setReceiptOpen(false)}
+            aria-label="Close receipt"
+            style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', color: '#fff', fontSize: 30, lineHeight: 1, cursor: 'pointer' }}
+          >
+            ×
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={detail.receiptUrl}
+            alt="Receipt"
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -636,13 +692,17 @@ export function ExpensesPage() {
     fetch(`/api/groups/${chatId}/expenses/${exp.id}`, { headers: apiHeaders })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data) setDetail(prev =>
+        setDetail(prev =>
           prev?.kind === 'expense' && prev.item.id === exp.id
-            ? { ...prev, splits: data.splits ?? [] }
+            ? { ...prev, splits: data ? (data.splits ?? []) : prev.splits, receiptUrl: data?.receipt_url ?? null }
             : prev
         )
       })
-      .catch(() => {})
+      .catch(() => {
+        setDetail(prev =>
+          prev?.kind === 'expense' && prev.item.id === exp.id ? { ...prev, receiptUrl: null } : prev
+        )
+      })
   }
 
   const openSettlementDetail = (s: Settlement) => {
@@ -889,7 +949,10 @@ export function ExpensesPage() {
                           {exp.category ? exp.category.split(' ')[0] : '🧾'}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-base truncate">{exp.description}</p>
+                          <p className="font-semibold text-base truncate">
+                            {exp.description}
+                            {exp.has_receipt && <span aria-label="Has receipt" style={{ marginLeft: 6, fontSize: 12 }}>📎</span>}
+                          </p>
                           <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>
                             {isSolo ? 'You paid for yourself' : `${exp.paid_by_name ?? '?'} paid ${exp.currency} ${expTotal.toFixed(2)}`}
                           </p>
