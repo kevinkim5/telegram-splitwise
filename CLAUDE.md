@@ -25,7 +25,7 @@ Copy `.env.example` to `.env.local` for local development. Key vars:
 | `WEBAPP_URL` | Public URL of the deployment (used in bot reply buttons) |
 | `TELEGRAM_APP_URL` | `https://t.me/<bot>/<app>` Mini App link (enables the group chat inline button) |
 | `WEBHOOK_SECRET_TOKEN` | Secret checked on incoming webhook calls; if absent, all webhook requests are accepted |
-| `GEMINI_API_KEY` | Google Gemini key used to read receipt photos (optional; one per environment). `GEMINI_RECEIPT_MODEL` overrides the default `gemini-2.5-flash` |
+| `GEMINI_API_KEY` | Google Gemini key used to read receipt photos (optional; one per environment). `GEMINI_RECEIPT_MODEL` overrides the default `gemini-flash-latest` alias (pinned model names get retired for new keys) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store) for receipt images (optional). Added automatically when a Blob store is connected; also used to sign receipt view links |
 | `ADMIN_GITHUB_ID` | Numeric GitHub user ID allowed to access `/admin` routes |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | NextAuth GitHub OAuth credentials |
