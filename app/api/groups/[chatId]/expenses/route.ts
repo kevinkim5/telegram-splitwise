@@ -59,7 +59,9 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   `
   const total = expenses.length > 0 ? parseInt(expenses[0].total_count as string) : 0
 
-  return NextResponse.json({ total, page, items: expenses })
+  const items = expenses.map(({ receipt_key, ...rest }) => ({ ...rest, has_receipt: !!receipt_key }))
+
+  return NextResponse.json({ total, page, items })
 }
 
 export async function POST(request: Request, props: { params: Promise<{ chatId: string }> }) {
@@ -121,6 +123,6 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     SELECT id FROM new_exp
   `
 
-  const result = await getExpenseWithSplits(expenseId as number)
-  return NextResponse.json(result, { status: 201 })
+  const { receipt_key: _unused, ...result } = await getExpenseWithSplits(expenseId as number) as { receipt_key?: string | null }
+  return NextResponse.json({ ...result, has_receipt: false }, { status: 201 })
 }

@@ -40,6 +40,7 @@ export async function ensureSchema() {
     )
   `
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(50)`
+  await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_key VARCHAR(255)`
   await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS photo_url TEXT`
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
   await sql`
@@ -63,6 +64,15 @@ export async function ensureSchema() {
       deleted_at     TIMESTAMPTZ
     )
   `
+  // Receipt-scan usage log, used to rate limit the paid vision call per user
+  await sql`
+    CREATE TABLE IF NOT EXISTS receipt_scans (
+      id               SERIAL PRIMARY KEY,
+      telegram_user_id BIGINT NOT NULL,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS idx_receipt_scans_user ON receipt_scans(telegram_user_id, created_at DESC)`
   await sql`CREATE INDEX IF NOT EXISTS idx_expenses_group    ON expenses(group_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_splits_expense    ON expense_splits(expense_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_splits_member     ON expense_splits(member_id)`
