@@ -7,6 +7,8 @@ import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
 import { breakdown, sumConverted, type CurrencyLine } from '@/lib/convert'
+import { buildPayments, checkAmount, groupDebtsByPerson, type Payment, type SettleGroup } from '@/lib/settle'
+import { CURRENCIES } from '@/components/CurrencyPicker'
 
 interface BalancesData {
   balances: NamedBalance[]
@@ -14,64 +16,166 @@ interface BalancesData {
   simplified_debts: SimplifiedDebt[]
 }
 
-interface SettleModalProps {
-  debt: SimplifiedDebt
-  label: string
+interface SettleSheetProps {
+  group: SettleGroup
+  rates: Record<string, number> | null // exchange rates to SGD, when loaded, for the on-screen total
   onClose: () => void
-  onConfirm: (amount: number) => Promise<void>
+  onConfirm: (payments: Payment[]) => Promise<void>
 }
 
-function SettleModal({ debt, label, onClose, onConfirm }: SettleModalProps) {
-  const [amount, setAmount] = useState(debt.amount.toFixed(2))
+// Settle with one person: one field per currency, pre-filled with the full amount. Empty = skip.
+function SettleSheet({ group, rates, onClose, onConfirm }: SettleSheetProps) {
+  const { entries, personName } = group
+  const [raws, setRaws] = useState<Record<string, string>>(
+    () => Object.fromEntries(entries.map(e => [e.key, e.owed.toFixed(2)]))
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amt = parseFloat(amount)
-    if (isNaN(amt) || amt <= 0) { setError('Enter a valid amount'); return }
-    if (amt > debt.amount + 0.005) { setError(`Amount cannot exceed the debt (${debt.currency} ${debt.amount.toFixed(2)})`); return }
+  const hasPay = entries.some(e => e.direction === 'pay')
+  const hasReceive = entries.some(e => e.direction === 'receive')
+  const checks = entries.map(e => checkAmount(e, raws[e.key] ?? ''))
+  const anyError = checks.some(c => c.status === 'error')
+  const anyFilled = checks.some(c => c.status === 'ok')
+
+  // On-screen convenience only (not stored): the total in SGD of what is being paid, when every
+  // filled currency can be converted and all payments go the same way.
+  const filled = entries.flatMap((e, i) => {
+    const c = checks[i]
+    return c && c.status === 'ok' ? [{ entry: e, amount: c.amount }] : []
+  })
+  const sameWay = filled.length > 0 && filled.every(f => f.entry.direction === filled[0]!.entry.direction)
+  const converted = rates && sameWay && filled.some(f => f.entry.currency !== CONVERT_TO)
+    ? sumConverted(filled.map(f => ({ currency: f.entry.currency, net: f.amount })), rates, CONVERT_TO)
+    : null
+  const showTotal = !!converted && converted.missing.length === 0
+
+  const subtitle = hasPay && hasReceive
+    ? `Record what has been paid between you and ${personName}.`
+    : hasReceive
+      ? `${personName} pays you. Record what you've received.`
+      : `You pay ${personName}. Leave a field empty to skip that currency.`
+
+  const handleSubmit = async () => {
+    const built = buildPayments(entries, raws)
+    if (!built.ok) { setError(built.error); return }
     setSubmitting(true)
-    try { await onConfirm(amt) }
-    catch (err) { setError(String(err)) }
-    finally { setSubmitting(false) }
+    setError(null)
+    try {
+      await onConfirm(built.payments)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
+
+  const renderField = (e: (typeof entries)[number]) => {
+    const i = entries.indexOf(e)
+    const check = checks[i]!
+    const raw = raws[e.key] ?? ''
+    const isFull = check.status === 'ok' && Math.abs(check.amount - e.owed) < 0.005
+    const left = check.status === 'ok' && !isFull ? Math.max(0, e.owed - check.amount) : null
+    const flag = CURRENCIES.find(c => c.code === e.currency)?.flag ?? ''
+    return (
+      <div key={e.key}>
+        <div
+          className="flex items-center gap-3"
+          style={{
+            background: check.status === 'skip' ? 'transparent' : 'var(--tg-theme-secondary-bg-color)',
+            border: `1.5px ${check.status === 'skip' ? 'dashed' : 'solid'} ${
+              check.status === 'error' ? 'var(--tg-theme-destructive-text-color, #ff3b30)' : check.status === 'skip' ? 'rgba(128,128,128,0.45)' : 'transparent'}`,
+            borderRadius: 12, padding: '9px 12px', marginBottom: check.status === 'error' ? 4 : 8,
+          }}
+        >
+          <span className="text-sm font-bold flex-shrink-0" style={{ minWidth: 56 }}>{flag} {e.currency}</span>
+          <div className="flex-1 min-w-0">
+            <input
+              aria-label={`${e.currency} amount`}
+              type="number" inputMode="decimal" step="0.01" min="0"
+              value={raw}
+              placeholder="skip"
+              disabled={submitting}
+              onChange={ev => { setRaws(prev => ({ ...prev, [e.key]: ev.target.value })); setError(null) }}
+              style={{ width: '100%', textAlign: 'right', fontSize: 18, fontWeight: 600, background: 'transparent', border: 'none', outline: 'none', color: 'var(--tg-theme-text-color)' }}
+            />
+            <p className="text-right" style={{ fontSize: 11, color: 'var(--tg-theme-hint-color)' }}>
+              {left !== null ? `${e.currency} ${left.toFixed(2)} left after` : `of ${e.currency} ${e.owed.toFixed(2)} owed`}
+            </p>
+          </div>
+          {!isFull && !submitting && (
+            <button
+              type="button"
+              onClick={() => { setRaws(prev => ({ ...prev, [e.key]: e.owed.toFixed(2) })); setError(null) }}
+              style={{ fontSize: 11, fontWeight: 700, color: 'var(--tg-theme-link-color)', background: 'rgba(36,129,204,0.12)', border: 'none', borderRadius: 999, padding: '3px 9px', cursor: 'pointer', flexShrink: 0 }}
+            >
+              Full
+            </button>
+          )}
+        </div>
+        {check.status === 'error' && (
+          <p className="text-xs mb-2 px-1" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{check.message}</p>
+        )}
+      </div>
+    )
+  }
+
+  const heading = (text: string, color: string) => (
+    <p className="text-xs font-bold uppercase mt-3 mb-1.5 px-0.5" style={{ color, letterSpacing: '0.06em' }}>{text}</p>
+  )
 
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
       style={{ background: 'rgba(0,0,0,0.4)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onClick={e => { if (e.target === e.currentTarget && !submitting) onClose() }}
     >
-      <div className="w-full rounded-t-2xl p-5 flex flex-col gap-4"
-        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}>
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold">Record Payment</h2>
-          <button onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}>
+      <div className="w-full rounded-t-2xl p-5 flex flex-col"
+        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '85dvh', overflowY: 'auto' }}>
+        <div className="flex justify-between items-center mb-1">
+          <h2 className="text-lg font-bold">Settle with {personName}</h2>
+          <button onClick={onClose} disabled={submitting} aria-label="Close"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)', opacity: submitting ? 0.3 : 1 }}>
             ×
           </button>
         </div>
-        <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
-        {error && <p className="text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{error}</p>}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <p className="tg-label">Amount ({debt.currency})</p>
-            <div className="tg-section">
-              <input className="tg-input text-lg font-semibold" type="number" inputMode="decimal"
-                step="0.01" min="0.01" max={debt.amount} value={amount} onChange={e => setAmount(e.target.value)} autoFocus />
+        <p className="text-sm mb-3" style={{ color: 'var(--tg-theme-hint-color)' }}>{subtitle}</p>
+
+        {error && (
+          <div className="mb-3 p-3 rounded-xl text-sm" role="alert"
+            style={{ background: 'rgba(255,59,48,0.1)', color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
+            {error}
+          </div>
+        )}
+
+        {hasPay && hasReceive ? (
+          <>
+            {heading(`You pay ${personName}`, 'var(--tg-theme-destructive-text-color, #ff3b30)')}
+            {entries.filter(e => e.direction === 'pay').map(renderField)}
+            {heading(`${personName} pays you`, 'var(--tg-theme-button-color)')}
+            {entries.filter(e => e.direction === 'receive').map(renderField)}
+          </>
+        ) : entries.map(renderField)}
+
+        {showTotal && converted && (
+          <div className="flex justify-between text-sm pt-2.5 pb-1 px-1" style={{ borderTop: '0.5px solid rgba(128,128,128,0.25)' }}>
+            <div>
+              <p className="font-bold">Total</p>
+              <p style={{ fontSize: 11, color: 'var(--tg-theme-hint-color)' }}>at today&apos;s rates</p>
             </div>
+            <p className="font-bold">≈ {CONVERT_TO} {converted.total.toFixed(2)}</p>
           </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-medium"
-              style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}>
-              Cancel
-            </button>
-            <button type="submit" disabled={submitting} className="flex-1 tg-btn" style={{ opacity: submitting ? 0.7 : 1 }}>
-              {submitting ? 'Recording…' : 'Record Payment'}
-            </button>
-          </div>
-        </form>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting || anyError || !anyFilled}
+          className="tg-btn mt-3"
+          style={{ opacity: submitting ? 0.7 : 1, ...(anyError || !anyFilled ? { background: '#c9c9cf', color: '#fff', cursor: 'default' } : {}) }}
+        >
+          {submitting ? 'Recording…' : entries.length > 1 ? 'Record payments' : 'Record payment'}
+        </button>
       </div>
     </div>
   )
@@ -122,7 +226,7 @@ export function BalancesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const showSkeleton = useShowSkeleton(loading)
-  const [settleDebt, setSettleDebt] = useState<{ debt: SimplifiedDebt; label: string } | null>(null)
+  const [settleTarget, setSettleTarget] = useState<SettleGroup | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
   const [notifying, setNotifying] = useState(false)
@@ -194,18 +298,24 @@ export function BalancesPage() {
     }
   }
 
-  const handleSettle = async (debt: SimplifiedDebt, amount: number) => {
-    const res = await fetch(`/api/groups/${chatId}/settlements`, {
+  // Record the chosen payments (one per currency) in a single request: all saved or none.
+  const handleRecord = async (payments: Payment[]) => {
+    const res = await fetch(`/api/groups/${chatId}/settlements/batch`, {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({ from_member_id: debt.from_member_id, to_member_id: debt.to_member_id, amount, currency: debt.currency }),
+      body: JSON.stringify({ settlements: payments }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({})) as { error?: string }
-      throw new Error(d.error ?? `HTTP ${res.status}`)
+      if (res.status === 409) loadBalances() // balances changed under us: refresh so reopening shows the truth
+      throw new Error(
+        res.status >= 500 || !d.error
+          ? "Couldn't record the payments, so nothing was saved. Check your connection and try again."
+          : d.error,
+      )
     }
     window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    setSettleDebt(null)
+    setSettleTarget(null)
     loadBalances()
   }
 
@@ -221,6 +331,9 @@ export function BalancesPage() {
   const myDebts = data?.simplified_debts.filter(
     d => d.from_member_id === currentMember.id || d.to_member_id === currentMember.id
   ) ?? []
+
+  // The same debts, one group per person you owe or are owed by
+  const settleGroups = groupDebtsByPerson(data?.simplified_debts ?? [], currentMember.id)
 
   // My net per currency from balances_by_currency
   const myCurrencyLines: { currency: string; net: number }[] = data
@@ -442,32 +555,39 @@ export function BalancesPage() {
                 )}
               </div>
 
-              {/* Debts involving you */}
-              {myDebts.map((debt, idx) => {
-                const iOwe = debt.from_member_id === currentMember.id
-                const other = iOwe ? debt.to_name : debt.from_name
-                const label = iOwe ? `You owe ${other}` : `${other} owes you`
-                const settleLabel = iOwe ? `You pay ${other}` : `${other} pays you`
-                const isLast = idx === myDebts.length - 1
-                const approx = approxStr(debt.amount, debt.currency)
+              {/* Debts involving you, one row per person */}
+              {settleGroups.map((g, idx) => {
+                const isLast = idx === settleGroups.length - 1
+                const lines = g.entries.map(e => ({ currency: e.currency, net: e.direction === 'pay' ? -e.owed : e.owed }))
+                const multi = g.entries.length > 1
+                const sum = showConverted && multi ? sumConverted(lines, directRates, CONVERT_TO) : null
+                const net = sum && sum.usedAny && sum.missing.length === 0 ? sum.total : null
+                const single = !multi ? approxStr(g.entries[0]!.owed, g.entries[0]!.currency) : null
                 return (
-                  <div key={idx} className="tg-list-item flex items-center justify-between gap-3"
+                  <div key={g.personId} className="tg-list-item flex items-center justify-between gap-3"
                     style={{ borderBottom: isLast ? 'none' : undefined }}>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>{label}</p>
-                      <p className="text-sm font-bold" style={{
-                        color: iOwe
-                          ? 'var(--tg-theme-destructive-text-color, #ff3b30)'
-                          : 'var(--tg-theme-button-color)',
-                      }}>
-                        {debt.currency} {debt.amount.toFixed(2)}
-                      </p>
-                      {approx && (
-                        <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)', marginTop: 1 }}>{approx}</p>
+                      <p className="text-sm font-medium">{g.personName}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {g.entries.map(e => (
+                          <span key={e.key} className="text-xs font-bold" style={{
+                            borderRadius: 999, padding: '2px 9px',
+                            color: e.direction === 'pay' ? 'var(--tg-theme-destructive-text-color, #ff3b30)' : 'var(--tg-theme-button-color)',
+                            background: e.direction === 'pay' ? 'rgba(255,59,48,0.1)' : 'rgba(36,129,204,0.1)',
+                          }}>
+                            {e.direction === 'pay' ? 'you owe' : 'owes you'} {e.currency} {e.owed.toFixed(2)}
+                          </span>
+                        ))}
+                      </div>
+                      {net !== null && Math.abs(net) >= 0.005 && (
+                        <p className="text-xs mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                          net ≈ {CONVERT_TO} {Math.abs(net).toFixed(2)} {net < 0 ? 'you owe' : 'owed to you'}
+                        </p>
                       )}
+                      {single && <p className="text-xs mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>{single}</p>}
                     </div>
                     <button
-                      onClick={() => setSettleDebt({ debt, label: settleLabel })}
+                      onClick={() => setSettleTarget(g)}
                       className="py-1.5 px-3 rounded-xl text-xs font-medium flex-shrink-0"
                       style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)', border: 'none', cursor: 'pointer' }}
                     >
@@ -579,12 +699,12 @@ export function BalancesPage() {
         </div>
       )}
 
-      {settleDebt && (
-        <SettleModal
-          debt={settleDebt.debt}
-          label={settleDebt.label}
-          onClose={() => setSettleDebt(null)}
-          onConfirm={amount => handleSettle(settleDebt.debt, amount)}
+      {settleTarget && (
+        <SettleSheet
+          group={settleTarget}
+          rates={showConverted ? directRates : null}
+          onClose={() => setSettleTarget(null)}
+          onConfirm={handleRecord}
         />
       )}
     </div>
