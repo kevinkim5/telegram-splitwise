@@ -65,9 +65,13 @@ An expense can have at most one receipt image, stored in a private Vercel Blob s
 - Viewing: expense GET returns `has_receipt` and a 15-minute `receipt_url`, a same-origin link to `GET /api/groups/[chatId]/expenses/[id]/receipt?exp=…&sig=…` (HMAC-signed, bound to the expense and current image) that streams the private blob, so `<img src>` works without Telegram headers. The list returns only `has_receipt`. The storage key is never sent to clients. Deleting an expense is a soft delete, so its image is kept.
 - Receipt photos reach Google when Auto-fill is tapped. On Gemini's free tier Google may use submitted content to improve its products.
 
+### Expense activity
+
+Expense detail shows an Activity section (`components/ExpenseActivity.tsx`, from `activity` on `GET /expenses/[id]`): who changed what (old → new), plus deleted/restored entries. The Edit page keeps Save top-right, disabled until a real change (changed fields outlined), with a discard prompt on Back; Add has its button top-right too.
+
 ### 2. Admin dashboard (`/admin`)
 
-Plain server-rendered Next.js pages (no Telegram context). Protected by NextAuth with GitHub OAuth; only the account whose numeric ID matches `ADMIN_GITHUB_ID` can log in (`auth.ts`). Middleware in `middleware.ts` guards all `/admin/*` routes.
+Plain server-rendered Next.js pages (no Telegram context). Protected by NextAuth with GitHub OAuth; only the account whose numeric ID matches `ADMIN_GITHUB_ID` can log in (`auth.ts`). Middleware in `middleware.ts` guards all `/admin/*` routes. A group's Expenses list can show deleted expenses (with who deleted them), each row expands to its full history, and **Restore** brings a deleted expense back (logged as an admin `restored` event).
 
 ### API Routes (`app/api/`)
 
@@ -90,6 +94,7 @@ Schema (defined in `lib/db.ts`):
 - `members` — users per group (keyed on `(group_id, telegram_user_id)`)
 - `expenses` + `expense_splits` — each expense stores per-member split amounts; soft-deleted via `deleted_at`
 - `settlements` — direct payment records; also soft-deleted
+- `expense_events` — per-expense activity log (`created`/`edited`/`deleted`/`restored`, JSON `changes`, `actor` member or admin). Written in the same statement/transaction as the change by the expense routes (`lib/expense-events.ts`, diffs from `lib/expense-history.ts`). Receipt add/replace/remove is folded into the same person's edit from the last 2 minutes. Older expenses get a `created` entry synthesised on read. Settlements are not logged.
 
 ### Business Logic (`lib/`)
 

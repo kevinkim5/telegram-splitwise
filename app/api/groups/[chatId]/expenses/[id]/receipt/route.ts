@@ -4,6 +4,7 @@ import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { readReceiptImage, receiptExtension } from '@/lib/receipt-image'
+import { logReceiptChange } from '@/lib/expense-events'
 import {
   deleteReceipt, putReceipt, readReceipt, receiptKey, receiptViewUrl, storageConfigured, verifyReceiptLink,
 } from '@/lib/receipt-storage'
@@ -32,7 +33,7 @@ async function resolveExpense(request: Request, props: Props) {
   `
   if (!expense) return { ok: false as const, response: NextResponse.json({ error: 'Expense not found' }, { status: 404 }) }
 
-  return { ok: true as const, groupId: group.id as number, chatId, expenseId, oldKey: (expense.receipt_key as string | null) ?? null }
+  return { ok: true as const, groupId: group.id as number, memberId: member.id, chatId, expenseId, oldKey: (expense.receipt_key as string | null) ?? null }
 }
 
 // Stream the receipt image. Authorised by a short-lived signed link (see receiptViewUrl) instead
@@ -100,6 +101,8 @@ export async function PUT(request: Request, props: Props) {
 
   // Only drop the previous image once the new one is saved.
   if (ctx.oldKey) await deleteReceipt(ctx.oldKey).catch(err => console.error('Old receipt cleanup failed:', err))
+  await logReceiptChange(ctx.expenseId, ctx.memberId, ctx.oldKey ? 'replaced' : 'added')
+    .catch(err => console.error('Receipt activity log failed:', err))
 
   return NextResponse.json({ ok: true, receipt_url: receiptViewUrl(ctx.chatId, ctx.expenseId, key) })
 }
@@ -111,6 +114,8 @@ export async function DELETE(request: Request, props: Props) {
   if (ctx.oldKey) {
     await sql`UPDATE expenses SET receipt_key = NULL WHERE id = ${ctx.expenseId}`
     await deleteReceipt(ctx.oldKey).catch(err => console.error('Receipt delete failed:', err))
+    await logReceiptChange(ctx.expenseId, ctx.memberId, 'removed')
+      .catch(err => console.error('Receipt activity log failed:', err))
   }
   return NextResponse.json({ ok: true })
 }

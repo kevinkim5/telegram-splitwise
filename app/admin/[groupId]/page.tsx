@@ -1,8 +1,12 @@
 import { sql } from '@/lib/sql'
-import { signOut } from '@/auth'
+import { auth, signOut } from '@/auth'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
-import { ExpenseRow } from './ExpenseRow'
+import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
+import { insertEvent } from '@/lib/expense-events'
+import { ensureSchema } from '@/lib/db'
+import type { Change } from '@/lib/expense-history'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,8 +47,9 @@ export default async function AdminGroupPage({
     sql`SELECT * FROM members WHERE group_id = ${group.id} ORDER BY first_name`,
     sql`
       SELECT
-        e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at,
+        e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, e.deleted_at,
         m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name,
+        cm.first_name || COALESCE(' ' || cm.last_name, '') AS created_by_name,
         json_agg(
           json_build_object(
             'name', sm.first_name || COALESCE(' ' || sm.last_name, ''),
@@ -53,10 +58,12 @@ export default async function AdminGroupPage({
         ) AS splits
       FROM expenses e
       JOIN members m ON m.id = e.paid_by_member_id
+      JOIN members cm ON cm.id = e.created_by_member_id
       JOIN expense_splits es ON es.expense_id = e.id
       JOIN members sm ON sm.id = es.member_id
-      WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
-      GROUP BY e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, m.first_name, m.last_name
+      WHERE e.group_id = ${group.id}
+      GROUP BY e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, e.deleted_at,
+               m.first_name, m.last_name, cm.first_name, cm.last_name
       ORDER BY e.date DESC, e.created_at DESC
       LIMIT 100
     `,
@@ -84,6 +91,79 @@ export default async function AdminGroupPage({
       ORDER BY currency
     `,
   ])
+
+  const expenseIds = expenseRows.map(e => e.id as number)
+  const loadEvents = () => sql`
+    SELECT ev.expense_id, ev.type, ev.actor, ev.changes, ev.summary, ev.created_at,
+           m.first_name || COALESCE(' ' || m.last_name, '') AS actor_name
+    FROM expense_events ev
+    LEFT JOIN members m ON m.id = ev.member_id
+    WHERE ev.expense_id = ANY(${expenseIds}::int[])
+    ORDER BY ev.created_at DESC, ev.id DESC
+  `
+  // The table is created by ensureSchema(), which normally runs when someone opens the app. If an
+  // admin gets here first after a deploy, create it now instead of failing.
+  const eventRows = expenseIds.length === 0 ? [] : await loadEvents().catch(async () => {
+    await ensureSchema()
+    return loadEvents()
+  })
+  const historyByExpense = new Map<number, HistoryEvent[]>()
+  for (const r of eventRows) {
+    const list = historyByExpense.get(r.expense_id as number) ?? []
+    list.push({
+      type: r.type as HistoryEvent['type'],
+      actor: r.actor as HistoryEvent['actor'],
+      actorName: (r.actor_name as string | null) ?? null,
+      when: new Date(r.created_at as string).toISOString(),
+      changes: (r.changes as Change[]) ?? [],
+      summary: (r.summary as string | null) ?? null,
+    })
+    historyByExpense.set(r.expense_id as number, list)
+  }
+
+  const adminExpenses: AdminExpense[] = expenseRows.map(e => {
+    const history = historyByExpense.get(e.id as number) ?? []
+    // Expenses from before the activity log existed have no "created" entry
+    if (!history.some(h => h.type === 'created')) {
+      history.push({
+        type: 'created', actor: 'member', actorName: (e.created_by_name as string | null) ?? null,
+        when: new Date(e.created_at as string).toISOString(), changes: [], summary: null,
+      })
+    }
+    const deleted = !!e.deleted_at
+    const lastDelete = history.find(h => h.type === 'deleted')
+    return {
+      id: e.id as number,
+      description: String(e.description),
+      paidBy: String(e.paid_by_name),
+      date: new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      currency: String(e.currency),
+      amount: Number(e.total_amount),
+      category: e.category ? String(e.category) : null,
+      splits: e.splits as Array<{ name: string; amount: string }>,
+      deleted,
+      deletedNote: deleted
+        ? `Deleted${lastDelete?.actorName ? ` by ${lastDelete.actorName}` : ''}, ${new Date(e.deleted_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+        : null,
+      editCount: history.filter(h => h.type === 'edited').length,
+      history,
+    }
+  })
+  const activeExpenseCount = adminExpenses.filter(e => !e.deleted).length
+
+  async function restoreExpense(expenseId: number) {
+    'use server'
+    if (!(await auth())) throw new Error('Unauthorized')
+    const [row] = await sql`
+      SELECT id FROM expenses WHERE id = ${expenseId} AND group_id = ${group.id} AND deleted_at IS NOT NULL
+    `
+    if (!row) return
+    await sql.transaction([
+      sql`UPDATE expenses SET deleted_at = NULL WHERE id = ${expenseId}`,
+      insertEvent(expenseId, null, 'restored', [], null, 'admin'),
+    ])
+    revalidatePath(`/admin/${group.id}`)
+  }
 
   const memberIds = members.map(m => m.id as number)
   const memberNameMap = new Map(members.map(m => [
@@ -150,7 +230,7 @@ export default async function AdminGroupPage({
         {String(group.title)}
       </h1>
       <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>
-        {members.length} members · {expenseRows.length} expenses
+        {members.length} members · {activeExpenseCount} expenses
       </p>
       {currencyTotals.length > 0 && (
         <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', marginBottom: '1.5rem' }}>
@@ -203,24 +283,8 @@ export default async function AdminGroupPage({
       </Section>
 
       {/* Expenses */}
-      <Section title={`Expenses (${expenseRows.length})`}>
-        {expenseRows.length === 0 ? (
-          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</span></Row>
-        ) : (
-          expenseRows.map((e, i) => (
-            <ExpenseRow
-              key={String(e.id)}
-              description={String(e.description)}
-              paidBy={String(e.paid_by_name)}
-              date={new Date(e.date as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-              currency={String(e.currency)}
-              amount={Number(e.total_amount)}
-              category={e.category ? String(e.category) : null}
-              splits={e.splits as Array<{ name: string; amount: string }>}
-              last={i === expenseRows.length - 1}
-            />
-          ))
-        )}
+      <Section title={`Expenses (${activeExpenseCount})`}>
+        <ExpensesList expenses={adminExpenses} restore={restoreExpense} />
       </Section>
 
       {/* Settlements */}

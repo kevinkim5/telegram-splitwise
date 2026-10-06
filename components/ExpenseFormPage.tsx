@@ -83,6 +83,35 @@ export function ExpenseFormPage({ editId }: Props) {
     load()
   }, [isEdit, editId, chatId, apiHeaders, members])
 
+  // Edit mode: remember how the form looked once loaded, so Save only lights up after a real change
+  // and the changed fields can be outlined. Compared by value, so undoing an edit un-dirties it.
+  const current = {
+    description,
+    amount: String(Number(amount) || 0),
+    currency: expenseCurrency,
+    date,
+    paidBy,
+    category,
+    split: {
+      type: splitType,
+      members: [...selectedMembers].sort((a, b) => a - b),
+      custom: splitType === 'custom'
+        ? [...selectedMembers].sort((a, b) => a - b).map(id => Number(customAmounts[id]) || 0) : null,
+      shares: splitType === 'shares'
+        ? [...selectedMembers].sort((a, b) => a - b).map(id => shareAmounts[id] ?? 1) : null,
+    },
+    receipt: receiptBlob ? 'new' : removeReceipt ? 'removed' : '',
+  }
+  const [baseline, setBaseline] = useState<typeof current | null>(null)
+  useEffect(() => {
+    if (isEdit && !loading && !error && baseline === null) setBaseline(current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, loading])
+  const same = (key: keyof typeof current) => !baseline || JSON.stringify(current[key]) === JSON.stringify(baseline[key])
+  const dirty = !!baseline && JSON.stringify(current) !== JSON.stringify(baseline)
+  const changedStyle = (...keys: (keyof typeof current)[]) =>
+    isEdit && keys.some(k => !same(k)) ? { outline: '1.5px solid rgba(36,129,204,0.55)', outlineOffset: '-1.5px' } : undefined
+
   const toggleMember = (id: number) => {
     setSelectedMembers(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -97,6 +126,14 @@ export function ExpenseFormPage({ editId }: Props) {
   const customSum = selectedMembers.reduce((sum, id) => sum + (parseFloat(customAmounts[id] ?? '0') || 0), 0)
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
+
+  const handleBack = () => {
+    if (!(isEdit && dirty) || submitting) { navigate('/'); return }
+    const msg = 'You have unsaved edits to this expense.'
+    const tg = window.Telegram?.WebApp
+    if (tg?.showConfirm) tg.showConfirm(`Discard changes?\n${msg}`, ok => { if (ok) navigate('/') })
+    else if (window.confirm(`Discard changes?\n\n${msg}`)) navigate('/')
+  }
 
   const handleCurrencySelect = (currency: string) => {
     setExpenseCurrency(currency)
@@ -321,16 +358,30 @@ export function ExpenseFormPage({ editId }: Props) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
+      {/* Header: Back, title, and the primary action always in reach at the top-right */}
+      <div className="flex items-center justify-between gap-3 mb-5">
         <button
-          onClick={() => navigate('/')}
+          type="button"
+          onClick={handleBack}
           className="text-sm font-medium"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', minWidth: 56, textAlign: 'left' }}
         >
           ← Back
         </button>
         <h1 className="text-lg font-bold">{isEdit ? 'Edit Expense' : 'Add Expense'}</h1>
+        <button
+          type="submit"
+          form="expense-form"
+          disabled={submitting || (isEdit && !dirty)}
+          className="text-base font-bold"
+          style={{
+            background: 'none', border: 'none', minWidth: 56, textAlign: 'right',
+            cursor: submitting || (isEdit && !dirty) ? 'default' : 'pointer',
+            color: submitting || (isEdit && !dirty) ? '#b8b8c0' : 'var(--tg-theme-link-color)',
+          }}
+        >
+          {submitting ? 'Saving…' : isEdit ? 'Save' : 'Add'}
+        </button>
       </div>
 
       {error && (
@@ -339,7 +390,7 @@ export function ExpenseFormPage({ editId }: Props) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form id="expense-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
         {/* Receipt (optional) */}
         <div>
           <p className="tg-label">Receipt (optional)</p>
@@ -427,7 +478,7 @@ export function ExpenseFormPage({ editId }: Props) {
         {/* Description */}
         <div>
           <p className="tg-label">Description</p>
-          <div className="tg-section">
+          <div className="tg-section" style={changedStyle('description')}>
             <input
               className="tg-input"
               value={description}
@@ -468,7 +519,7 @@ export function ExpenseFormPage({ editId }: Props) {
         {/* Amount + Currency */}
         <div>
           <p className="tg-label">Amount</p>
-          <div className="tg-section" style={{ display: 'flex', alignItems: 'stretch' }}>
+          <div className="tg-section" style={{ display: 'flex', alignItems: 'stretch', ...changedStyle('amount', 'currency') }}>
             <button
               type="button"
               onClick={() => setShowCurrencyPicker(true)}
@@ -508,7 +559,7 @@ export function ExpenseFormPage({ editId }: Props) {
         {/* Date */}
         <div>
           <p className="tg-label">Date</p>
-          <div className="tg-section">
+          <div className="tg-section" style={changedStyle('date')}>
             <input
               className="tg-input"
               type="date"
@@ -522,7 +573,7 @@ export function ExpenseFormPage({ editId }: Props) {
         {/* Paid by */}
         <div>
           <p className="tg-label">Paid by</p>
-          <div className="tg-section">
+          <div className="tg-section" style={changedStyle('paidBy')}>
             <select
               className="tg-input"
               value={paidBy}
@@ -696,15 +747,6 @@ export function ExpenseFormPage({ editId }: Props) {
             </div>
           )}
         </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="tg-btn"
-          style={{ opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
-        >
-          {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Expense'}
-        </button>
       </form>
 
       {showCurrencyPicker && (

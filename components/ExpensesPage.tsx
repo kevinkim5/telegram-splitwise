@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
-import type { Expense, ExpenseSplit, Member, Settlement } from '@/types'
+import type { ActivityEvent, Expense, ExpenseSplit, Member, Settlement } from '@/types'
+import { ExpenseActivity } from '@/components/ExpenseActivity'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
 
 function formatDate(dateStr: string) {
@@ -56,7 +57,7 @@ function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name:
 }
 
 type DetailState =
-  | { kind: 'expense'; item: Expense; splits: ExpenseSplit[] | null; receiptUrl?: string | null } // receiptUrl: undefined = still loading
+  | { kind: 'expense'; item: Expense; splits: ExpenseSplit[] | null; receiptUrl?: string | null; activity?: ActivityEvent[] } // receiptUrl: undefined = still loading
   | { kind: 'settlement'; item: Settlement }
 
 function PencilIcon() {
@@ -322,6 +323,8 @@ function DetailPanel({
                   )
                 })}
               </div>
+
+              {detail.activity && <ExpenseActivity events={detail.activity} />}
             </>
           ) : isEditing ? (
             /* Settlement edit form */
@@ -694,7 +697,7 @@ export function ExpensesPage() {
       .then(data => {
         setDetail(prev =>
           prev?.kind === 'expense' && prev.item.id === exp.id
-            ? { ...prev, splits: data ? (data.splits ?? []) : prev.splits, receiptUrl: data?.receipt_url ?? null }
+            ? { ...prev, splits: data ? (data.splits ?? []) : prev.splits, receiptUrl: data?.receipt_url ?? null, activity: data?.activity ?? [] }
             : prev
         )
       })
