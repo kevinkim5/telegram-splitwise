@@ -23,6 +23,16 @@ export const settlementBodySchema = z.object({
   currency:       currency.optional(),
 })
 
+// Several settlements recorded together (one per currency). Currency is required here.
+export const settlementBatchBodySchema = z.object({
+  settlements: z.array(z.object({
+    from_member_id: z.number().int().positive(),
+    to_member_id:   z.number().int().positive(),
+    amount:         z.number().finite().positive(),
+    currency,
+  })).min(1).max(20),
+})
+
 export const settingsBodySchema = z.object({
   currency,
 })
