@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Settle sheet — UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --blue:#2481cc; --hint:#8e8e93; --sec:#f0f0f4; --red:#ff3b30; --green:#1c9c48; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e4e4ea; padding:26px 14px 60px; color:#000; }
+  h1 { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8e8e93; text-align:center; margin-bottom:4px; }
+  .sub { font-size:12px; color:#8e8e93; text-align:center; margin-bottom:6px; }
+  h2 { font-size:13px; font-weight:700; margin:36px 0 4px; text-align:center; }
+  .desc { max-width:720px; margin:0 auto 14px; font-size:12px; color:#6c6c70; line-height:1.5; text-align:center; }
+  .row { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; align-items:flex-start; }
+  .card { width:340px; background:#f2f2f7; border-radius:20px; padding:14px; box-shadow:0 3px 18px rgba(0,0,0,.12); position:relative; overflow:hidden; }
+  .cap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#8e8e93; text-align:center; margin-bottom:10px; }
+  .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:10px 4px 6px; }
+  .sec { background:#fff; border-radius:12px; overflow:hidden; }
+  .item { padding:11px 14px; border-bottom:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .item:last-child { border-bottom:none; }
+  .t { font-size:14px; font-weight:600; } .s { font-size:12px; color:var(--hint); margin-top:2px; }
+  .red { color:var(--red); } .blue { color:var(--blue); } .green { color:var(--green); }
+  .settle { border:none; border-radius:10px; background:var(--blue); color:#fff; font-size:12px; font-weight:600; padding:7px 13px; flex:none; }
+  .dim { opacity:.4; }
+  .dimbg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  /* bottom sheet */
+  .sheetwrap { position:relative; margin:0 -14px -14px; padding-top:64px; background:#f2f2f7; border-radius:12px 12px 0 0; overflow:hidden; }
+  .sheet { background:#fff; border-radius:18px 18px 0 0; padding:16px 16px 18px; position:relative; box-shadow:0 -6px 24px rgba(0,0,0,.18); }
+  .sh-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .sh-top h3 { font-size:18px; font-weight:700; } .x { color:var(--hint); font-size:24px; line-height:1; }
+  .sh-sub { font-size:13px; color:var(--hint); margin-bottom:12px; line-height:1.4; }
+  .sh-sub b { color:#222; font-weight:600; }
+  .group { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin:12px 2px 6px; }
+  .field { background:var(--sec); border-radius:12px; padding:9px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px; border:1.5px solid transparent; }
+  .field .cur { font-size:13px; font-weight:700; min-width:48px; display:flex; align-items:center; gap:5px; }
+  .field .inp { flex:1; font-size:18px; font-weight:600; text-align:right; color:#111; }
+  .field .inp.empty { color:#b8b8c0; font-weight:500; }
+  .field .meta { font-size:11px; color:var(--hint); text-align:right; margin-top:1px; }
+  .field .full { font-size:11px; font-weight:700; color:var(--blue); background:rgba(36,129,204,.12); border-radius:999px; padding:3px 8px; flex:none; }
+  .field.skip { background:transparent; border:1.5px dashed #c7c7cc; }
+  .field.err { border-color:var(--red); background:rgba(255,59,48,.06); }
+  .errtxt { font-size:11.5px; color:var(--red); margin:-3px 4px 8px; }
+  .total { display:flex; justify-content:space-between; font-size:13px; padding:10px 4px 2px; border-top:.5px solid rgba(0,0,0,.08); margin-top:6px; }
+  .total b { font-weight:700; } .total .a { color:var(--hint); font-size:11.5px; margin-top:2px; }
+  .btn { border:none; border-radius:12px; font-weight:600; font-size:15px; padding:13px; background:var(--blue); color:#fff; width:100%; margin-top:12px; text-align:center; }
+  .btn.off { background:#c9c9cf; }
+  .hint { font-size:11.5px; color:var(--hint); margin:8px 4px 0; line-height:1.45; }
+  .banner { background:rgba(255,59,48,.1); color:var(--red); border-radius:10px; padding:9px 12px; font-size:12.5px; margin-bottom:10px; line-height:1.4; }
+  .spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(255,255,255,.45); border-top-color:#fff; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .pill { display:inline-block; font-size:10px; font-weight:700; border-radius:999px; padding:2px 8px; margin-left:6px; letter-spacing:.04em; vertical-align:1px; }
+  .pill.new { color:#1c9c48; background:rgba(52,199,89,.16); } .pill.old { color:#6c6c70; background:rgba(0,0,0,.07); }
+  .chips { margin-top:3px; display:flex; flex-wrap:wrap; gap:5px; } .chip { font-size:11.5px; font-weight:700; background:var(--sec); border-radius:999px; padding:2px 9px; color:#333; }
+  .chip.red { color:var(--red); background:rgba(255,59,48,.1); } .chip.blue { color:var(--blue); background:rgba(36,129,204,.1); }
+</style>
+</head>
+<body>
+
+<h1>Settle with a person — proposed UI</h1>
+<p class="sub">One button per person, one sheet, one field per currency. Nothing is built yet.</p>
+
+<!-- ═════════ 1 ═════════ -->
+<h2>1 · Balances page: one row per person</h2>
+<p class="desc">Today each currency is its own row with its own Settle button. Debts to the same person collapse into one row that lists every currency, with a single Settle button.</p>
+<div class="row">
+  <div class="card"><p class="cap">Today</p>
+    <div class="lbl" style="margin-top:0">You</div>
+    <div class="sec">
+      <div class="item"><div><div class="s">You owe Ann</div><div class="t red">JPY 3000.00</div></div><button class="settle">Settle</button></div>
+      <div class="item"><div><div class="s">You owe Ann</div><div class="t red">USD 18.50</div></div><button class="settle">Settle</button></div>
+      <div class="item"><div><div class="s">Ann owes you</div><div class="t blue">SGD 10.00</div></div><button class="settle">Settle</button></div>
+      <div class="item"><div><div class="s">You owe Ben</div><div class="t red">USD 12.00</div></div><button class="settle">Settle</button></div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Proposed</p>
+    <div class="lbl" style="margin-top:0">You</div>
+    <div class="sec">
+      <div class="item"><div style="min-width:0"><div class="t">Ann</div><div class="chips"><span class="chip red">you pay JPY 3000.00</span><span class="chip red">you pay USD 18.50</span><span class="chip blue">gets you SGD 10.00</span></div></div><button class="settle">Settle</button></div>
+      <div class="item"><div style="min-width:0"><div class="t">Ben</div><div class="chips"><span class="chip red">you pay USD 12.00</span></div></div><button class="settle">Settle</button></div>
+    </div>
+    <p class="hint">Direction is colour-coded and spelled out, so you can see at a glance what flows which way. Debts from other people to you work the same way.</p>
+  </div>
+</div>
+
+<!-- ═════════ 2 ═════════ -->
+<h2>2 · The sheet: you owe in two currencies</h2>
+<p class="desc">Each currency is a field, pre-filled with the full amount. Change an amount for a part-payment, or tap <b>Full</b> to put the full amount back. The button records everything in one go.</p>
+<div class="row">
+  <div class="card"><p class="cap">Opens pre-filled</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x">×</span></div>
+        <p class="sh-sub">You pay <b>Ann</b>. Leave a field empty to skip that currency.</p>
+        <div class="field"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">3000.00</div><div class="meta">of JPY 3000.00 owed</div></div></div>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">18.50</div><div class="meta">of USD 18.50 owed</div></div></div>
+        <div class="total"><div><b>Total</b><div class="a">at today's rates</div></div><div style="text-align:right"><b>≈ SGD 52.09</b></div></div>
+        <div class="btn">Record payment</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Part-payment, one currency skipped</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x">×</span></div>
+        <p class="sh-sub">You pay <b>Ann</b>. Leave a field empty to skip that currency.</p>
+        <div class="field"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">1500.00</div><div class="meta">JPY 1500.00 left after</div></div><span class="full">Full</span></div>
+        <div class="field skip"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp empty">skip</div><div class="meta">of USD 18.50 owed</div></div><span class="full">Full</span></div>
+        <div class="total"><div><b>Total</b><div class="a">at today's rates</div></div><div style="text-align:right"><b>≈ SGD 13.65</b></div></div>
+        <div class="btn">Record payment</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Validation</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x">×</span></div>
+        <p class="sh-sub">You pay <b>Ann</b>. Leave a field empty to skip that currency.</p>
+        <div class="field err"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">3500.00</div><div class="meta">of JPY 3000.00 owed</div></div><span class="full">Full</span></div>
+        <div class="errtxt">That's more than you owe. The most you can pay is JPY 3000.00.</div>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">18.50</div><div class="meta">of USD 18.50 owed</div></div></div>
+        <div class="btn off">Record payment</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ 3 ═════════ -->
+<h2>3 · Debts that go both ways</h2>
+<p class="desc">Ann owes you in one currency while you owe her in others. The fields are split under two headings so it's obvious which way each payment goes. You can settle one direction, both, or skip either.</p>
+<div class="row">
+  <div class="card"><p class="cap">Mixed directions</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x">×</span></div>
+        <p class="sh-sub">Record what has been paid between you and <b>Ann</b>.</p>
+        <div class="group red">You pay Ann</div>
+        <div class="field"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">3000.00</div><div class="meta">of JPY 3000.00 owed</div></div></div>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">18.50</div><div class="meta">of USD 18.50 owed</div></div></div>
+        <div class="group blue">Ann pays you</div>
+        <div class="field"><div class="cur">🇸🇬 SGD</div><div style="flex:1"><div class="inp">10.00</div><div class="meta">of SGD 10.00 owed</div></div></div>
+        <div class="btn">Record payments</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Someone is paying you</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ben</h3><span class="x">×</span></div>
+        <p class="sh-sub"><b>Ben</b> pays you. Record what you've received.</p>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">12.00</div><div class="meta">of USD 12.00 owed</div></div></div>
+        <div class="field"><div class="cur">🇹🇭 THB</div><div style="flex:1"><div class="inp">250.00</div><div class="meta">of THB 250.00 owed</div></div></div>
+        <div class="btn">Record payments</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Just one currency: same as today</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ben</h3><span class="x">×</span></div>
+        <p class="sh-sub">You pay <b>Ben</b>.</p>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">12.00</div><div class="meta">of USD 12.00 owed</div></div></div>
+        <div class="btn">Record payment</div>
+        <p class="hint" style="text-align:center">One currency looks and behaves like today's sheet, so the simple case doesn't change.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ 4 ═════════ -->
+<h2>4 · Saving and failure</h2>
+<p class="desc">All the payments are saved together or not at all, so a failure can never leave you half-settled.</p>
+<div class="row">
+  <div class="card"><p class="cap">Saving</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x" style="opacity:.3">×</span></div>
+        <p class="sh-sub">You pay <b>Ann</b>.</p>
+        <div class="field dim"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">3000.00</div></div></div>
+        <div class="field dim"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">18.50</div></div></div>
+        <div class="btn" style="opacity:.7"><span class="spin"></span>Recording…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Failed: nothing was saved</p>
+    <div class="sheetwrap"><div class="dimbg"></div>
+      <div class="sheet">
+        <div class="sh-top"><h3>Settle with Ann</h3><span class="x">×</span></div>
+        <div class="banner">Couldn't record the payments, so nothing was saved. Check your connection and try again.</div>
+        <div class="field"><div class="cur">🇯🇵 JPY</div><div style="flex:1"><div class="inp">3000.00</div></div></div>
+        <div class="field"><div class="cur">🇺🇸 USD</div><div style="flex:1"><div class="inp">18.50</div></div></div>
+        <div class="btn">Try again</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="desc" style="margin-top:34px"><b>Not in this version:</b> a “pay everything in SGD” option. That needs the exchange rate to be recorded with the payment so every currency's balance still clears correctly, which is a separate step. The “≈ SGD” total here is only an on-screen convenience when rates are loaded; it isn't stored.</p>
+</body>
+</html>
