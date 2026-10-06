@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edit history — UI v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --blue:#2481cc; --hint:#8e8e93; --sec:#f0f0f4; --red:#ff3b30; --green:#1c9c48; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e4e4ea; padding:26px 14px 60px; color:#000; }
+  h1 { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8e8e93; text-align:center; margin-bottom:4px; }
+  .sub { font-size:12px; color:#8e8e93; text-align:center; margin-bottom:6px; }
+  h2 { font-size:13px; font-weight:700; margin:36px 0 4px; text-align:center; }
+  .desc { max-width:720px; margin:0 auto 14px; font-size:12px; color:#6c6c70; line-height:1.5; text-align:center; }
+  .row { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; align-items:flex-start; }
+  .card { width:340px; background:#f2f2f7; border-radius:20px; padding:14px; box-shadow:0 3px 18px rgba(0,0,0,.12); position:relative; overflow:hidden; }
+  .cap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#8e8e93; text-align:center; margin-bottom:10px; }
+  .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:14px 4px 6px; }
+  .sec { background:#fff; border-radius:12px; overflow:hidden; }
+  .item { padding:11px 14px; border-bottom:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; }
+  .item:last-child { border-bottom:none; }
+  .panel { background:#fff; border-radius:16px; margin:0 -14px -14px; overflow:hidden; }
+  .head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:.5px solid rgba(0,0,0,.08); }
+  .head .title { font-size:16px; font-weight:600; }
+  .link { color:var(--blue); font-size:15px; font-weight:500; }
+  .save { font-size:15px; font-weight:700; color:var(--blue); } .save.off { color:#b8b8c0; font-weight:600; }
+  .body { padding:14px 16px 18px; }
+  .center { text-align:center; margin-bottom:14px; } .center .cat { font-size:30px; } .center .n { font-size:16px; font-weight:700; margin-top:3px; } .center .big { font-size:24px; font-weight:300; color:var(--blue); margin:2px 0; } .center .m { font-size:12px; color:var(--hint); }
+  .thumb { width:44px; height:58px; border-radius:7px; background:#fafaf5; border:1px solid rgba(0,0,0,.08); flex:none;
+    background-image:linear-gradient(#444,#444),linear-gradient(#bbb,#bbb),linear-gradient(#bbb,#bbb),linear-gradient(#444,#444),linear-gradient(#bbb,#bbb);
+    background-size:55% 3px,80% 2px,70% 2px,45% 3px,72% 2px; background-position:20% 9px,20% 17px,20% 23px,20% 33px,20% 41px; background-repeat:no-repeat; }
+  /* activity */
+  .act { margin-top:2px; }
+  .ev { display:flex; gap:11px; padding:10px 0; } .ev + .ev { border-top:.5px solid rgba(0,0,0,.07); }
+  .av { width:28px; height:28px; border-radius:50%; flex:none; color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .a1{background:#a56bd3}.a2{background:#e8762b}.a3{background:#2e9e6a}.adm{background:#6b7280}
+  .who { font-size:13px; line-height:1.35; } .who b { font-weight:600; } .when { font-size:11px; color:var(--hint); margin-top:1px; }
+  .diff { margin-top:6px; font-size:12px; background:var(--sec); border-radius:9px; padding:7px 10px; line-height:1.6; }
+  .k { color:var(--hint); } .old { color:var(--red); text-decoration:line-through; } .new { color:var(--green); font-weight:600; }
+  .more { font-size:13px; color:var(--blue); font-weight:600; padding:8px 0 2px; text-align:center; }
+  .scrollnote { text-align:center; font-size:11px; color:var(--hint); padding:2px 0 8px; }
+  /* form bits */
+  .field { background:var(--sec); border-radius:11px; padding:12px 14px; font-size:14px; }
+  .field.chg { box-shadow:inset 0 0 0 1.5px rgba(36,129,204,.55); background:rgba(36,129,204,.06); }
+  .flabel { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:12px 2px 5px; }
+  .banner { background:rgba(255,59,48,.1); color:var(--red); border-radius:11px; padding:10px 12px; font-size:12.5px; margin-bottom:10px; }
+  .spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(36,129,204,.3); border-top-color:var(--blue); border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .dlg { margin:30px 18px 6px; background:#fff; border-radius:16px; padding:18px 16px 0; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+  .dlg .t { font-size:16px; font-weight:700; } .dlg .m { font-size:13px; color:#6c6c70; margin:6px 0 14px; line-height:1.4; }
+  .dlg .btns { display:flex; border-top:.5px solid rgba(0,0,0,.12); margin:0 -16px; } .dlg .btns div { flex:1; padding:12px 0; font-size:15px; } .dlg .btns div + div { border-left:.5px solid rgba(0,0,0,.12); font-weight:600; color:var(--red); } .dlg .btns div:first-child { color:var(--blue); }
+  .dim { opacity:.35; pointer-events:none; }
+  .rec { display:inline-block; font-size:10px; color:#1c9c48; background:rgba(52,199,89,.16); border-radius:999px; padding:2px 8px; margin-left:6px; letter-spacing:.04em; vertical-align:1px; }
+  .tabsel { display:inline-block; font-size:10px; color:#6c6c70; background:rgba(0,0,0,.07); border-radius:999px; padding:2px 8px; margin-left:6px; letter-spacing:.04em; vertical-align:1px; }
+  /* admin (desktop-ish, matches /admin styling) */
+  .admin { width:660px; max-width:100%; background:#f3f4f6; border-radius:14px; padding:18px 18px 22px; box-shadow:0 3px 18px rgba(0,0,0,.12); font-size:14px; color:#111827; }
+  .asec { margin-bottom:14px; } .asec h3 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6b7280; margin:0 0 6px 4px; display:flex; justify-content:space-between; align-items:center; }
+  .toggle { font-size:12px; font-weight:600; color:#2563eb; text-transform:none; letter-spacing:0; }
+  .acard { background:#fff; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.06); overflow:hidden; }
+  .arow { padding:11px 16px; border-bottom:.5px solid #f3f4f6; display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .arow:last-child { border-bottom:none; }
+  .arow .d { font-weight:500; font-size:14px; } .arow .m { font-size:12px; color:#9ca3af; margin-top:2px; }
+  .pill { display:inline-block; font-size:10px; font-weight:700; border-radius:999px; padding:1px 8px; margin-left:6px; vertical-align:1px; }
+  .pill.ed { background:#eef2ff; color:#4f46e5; } .pill.del { background:#fee2e2; color:#b91c1c; }
+  .arow.deleted { background:#fafafa; } .arow.deleted .d { text-decoration:line-through; color:#9ca3af; }
+  .restore { border:1px solid #d1d5db; background:#fff; color:#111827; font-size:12px; font-weight:600; border-radius:8px; padding:5px 11px; white-space:nowrap; }
+  .ahist { background:#f9fafb; border-top:.5px solid #f3f4f6; padding:10px 16px 12px; }
+  .ahist .h { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; margin-bottom:6px; }
+  .aev { display:flex; gap:10px; padding:6px 0; font-size:13px; } .aev .w { color:#9ca3af; font-size:11.5px; min-width:92px; flex:none; padding-top:1px; }
+  .aev .old { color:#dc2626; } .aev .new { color:#15803d; font-weight:600; }
+</style>
+</head>
+<body>
+
+<h1>Edit history — proposed UI (v2)</h1>
+<p class="sub">Revised from your feedback. Nothing is built yet.</p>
+
+<!-- ═════════ 1 ═════════ -->
+<h2>1 · Activity at the bottom of the expense</h2>
+<p class="desc">The history lives inside the expense, below Split and the receipt, so it only appears when you open one. Each entry shows who, when, and old → new for only what changed. Deleted expenses don't appear in the app at all.</p>
+<div class="row">
+  <div class="card"><p class="cap">Expense detail · scrolled to the bottom</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title" style="font-size:15px">Expense</span><span style="width:50px"></span></div>
+      <div class="body">
+        <div class="center"><div class="cat">🍜</div><div class="n">Lunch at Din Tai Fung</div><div class="big">SGD 58.40</div><div class="m">Kev paid · Oct 3</div></div>
+
+        <div class="lbl" style="margin-top:0">Receipt</div>
+        <div class="sec"><div class="item" style="gap:12px;justify-content:flex-start"><div class="thumb"></div><div><div style="font-weight:600">Receipt photo</div><div style="font-size:12px;color:var(--hint)">Tap to enlarge</div></div></div></div>
+
+        <div class="lbl">Split</div>
+        <div class="sec"><div class="item"><span><b>You</b> <span style="color:var(--hint);font-size:11px">paid</span></span><b style="color:var(--blue)">SGD 14.60</b></div><div class="item"><span>Ann</span><b>SGD 14.60</b></div><div class="item"><span>Ben</span><b>SGD 14.60</b></div><div class="item"><span>Kev</span><b>SGD 14.60</b></div></div>
+
+        <div class="lbl">Activity</div>
+        <div class="act">
+          <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> edited</div><div class="when">Today, 14:02</div>
+            <div class="diff"><span class="k">Amount</span> <span class="old">SGD 50.00</span> → <span class="new">SGD 58.40</span><br><span class="k">Split</span> <span class="new">+ Ben</span></div></div></div>
+          <div class="ev"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> edited</div><div class="when">Today, 09:15</div>
+            <div class="diff"><span class="k">Description</span> <span class="old">Lunch</span> → <span class="new">Lunch at Din Tai Fung</span><br><span class="k">Receipt</span> <span class="new">added</span></div></div></div>
+          <div class="ev"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> created this expense</div><div class="when">Oct 3, 13:41</div>
+            <div class="diff">SGD 50.00 · paid by Kev · split equally between 3</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">A long history (collapsed)</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title" style="font-size:15px">Expense</span><span style="width:50px"></span></div>
+      <div class="body">
+        <div class="lbl" style="margin-top:0">Activity</div>
+        <div class="act">
+          <div class="ev"><div class="av a3">B</div><div style="flex:1"><div class="who"><b>Ben</b> edited</div><div class="when">Today, 18:40</div><div class="diff"><span class="k">Category</span> <span class="old">📦 Other</span> → <span class="new">🍜 Food</span></div></div></div>
+          <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> edited</div><div class="when">Today, 14:02</div><div class="diff"><span class="k">Paid by</span> <span class="old">Kev</span> → <span class="new">Ann</span></div></div></div>
+          <div class="ev"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> edited</div><div class="when">Today, 09:15</div><div class="diff"><span class="k">Date</span> <span class="old">Oct 2</span> → <span class="new">Oct 3</span></div></div></div>
+          <div class="more">Show 4 earlier changes</div>
+          <div class="ev" style="border-top:.5px solid rgba(0,0,0,.07)"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> created this expense</div><div class="when">Oct 1, 13:41</div></div></div>
+        </div>
+        <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.45">Shows the 3 most recent changes, with the original “created” entry always at the end.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">If an admin restored it</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title" style="font-size:15px">Expense</span><span style="width:50px"></span></div>
+      <div class="body">
+        <div class="lbl" style="margin-top:0">Activity</div>
+        <div class="act">
+          <div class="ev"><div class="av adm">⚙</div><div style="flex:1"><div class="who"><b>Admin</b> restored this expense</div><div class="when">Today, 16:20</div></div></div>
+          <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> deleted this expense</div><div class="when">Today, 16:05</div></div></div>
+          <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> created this expense</div><div class="when">Oct 3, 19:10</div></div></div>
+        </div>
+        <p style="font-size:11px;color:var(--hint);margin-top:10px;line-height:1.45">Expenses stay hidden once deleted. If an admin brings one back, its full story, including the deletion, is shown so nobody is confused why it reappeared.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ 2 ═════════ -->
+<h2>2 · Edit page: Save moves to the top-right</h2>
+<p class="desc">Same pattern as the settlement editor in the app: Back on the left, title in the middle, Save on the right, always visible however far you scroll. Save stays greyed out until something has actually changed, and the changed fields get a subtle blue outline so you can see what you're about to log.</p>
+<div class="row">
+  <div class="card"><p class="cap">Nothing changed yet</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title">Edit Expense</span><span class="save off">Save</span></div>
+      <div class="body" style="padding-top:4px">
+        <div class="flabel">Description</div><div class="field">Lunch at Din Tai Fung</div>
+        <div class="flabel">Amount</div><div class="field">🇸🇬 SGD&nbsp;&nbsp;&nbsp;58.40</div>
+        <div class="flabel">Date</div><div class="field">10/03/2026</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Something changed</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title">Edit Expense</span><span class="save">Save</span></div>
+      <div class="body" style="padding-top:4px">
+        <div class="flabel">Description</div><div class="field">Lunch at Din Tai Fung</div>
+        <div class="flabel">Amount</div><div class="field chg">🇸🇬 SGD&nbsp;&nbsp;&nbsp;62.00</div>
+        <div class="flabel">Date</div><div class="field">10/03/2026</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Saving / save failed</p>
+    <div class="panel">
+      <div class="head"><span class="link" style="opacity:.4">← Back</span><span class="title">Edit Expense</span><span class="save"><span class="spin"></span>Saving…</span></div>
+      <div class="body" style="padding-top:10px">
+        <div class="banner">Custom split amounts (60.00) must equal total (62.00)</div>
+        <div class="flabel" style="margin-top:2px">Description</div><div class="field">Lunch at Din Tai Fung</div>
+        <div class="flabel">Amount</div><div class="field chg">🇸🇬 SGD&nbsp;&nbsp;&nbsp;62.00</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Back with unsaved changes</p>
+    <div class="panel" style="height:230px;position:relative">
+      <div class="head dim"><span class="link">← Back</span><span class="title">Edit Expense</span><span class="save">Save</span></div>
+      <div class="dlg"><div class="t">Discard changes?</div><div class="m">You have unsaved edits to this expense.</div>
+        <div class="btns"><div>Keep editing</div><div>Discard</div></div></div>
+    </div>
+  </div>
+</div>
+
+<h2 style="margin-top:28px">…and the Add page <span class="tabsel">YOUR CALL</span></h2>
+<p class="desc">You mentioned the edit page. For consistency the Add page could get the same header button, <b>or</b> keep its bottom button as it is, since adding naturally ends at the bottom. Which do you prefer?</p>
+<div class="row">
+  <div class="card"><p class="cap">Option A · Add moves up too</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title">Add Expense</span><span class="save off">Add</span></div>
+      <div class="body" style="padding-top:4px"><div class="flabel">Receipt (optional)</div><div class="field" style="text-align:center;color:var(--blue);font-weight:600;border:1.5px dashed #b4b4bc;background:transparent">📷 Add receipt photo</div><div class="flabel">Description</div><div class="field" style="color:#aaa">Dinner, groceries, taxi…</div></div>
+    </div>
+  </div>
+  <div class="card"><p class="cap">Option B · Add keeps the bottom button</p>
+    <div class="panel">
+      <div class="head"><span class="link">← Back</span><span class="title">Add Expense</span><span style="width:50px"></span></div>
+      <div class="body" style="padding-top:4px"><div class="flabel">Description</div><div class="field" style="color:#aaa">Dinner, groceries, taxi…</div><div style="text-align:center;color:#c7c7cc;font-size:18px;padding:6px 0">⋮</div>
+        <div style="background:var(--blue);color:#fff;text-align:center;font-weight:600;border-radius:12px;padding:13px">Add Expense</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════ 3 ═════════ -->
+<h2>3 · Admin panel: deleted expenses and full history</h2>
+<p class="desc">Deleted expenses never show in the Telegram app, but the admin can see and restore them. The Expenses list gets a “Show deleted” switch; deleted rows are greyed and struck through with who deleted them and when; every row can expand to its full history. This matches the existing admin look.</p>
+<div class="row">
+  <div class="admin"><p class="cap">/admin/groups/… · Expenses</p>
+    <div class="asec">
+      <h3><span>Expenses</span><span class="toggle">☑ Show deleted (3)</span></h3>
+      <div class="acard">
+        <div class="arow"><div><div class="d">Lunch at Din Tai Fung<span class="pill ed">edited ×2</span></div><div class="m">Kev · Oct 3 · 🍜 Food</div></div><div style="font-weight:600">SGD 58.40 <span style="color:#9ca3af;font-size:10px">▼</span></div></div>
+        <div class="arow deleted"><div><div class="d">Taxi<span class="pill del">deleted</span></div><div class="m">Ann · Oct 3 · Deleted by Ann, today 16:05</div></div><div style="display:flex;gap:10px;align-items:center"><span style="font-weight:600;color:#9ca3af">SGD 12.00</span><button class="restore">Restore</button></div></div>
+        <div class="arow"><div><div class="d">Groceries</div><div class="m">Ben · Oct 2 · 🛒 Shopping</div></div><div style="font-weight:600">SGD 31.90 <span style="color:#9ca3af;font-size:10px">▼</span></div></div>
+        <div class="arow deleted"><div><div class="d">Coffee<span class="pill del">deleted</span></div><div class="m">Ben · Oct 1 · Deleted by Ben, 2 days ago</div></div><div style="display:flex;gap:10px;align-items:center"><span style="font-weight:600;color:#9ca3af">SGD 4.50</span><button class="restore">Restore</button></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin" style="width:520px"><p class="cap">Expanded row · history</p>
+    <div class="asec"><div class="acard">
+      <div class="arow" style="border-bottom:none"><div><div class="d">Lunch at Din Tai Fung<span class="pill ed">edited ×2</span></div><div class="m">Kev · Oct 3 · 🍜 Food</div></div><div style="font-weight:600">SGD 58.40 <span style="color:#9ca3af;font-size:10px">▲</span></div></div>
+      <div class="ahist" style="border-top:.5px solid #f3f4f6">
+        <div class="h">Split</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0"><span>Kev</span><span style="font-weight:500">SGD 14.60</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0 10px"><span>Ann</span><span style="font-weight:500">SGD 14.60</span></div>
+        <div class="h">History</div>
+        <div class="aev"><span class="w">Today 14:02</span><span><b style="font-weight:600">Ann</b> edited · Amount <span class="old">50.00</span> → <span class="new">58.40</span>, split <span class="new">+ Ben</span></span></div>
+        <div class="aev"><span class="w">Today 09:15</span><span><b style="font-weight:600">Kev</b> edited · Description <span class="old">Lunch</span> → <span class="new">Lunch at Din Tai Fung</span>, receipt <span class="new">added</span></span></div>
+        <div class="aev"><span class="w">Oct 3 13:41</span><span><b style="font-weight:600">Kev</b> created · SGD 50.00, split equally between 3</span></div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="card"><p class="cap">Clicking Restore</p>
+    <div class="panel" style="height:200px">
+      <div class="dlg"><div class="t">Restore “Taxi”?</div><div class="m">It will appear in the group again and count towards balances.</div>
+        <div class="btns"><div>Cancel</div><div style="color:var(--blue)">Restore</div></div></div>
+    </div>
+    <p style="font-size:11px;color:var(--hint);margin-top:12px;line-height:1.45;text-align:center">Same confirm style as “Archive group”.</p>
+  </div>
+</div>
+
+<p class="desc" style="margin-top:34px"><b>What gets logged:</b> created, edited (amount, description, currency, who paid, split, date, category, receipt added/removed/replaced), deleted, restored. Who did it comes from their Telegram login, so it can't be faked.<br>
+<b>Not logged / not shown:</b> receipt images themselves, settlements (can be added later the same way), and anything about deleted expenses inside the Telegram app.</p>
+</body>
+</html>
