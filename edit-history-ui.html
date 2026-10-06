@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edit history — UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --blue:#2481cc; --hint:#8e8e93; --sec:#f0f0f4; --red:#ff3b30; --green:#1c9c48; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e4e4ea; padding:26px 14px 60px; color:#000; }
+  h1 { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8e8e93; text-align:center; margin-bottom:4px; }
+  .sub { font-size:12px; color:#8e8e93; text-align:center; margin-bottom:6px; }
+  h2 { font-size:13px; font-weight:700; margin:34px 0 4px; text-align:center; }
+  .desc { max-width:700px; margin:0 auto 14px; font-size:12px; color:#6c6c70; line-height:1.5; text-align:center; }
+  .row { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; }
+  .card { width:340px; background:#f2f2f7; border-radius:20px; padding:14px; box-shadow:0 3px 18px rgba(0,0,0,.12); position:relative; overflow:hidden; }
+  .cap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#8e8e93; text-align:center; margin-bottom:10px; }
+  .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:12px 4px 6px; }
+  .sec { background:#fff; border-radius:12px; overflow:hidden; }
+  .item { padding:11px 14px; border-bottom:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .item:last-child { border-bottom:none; }
+  .t { font-size:14px; font-weight:600; } .s { font-size:12px; color:var(--hint); margin-top:2px; }
+  .emoji { width:40px; height:40px; border-radius:10px; background:var(--sec); display:flex; align-items:center; justify-content:center; font-size:21px; flex:none; }
+  .tag { font-size:10px; color:var(--hint); background:var(--sec); border-radius:999px; padding:1px 7px; margin-left:6px; font-weight:600; vertical-align:1px; }
+  .amt { font-weight:700; font-size:14px; color:var(--blue); text-align:right; white-space:nowrap; flex:none; } .amt small { display:block; font-size:11px; font-weight:500; color:var(--hint); }
+  .btn { border:none; border-radius:9px; font-weight:600; font-size:12px; padding:7px 12px; background:var(--blue); color:#fff; }
+  .btn.ghost { background:var(--sec); color:#222; }
+  .sheet { background:#fff; border-radius:16px 16px 0 0; margin:0 -14px -14px; padding:0 0 14px; }
+  .sh-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:.5px solid rgba(0,0,0,.08); font-size:16px; font-weight:600; }
+  .link { color:var(--blue); font-size:14px; font-weight:500; }
+  .center { text-align:center; padding:16px 16px 10px; }
+  .center .cat { font-size:34px; } .center .n { font-size:17px; font-weight:700; margin-top:4px; } .center .big { font-size:26px; font-weight:300; color:var(--blue); margin:4px 0; }
+  .center .m { font-size:12px; color:var(--hint); }
+  .hist-row { margin:0 14px; background:var(--sec); border-radius:12px; padding:11px 14px; display:flex; justify-content:space-between; align-items:center; font-size:13px; }
+  .hist-row b { font-weight:600; } .hist-row .chev { color:var(--hint); font-size:18px; }
+  /* timeline */
+  .tl { padding:6px 16px 8px; }
+  .ev { display:flex; gap:11px; padding:11px 0; position:relative; }
+  .ev + .ev { border-top:.5px solid rgba(0,0,0,.07); }
+  .av { width:30px; height:30px; border-radius:50%; flex:none; color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .a1{background:#a56bd3}.a2{background:#e8762b}.a3{background:#2e9e6a}
+  .ev .who { font-size:13px; } .ev .who b { font-weight:600; } .ev .when { font-size:11px; color:var(--hint); margin-top:1px; }
+  .diff { margin-top:7px; font-size:12px; background:var(--sec); border-radius:9px; padding:7px 10px; line-height:1.55; }
+  .diff .k { color:var(--hint); } .old { color:var(--red); text-decoration:line-through; } .new { color:var(--green); font-weight:600; }
+  .foot { font-size:11px; color:var(--hint); text-align:center; padding:6px 20px 0; }
+  /* toast */
+  .toast { position:absolute; left:14px; right:14px; bottom:16px; background:#2c2c2e; color:#fff; border-radius:12px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; font-size:13px; box-shadow:0 6px 20px rgba(0,0,0,.3); }
+  .toast b { color:#5ab0ff; font-weight:700; letter-spacing:.03em; }
+  .bar { position:absolute; left:14px; right:14px; bottom:12px; height:3px; border-radius:2px; background:#5ab0ff; width:62%; }
+  .pad { height:96px; }
+  /* header with activity icon */
+  .hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .hdr .name { font-size:17px; font-weight:700; } .hdr .icons { display:flex; gap:7px; }
+  .circ { width:34px; height:34px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:0 1px 3px rgba(0,0,0,.08); position:relative; }
+  .circ .dot { position:absolute; top:5px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--red); border:1.5px solid #fff; }
+  .btns { display:flex; gap:8px; margin-bottom:12px; } .btns div { flex:1; background:#fff; border-radius:11px; text-align:center; padding:10px 0; font-size:13px; font-weight:500; border:1px solid rgba(0,0,0,.08); }
+  .btns .add { background:var(--blue); color:#fff; border:none; flex:1.4; font-weight:600; }
+  .chips { display:flex; gap:7px; padding:12px 14px 4px; } .chip { font-size:12px; font-weight:600; padding:5px 11px; border-radius:999px; background:var(--sec); color:#333; } .chip.on { background:var(--blue); color:#fff; }
+  .day { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--hint); padding:12px 16px 2px; }
+  .feed { padding:0 16px; } .feed .ev { align-items:flex-start; } .feed .what { font-size:13px; line-height:1.4; } .feed .what b { font-weight:600; }
+  .undo { color:var(--blue); font-weight:600; font-size:12px; margin-left:6px; }
+  .rec { display:inline-block; font-size:10px; color:#1c9c48; background:rgba(52,199,89,.16); border-radius:999px; padding:2px 8px; margin-left:6px; letter-spacing:.04em; vertical-align:1px; }
+</style>
+</head>
+<body>
+
+<h1>Edit history · undo · activity — UI</h1>
+<p class="sub">Nothing is built yet. This is how it would look and where each piece lives.</p>
+
+<!-- ───────────── 1 ───────────── -->
+<h2>1 · Where you see that something changed</h2>
+<p class="desc">A quiet “edited” tag on the list row, and a History row in the expense detail. Opening it shows exactly who changed what, and when.</p>
+<div class="row">
+
+  <div class="card"><p class="cap">Expense list</p>
+    <div class="sec">
+      <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🍜</div><div><div class="t">Lunch at Din Tai Fung 📎<span class="tag">edited</span></div><div class="s">Kev paid SGD 58.40</div></div></div><div class="amt">You lent<small>SGD 43.80</small></div></div>
+      <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🚕</div><div><div class="t">Taxi</div><div class="s">Ann paid SGD 12.00</div></div></div><div class="amt" style="color:#ff3b30">You borrowed<small>SGD 3.00</small></div></div>
+      <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🛒</div><div><div class="t">Groceries<span class="tag">edited</span></div><div class="s">Ben paid SGD 31.90</div></div></div><div class="amt" style="color:#ff3b30">You borrowed<small>SGD 8.00</small></div></div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Expense detail</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">← Back</span><span style="font-size:15px">Expense</span><span style="width:50px"></span></div>
+      <div class="center"><div class="cat">🍜</div><div class="n">Lunch at Din Tai Fung</div><div class="big">SGD 58.40</div><div class="m">Kev paid · Oct 3</div></div>
+      <div class="lbl" style="margin-left:18px">Split</div>
+      <div class="sec" style="margin:0 14px"><div class="item"><span style="font-size:13px"><b>You</b> <span style="color:var(--hint);font-size:11px">paid</span></span><b style="color:var(--blue);font-size:13px">SGD 14.60</b></div><div class="item"><span style="font-size:13px">Ann</span><b style="font-size:13px">SGD 14.60</b></div></div>
+      <div class="lbl" style="margin-left:18px">History</div>
+      <div class="hist-row"><span>✎ <b>Edited by Ann</b> · 2h ago · 2 changes</span><span class="chev">›</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── 2 ───────────── -->
+<h2>2 · The history itself</h2>
+<p class="desc">Newest first. Each entry says who, when, and shows old → new for only the fields that changed (amount, description, payer, split, date, category, receipt added/removed).</p>
+<div class="row">
+  <div class="card"><p class="cap">History sheet</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">Close</span><span>History</span><span style="width:40px"></span></div>
+      <div class="tl">
+        <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> edited</div><div class="when">Today, 14:02</div>
+          <div class="diff"><span class="k">Amount</span> <span class="old">SGD 50.00</span> → <span class="new">SGD 58.40</span><br><span class="k">Split</span> <span class="old">equally · 3</span> → <span class="new">equally · 4</span></div></div></div>
+        <div class="ev"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> edited</div><div class="when">Today, 09:15</div>
+          <div class="diff"><span class="k">Description</span> <span class="old">Lunch</span> → <span class="new">Lunch at Din Tai Fung</span><br><span class="k">Receipt</span> <span class="new">added 📎</span></div></div></div>
+        <div class="ev"><div class="av a2">K</div><div style="flex:1"><div class="who"><b>Kev</b> created this expense</div><div class="when">Oct 3, 13:41</div>
+          <div class="diff">SGD 50.00 · paid by Kev · split equally between 3</div></div></div>
+      </div>
+      <p class="foot">History starts from when this feature launched. Older expenses show only “created”.</p>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Another example: a deletion + restore</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">Close</span><span>History</span><span style="width:40px"></span></div>
+      <div class="tl">
+        <div class="ev"><div class="av a3">B</div><div style="flex:1"><div class="who"><b>Ben</b> restored this expense</div><div class="when">Today, 16:20</div></div></div>
+        <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> deleted this expense</div><div class="when">Today, 16:05</div><div class="diff">Was SGD 12.00 · paid by Ann</div></div></div>
+        <div class="ev"><div class="av a1">A</div><div style="flex:1"><div class="who"><b>Ann</b> created this expense</div><div class="when">Oct 3, 19:10</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── 3 ───────────── -->
+<h2>3 · Undo a delete — two layers of safety</h2>
+<p class="desc">An instant “Undo” toast for the first few seconds, and a “Recently deleted” list that keeps deleted expenses for 30 days, so a mistake discovered later can still be fixed. Balances recalculate instantly in both directions.</p>
+<div class="row">
+  <div class="card"><p class="cap">Right after deleting</p>
+    <div class="sec">
+      <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🍜</div><div><div class="t">Lunch at Din Tai Fung</div><div class="s">Kev paid SGD 58.40</div></div></div><div class="amt">You lent<small>SGD 43.80</small></div></div>
+      <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🛒</div><div><div class="t">Groceries</div><div class="s">Ben paid SGD 31.90</div></div></div><div class="amt" style="color:#ff3b30">You borrowed<small>SGD 8.00</small></div></div>
+    </div>
+    <div class="pad"></div>
+    <div class="toast"><span>Taxi deleted</span><b>UNDO</b></div><div class="bar"></div>
+  </div>
+
+  <div class="card"><p class="cap">Recently deleted (30 days)</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">← Back</span><span>Recently deleted</span><span style="width:40px"></span></div>
+      <div class="tl">
+        <div class="ev" style="align-items:center"><div class="emoji">🚕</div><div style="flex:1"><div class="t" style="font-size:13px">Taxi · SGD 12.00</div><div class="s">Deleted by Ann · 2h ago</div></div><button class="btn">Restore</button></div>
+        <div class="ev" style="align-items:center"><div class="emoji">☕</div><div style="flex:1"><div class="t" style="font-size:13px">Coffee · SGD 4.50</div><div class="s">Deleted by Ben · 2 days ago</div></div><button class="btn">Restore</button></div>
+        <div class="ev" style="align-items:center"><div class="emoji">🏨</div><div style="flex:1"><div class="t" style="font-size:13px">Hotel deposit · JPY 18,000</div><div class="s">Deleted by Kev · 12 days ago</div></div><button class="btn">Restore</button></div>
+      </div>
+      <p class="foot">Deleted expenses are removed for good after 30 days.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── 4 ───────────── -->
+<h2>4 · Group activity feed <span class="rec">NEW SCREEN</span></h2>
+<p class="desc">One place to see everything that happened in the group: added, edited, deleted, settled. Opened from a small clock icon in the header (a red dot when there is something new since you last looked), so the three existing buttons stay as they are.</p>
+<div class="row">
+  <div class="card"><p class="cap">Header with entry point</p>
+    <div class="hdr"><div><div class="name">Tokyo Trip</div><div style="font-size:12px;color:var(--hint)">You are owed SGD 43.80</div></div>
+      <div class="icons"><div class="circ">🕘<span class="dot"></span></div><div class="circ">👥</div><div class="circ">⚙️</div></div></div>
+    <div class="btns"><div>Balances</div><div>Totals</div><div class="add">+ Add</div></div>
+    <div class="sec"><div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="emoji">🍜</div><div><div class="t">Lunch at Din Tai Fung</div><div class="s">Kev paid SGD 58.40</div></div></div></div></div>
+  </div>
+
+  <div class="card"><p class="cap">Activity</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">← Back</span><span>Activity</span><span style="width:40px"></span></div>
+      <div class="chips"><span class="chip on">All</span><span class="chip">Expenses</span><span class="chip">Payments</span><span class="chip">Mine</span></div>
+      <div class="day">Today</div>
+      <div class="feed">
+        <div class="ev"><div class="av a1">A</div><div class="what"><b>Ann</b> edited <b>Lunch at Din Tai Fung</b><br><span style="color:var(--hint);font-size:12px">Amount SGD 50.00 → 58.40 · 14:02</span></div></div>
+        <div class="ev"><div class="av a3">B</div><div class="what"><b>Ben</b> restored <b>Taxi</b><br><span style="color:var(--hint);font-size:12px">16:20</span></div></div>
+        <div class="ev"><div class="av a2">K</div><div class="what"><b>Kev</b> added <b>Groceries</b> · SGD 31.90<br><span style="color:var(--hint);font-size:12px">11:08</span></div></div>
+      </div>
+      <div class="day">Yesterday</div>
+      <div class="feed">
+        <div class="ev"><div class="av a1">A</div><div class="what"><b>Ann</b> paid <b>Kev</b> SGD 20.00 <span style="color:var(--hint)">· settled</span><br><span style="color:var(--hint);font-size:12px">19:30</span></div></div>
+        <div class="ev"><div class="av a3">B</div><div class="what"><b>Ben</b> deleted <b>Coffee</b> · SGD 4.50<span class="undo">Restore</span><br><span style="color:var(--hint);font-size:12px">13:12</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="desc" style="margin-top:34px">Tapping an entry opens that expense (or its history). The same events can later feed chat announcements (“Ann edited Lunch: 50 → 58.40”) and settle-up reminders, so this is also the foundation for those features.</p>
+</body>
+</html>

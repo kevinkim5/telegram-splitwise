@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Placeholder members — flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --blue:#2481cc; --hint:#8e8e93; --sec:#f0f0f4; --red:#ff3b30; --green:#1c9c48; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e4e4ea; padding:26px 14px 60px; color:#000; }
+  h1 { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#8e8e93; text-align:center; margin-bottom:4px; }
+  .sub { font-size:12px; color:#8e8e93; text-align:center; margin-bottom:6px; }
+  h2 { font-size:13px; font-weight:700; margin:36px 0 4px; text-align:center; }
+  .desc { max-width:720px; margin:0 auto 14px; font-size:12px; color:#6c6c70; line-height:1.5; text-align:center; }
+  .row { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; align-items:flex-start; }
+  .card { width:340px; background:#f2f2f7; border-radius:20px; padding:14px; box-shadow:0 3px 18px rgba(0,0,0,.12); position:relative; overflow:hidden; }
+  .card.dark { background:#1c1c1e; }
+  .cap { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#8e8e93; text-align:center; margin-bottom:10px; }
+  .lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#8e8e93; margin:12px 4px 6px; }
+  .sec { background:#fff; border-radius:12px; overflow:hidden; }
+  .item { padding:11px 14px; border-bottom:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .item:last-child { border-bottom:none; }
+  .t { font-size:14px; font-weight:600; } .s { font-size:12px; color:var(--hint); margin-top:2px; }
+  .av { width:36px; height:36px; border-radius:50%; flex:none; color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .a1{background:#a56bd3}.a2{background:#e8762b}.a3{background:#2e9e6a}
+  .ghost { background:#fff; color:#8e8e93; border:1.5px dashed #b4b4bc; }
+  .tag { font-size:10px; color:#b36a00; background:rgba(255,159,10,.16); border-radius:999px; padding:1px 7px; margin-left:6px; font-weight:700; vertical-align:1px; }
+  .btn { border:none; border-radius:11px; font-weight:600; font-size:14px; padding:12px 14px; background:var(--blue); color:#fff; width:100%; }
+  .btn.ghostbtn { background:var(--sec); color:#222; }
+  .btn.sm { width:auto; font-size:12px; padding:7px 12px; border-radius:9px; }
+  .sheet { background:#fff; border-radius:16px 16px 0 0; margin:0 -14px -14px; padding-bottom:16px; }
+  .sh-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:.5px solid rgba(0,0,0,.08); font-size:16px; font-weight:600; }
+  .link { color:var(--blue); font-size:14px; font-weight:500; }
+  .field { background:var(--sec); border-radius:11px; padding:12px 14px; font-size:14px; margin:0 16px; color:#222; }
+  .field.ph { color:#aaa; }
+  .help { font-size:11.5px; color:var(--hint); margin:6px 20px 0; line-height:1.4; }
+  .chipsrow { display:flex; flex-wrap:wrap; gap:8px; padding:4px 0 6px; }
+  .chip { font-size:13px; padding:6px 12px; border-radius:999px; background:#fff; color:#222; display:flex; align-items:center; gap:7px; }
+  .chip.on { background:var(--blue); color:#fff; }
+  .chip .mini { width:20px; height:20px; border-radius:50%; font-size:9px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; }
+  .chip .mini.g { background:transparent; border:1.5px dashed currentColor; color:inherit; opacity:.9; }
+  /* chat bubble */
+  .bub { background:#2c2c2e; color:#eee; border-radius:4px 16px 16px 16px; padding:10px 13px; font-size:14px; line-height:1.45; max-width:300px; }
+  .bub b { color:#fff; } .bub .who { color:#5ab0ff; font-size:12px; font-weight:600; margin-bottom:3px; }
+  .ikb { display:flex; gap:6px; margin-top:6px; max-width:300px; } .ikb div { flex:1; background:rgba(255,255,255,.12); color:#7cc4ff; border-radius:10px; text-align:center; padding:9px 0; font-size:13px; font-weight:600; }
+  /* claim */
+  .claimcard { background:#fff; border-radius:14px; padding:13px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:center; border:1.5px solid transparent; }
+  .claimcard.sel { border-color:var(--blue); background:rgba(36,129,204,.06); }
+  .big { font-size:20px; font-weight:700; text-align:center; margin:6px 0 4px; } .note { font-size:12.5px; color:var(--hint); text-align:center; line-height:1.45; padding:0 8px; }
+  .impact { background:var(--sec); border-radius:12px; padding:12px 14px; margin:12px 0; font-size:13px; line-height:1.6; }
+  .impact b { font-weight:700; }
+  .banner { background:rgba(36,129,204,.1); border-radius:12px; padding:11px 13px; display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12.5px; line-height:1.4; margin-bottom:12px; }
+  .banner b { font-weight:600; } .banner a { color:var(--blue); font-weight:700; white-space:nowrap; }
+  /* lifecycle diagram */
+  .flow { max-width:760px; margin:0 auto; display:grid; gap:10px; }
+  .step { background:#fff; border-radius:14px; padding:12px 16px; box-shadow:0 1px 4px rgba(0,0,0,.08); font-size:13px; line-height:1.5; }
+  .step b { font-weight:700; } .step small { display:block; color:var(--hint); font-size:12px; }
+  .arrow { text-align:center; color:#8e8e93; font-size:18px; line-height:1; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; } @media (max-width:560px){ .two{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<h1>Placeholder members — how it would work</h1>
+<p class="sub">Nothing is built yet. Walkthrough from “add a friend who isn't on Telegram yet” to “they claim their spot”.</p>
+
+<!-- ───────────── A ───────────── -->
+<h2>A · Adding someone who hasn't joined</h2>
+<p class="desc">Today you can only split with people who have already messaged the group or opened the app. With placeholders, anyone in the group can add a name, optionally an @username, and start splitting with them straight away.</p>
+<div class="row">
+  <div class="card"><p class="cap">Members sheet</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span style="width:40px"></span><span>Members</span><span class="link">Done</span></div>
+      <div style="padding:6px 0">
+        <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="av a2">K</div><div><div class="t">Kev (you)</div><div class="s">@kev</div></div></div></div>
+        <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="av a1">A</div><div><div class="t">Ann</div><div class="s">@ann</div></div></div></div>
+        <div class="item"><div style="display:flex;gap:11px;align-items:center"><div class="av ghost">Y</div><div><div class="t">Annie<span class="tag">not joined</span></div><div class="s">Added by Kev · SGD 40.00 owed</div></div></div></div>
+      </div>
+      <div style="padding:2px 16px 0"><button class="btn ghostbtn" style="color:var(--blue)">＋ Add someone who hasn't joined yet</button></div>
+    </div>
+  </div>
+
+  <div class="card"><p class="cap">Add sheet</p>
+    <div class="sheet" style="margin-top:0;border-radius:14px">
+      <div class="sh-head"><span class="link">Cancel</span><span>Add a person</span><span style="width:40px"></span></div>
+      <div style="padding-top:14px">
+        <div class="field">Annie</div>
+        <p class="help">Name as your group knows them.</p>
+        <div style="height:12px"></div>
+        <div class="field">@annie_l <span style="color:#aaa">(optional)</span></div>
+        <p class="help">If you know their Telegram username, they'll be linked automatically the first time they open the app. No need to claim.</p>
+        <div style="padding:16px 16px 0"><button class="btn">Add</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── B ───────────── -->
+<h2>B · How a placeholder shows up everywhere</h2>
+<p class="desc">They behave like any other member (you can pick them as payer or split with them), marked by a dashed “ghost” avatar and a “not joined” tag so nobody is confused about who they are.</p>
+<div class="row">
+  <div class="card"><p class="cap">Splitting an expense</p>
+    <div class="lbl">Split between</div>
+    <div class="chipsrow">
+      <div class="chip on"><span class="mini" style="background:rgba(255,255,255,.3)">K</span>Kev</div>
+      <div class="chip on"><span class="mini" style="background:rgba(255,255,255,.3)">A</span>Ann</div>
+      <div class="chip on"><span class="mini g">Y</span>Annie · not joined</div>
+    </div>
+    <p class="help" style="margin:2px 4px 0">SGD 19.47 each</p>
+  </div>
+
+  <div class="card"><p class="cap">Balances</p>
+    <div class="lbl">Others</div>
+    <div class="sec">
+      <div class="item"><span class="t">Ann</span><span style="font-size:12px;font-weight:700;color:var(--blue)">gets back SGD 10.00</span></div>
+      <div class="item"><span class="t">Annie<span class="tag">not joined</span></span><span style="font-size:12px;font-weight:700;color:var(--red)">owes SGD 40.00</span></div>
+    </div>
+    <p class="help" style="margin:8px 4px 0">“Notify group” can’t @-tag someone who isn’t on Telegram yet, so it uses her name: <i>Annie (not joined) owes @kev SGD 40.00</i></p>
+  </div>
+</div>
+
+<!-- ───────────── C ───────────── -->
+<h2>C · The nudge in the chat</h2>
+<p class="desc">When a placeholder is created the bot posts a short note. The button deep-links straight into the claim screen, so the person doesn't have to hunt for anything. (Optional: can be turned off per group.)</p>
+<div class="row">
+  <div class="card dark"><p class="cap" style="color:#636366">Group chat</p>
+    <div class="bub"><div class="who">Split Bot</div><b>Kev</b> added <b>Annie</b> to <b>Tokyo Trip</b>.<br>Annie, tap below to claim your spot and see what you owe.</div>
+    <div class="ikb"><div>That's me</div><div>Open app</div></div>
+  </div>
+</div>
+
+<!-- ───────────── D ───────────── -->
+<h2>D · Claiming a spot after starting the app</h2>
+<p class="desc">Anyone Telegram confirms is in the group can claim, so strangers can't. First open: the app registers them as a normal member, then asks whether they are one of the people who were added for them. They see exactly what they're taking over before confirming.</p>
+<div class="row">
+  <div class="card"><p class="cap">1 · First open (any unclaimed names)</p>
+    <div class="big">Welcome, Ann Lee 👋</div>
+    <p class="note">Did someone add you to <b>Tokyo Trip</b> already? Pick your name to take over those expenses.</p>
+    <div style="height:14px"></div>
+    <div class="claimcard sel"><div class="av ghost">Y</div><div style="flex:1"><div class="t">Annie</div><div class="s">Added by Kev · owes SGD 40.00 · 3 expenses</div></div><span style="color:var(--blue);font-size:18px">●</span></div>
+    <div class="claimcard"><div class="av ghost">K</div><div style="flex:1"><div class="t">Kenji</div><div class="s">Added by Ben · owes SGD 15.00 · 1 expense</div></div><span style="color:#c7c7cc;font-size:18px">○</span></div>
+    <button class="btn" style="margin-top:6px">Continue</button>
+    <button class="btn ghostbtn" style="margin-top:8px">None of these — I'm new</button>
+  </div>
+
+  <div class="card"><p class="cap">2 · Confirm</p>
+    <div class="big">Link to “Annie”?</div>
+    <p class="note">You'll take over everything Kev added for Annie. This can't be undone, so check it's you.</p>
+    <div class="impact">
+      <b>You become:</b> Ann Lee (@ann_l)<br>
+      <b>You take over:</b> 3 expenses<br>
+      <b>Your balance:</b> you owe Kev SGD 40.00<br>
+      <b>Anyone notified:</b> Kev (added you)
+    </div>
+    <button class="btn">Yes, that's me</button>
+    <button class="btn ghostbtn" style="margin-top:8px">Back</button>
+  </div>
+
+  <div class="card"><p class="cap">3 · Done</p>
+    <div style="text-align:center;font-size:44px;margin:6px 0">✅</div>
+    <div class="big">You're in as Ann Lee</div>
+    <p class="note">Annie's 3 expenses and SGD 40.00 balance are now yours. Everyone else sees your real name from now on.</p>
+    <div style="height:14px"></div>
+    <button class="btn">Go to Tokyo Trip</button>
+    <p class="help" style="margin:12px 4px 0;text-align:center">The group's Activity feed records: <i>“Ann Lee joined as Annie”</i></p>
+  </div>
+</div>
+
+<!-- ───────────── E ───────────── -->
+<h2>E · Zero-tap version: matching by @username</h2>
+<p class="desc">If the person who added them entered a username, and that same user later opens the app (or sends any message in the group), they're linked automatically. No claim screen. They just see a banner with an undo, in case the match was wrong.</p>
+<div class="row">
+  <div class="card"><p class="cap">First open when the username matches</p>
+    <div class="banner"><span>We linked you to <b>Annie</b> (added by Kev as @annie_l). Not you?</span><a>Undo</a></div>
+    <div class="sec">
+      <div class="item"><div><div class="t">Lunch at Din Tai Fung</div><div class="s">Kev paid SGD 58.40</div></div><span style="color:#ff3b30;font-weight:700;font-size:13px">You borrowed<br><small style="font-weight:500">SGD 19.47</small></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── F ───────────── -->
+<h2>F · Lifecycle &amp; the awkward cases</h2>
+<div class="flow">
+  <div class="step"><b>1 · Created</b> by any group member (name, optional @username). Counts in splits, balances, settlements like anyone else. <small>No Telegram account needed.</small></div>
+  <div class="arrow">↓</div>
+  <div class="two">
+    <div class="step"><b>2a · Claimed</b><small>They pick their name in the app, or the @username matches.</small>Everything the placeholder owns (paid-for expenses, shares, settlements, who-did-what in history) moves to their real member record, in one atomic step. The placeholder disappears.</div>
+    <div class="step"><b>2b · Never joins</b><small>Not everyone will.</small>They stay as a ghost for the whole trip so money still adds up. Anyone can record a payment on their behalf (“Annie paid Kev SGD 40, in cash”). Once their balance is zero, a group member can remove them.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="two">
+    <div class="step"><b>Already registered before claiming</b><small>The common case.</small>They open the app, get registered normally, <i>then</i> claim. So claiming is really a <b>merge</b> of two member records. If both appear in the same expense, their two shares are added together.</div>
+    <div class="step"><b>Duplicates</b><small>Two people added “Annie” and “Annie L.”</small>A “Same person as…” action merges placeholder into placeholder, before anyone claims.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step"><b>Wrong person claims</b><small>Within a friend group, low risk but it can happen.</small>The confirm screen shows exactly what they take over; the claim is logged in Activity with who/when; the person who added the placeholder is told. There is no automatic “unlink”, because by then expenses have merged. Fixing a wrong claim would be a manual admin job, so the confirm step does the real prevention.</div>
+</div>
+
+</body>
+</html>
