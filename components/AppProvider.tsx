@@ -165,7 +165,7 @@ function ReceiptLoader() {
   )
 }
 
-function HomepageReceipt() {
+function HomepageReceipt({ notice }: { notice?: string | null }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -182,6 +182,16 @@ function HomepageReceipt() {
           to   { transform: translateY(0);    opacity: 1; }
         }
       `}</style>
+
+      {notice && (
+        <p role="alert" style={{
+          maxWidth: 260, textAlign: 'center', marginBottom: 18, padding: '8px 14px', borderRadius: 12,
+          fontSize: 13, fontWeight: 500, background: 'rgba(255,59,48,0.1)',
+          color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+        }}>
+          {notice}
+        </p>
+      )}
 
       {/* Receipt card */}
       <div style={{
@@ -268,6 +278,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [ctx, setCtx] = useState<AppContextValue | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null) // explains a refusal to the user
 
   // Admin routes are plain web pages — skip Telegram Mini App initialisation entirely
   if (pathname.startsWith('/admin')) {
@@ -313,6 +324,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         if (!res.ok) {
           const err = await res.json()
+          if (res.status === 403 || res.status === 503) setNotice(err.error ?? null)
           throw new Error(err.error ?? 'Failed to initialize group')
         }
         const { group, member } = await res.json() as {
@@ -346,7 +358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   if (error) {
-    return <HomepageReceipt />
+    return <HomepageReceipt notice={notice} />
   }
 
   if (!ctx) {
