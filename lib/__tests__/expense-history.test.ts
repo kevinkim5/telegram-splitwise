@@ -5,7 +5,7 @@ vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
 
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { createdSummary, diffExpense, type ExpenseSnapshot } from '@/lib/expense-history'
+import { createdSummary, diffExpense, toDay, type ExpenseSnapshot } from '@/lib/expense-history'
 import { PUT } from '../../app/api/groups/[chatId]/expenses/[id]/route'
 
 const base = (over: Partial<ExpenseSnapshot> = {}): ExpenseSnapshot => ({
@@ -81,6 +81,14 @@ describe('diffExpense', () => {
   })
 })
 
+describe('toDay', () => {
+  it('reads a Date from the driver (local midnight) and strings alike', () => {
+    expect(toDay(new Date(2026, 9, 3))).toBe('2026-10-03')
+    expect(toDay('2026-10-03T00:00:00.000Z')).toBe('2026-10-03')
+    expect(toDay('2026-10-03')).toBe('2026-10-03')
+  })
+})
+
 describe('createdSummary', () => {
   it('describes amount, payer and split', () => {
     expect(createdSummary(base())).toBe('SGD 50.00 · paid by Kev · split equally between 2')
@@ -102,7 +110,7 @@ function routeSql() {
     const q = strings.join('?').replace(/\s+/g, ' ').trim()
     if (/^SELECT id, currency FROM groups/.test(q)) return Promise.resolve([{ id: 5, currency: 'SGD' }])
     if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 1 }])
-    if (/^SELECT \* FROM expenses WHERE id/.test(q)) return Promise.resolve([{ id: 40, currency: 'SGD', date: '2026-10-03' }])
+    if (/^SELECT \* FROM expenses WHERE id/.test(q)) return Promise.resolve([{ id: 40, currency: 'SGD', date: new Date(2026, 9, 3) }])
     if (/^SELECT id FROM members WHERE group_id = \? AND id = ANY/.test(q)) return Promise.resolve([{ id: 1 }, { id: 2 }])
     if (/^SELECT id, first_name, last_name FROM members/.test(q)) {
       return Promise.resolve([{ id: 1, first_name: 'Kev' }, { id: 2, first_name: 'Ann' }])
@@ -110,7 +118,7 @@ function routeSql() {
     if (/^SELECT e\.\*, m\.first_name/.test(q)) {
       return Promise.resolve([{
         id: 40, group_id: 5, description: 'Lunch', total_amount: '50.00', currency: 'SGD',
-        paid_by_member_id: 1, split_type: 'equal', date: '2026-10-03', category: '🍜 Food', receipt_key: null,
+        paid_by_member_id: 1, split_type: 'equal', date: new Date(2026, 9, 3), category: '🍜 Food', receipt_key: null,
       }])
     }
     if (/^SELECT es\.id/.test(q)) {
@@ -151,6 +159,12 @@ describe('PUT /expenses/[id] activity log', () => {
       { field: 'amount', from: 'SGD 50.00', to: 'SGD 58.40' },
     ])
     expect(txCalls).toBe(4) // update, delete splits, insert splits, event
+  })
+
+  it('an amount-only edit does not also report a date change (DB returns a Date, body sends no date)', async () => {
+    await put({ total_amount: 62, date: undefined })
+    const changes = JSON.parse(events[0][4] as string)
+    expect(changes.map((c: { field: string }) => c.field)).toEqual(['amount'])
   })
 
   it('writes no event when the save changed nothing', async () => {

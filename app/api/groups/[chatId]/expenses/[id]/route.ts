@@ -8,7 +8,7 @@ import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
 import { ownsKey, receiptViewUrl } from '@/lib/receipt-storage'
 import { insertEvent, loadActivity, loadMemberNames } from '@/lib/expense-events'
-import { diffExpense, type ExpenseSnapshot } from '@/lib/expense-history'
+import { diffExpense, toDay, type ExpenseSnapshot } from '@/lib/expense-history'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -134,13 +134,13 @@ export async function PUT(
         toSnapshot({
           description: before.description as string, total_amount: Number(before.total_amount),
           currency: before.currency as string, paid_by_member_id: before.paid_by_member_id as number,
-          split_type: before.split_type as ExpenseSnapshot['split_type'], date: String(before.date),
+          split_type: before.split_type as ExpenseSnapshot['split_type'], date: toDay(before.date),
           category: (before.category as string | null) ?? null,
           splits: before.splits as { member_id: number; amount: number }[],
         }),
         toSnapshot({
           description, total_amount, currency: currency ?? (existing.currency as string),
-          paid_by_member_id, split_type, date: String(expenseDate), category: category ?? null,
+          paid_by_member_id, split_type, date: toDay(expenseDate), category: category ?? null,
           splits: resolvedSplits,
         }),
       )

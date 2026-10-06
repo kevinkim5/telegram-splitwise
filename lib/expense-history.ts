@@ -21,7 +21,15 @@ export interface ExpenseSnapshot {
   splits: { member_id: number; member_name: string; amount: number }[]
 }
 
-const day = (d: string) => String(d).slice(0, 10)
+// A DATE column can arrive as a JS Date (the driver parses it at local midnight) or as a string.
+export function toDay(d: unknown): string {
+  if (d instanceof Date) {
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+  return String(d).slice(0, 10)
+}
+const day = toDay
 const money = (currency: string, amount: number) => `${currency} ${Number(amount).toFixed(2)}`
 const cents = (n: number) => Math.round(Number(n) * 100)
 
