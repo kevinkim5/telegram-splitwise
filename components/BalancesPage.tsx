@@ -38,15 +38,30 @@ function SettleSheet({ group, rates, onClose, onConfirm }: SettleSheetProps) {
   const anyError = checks.some(c => c.status === 'error')
   const anyFilled = checks.some(c => c.status === 'ok')
 
-  // On-screen convenience only (not stored): the total in SGD of what is being paid, when every
-  // filled currency can be converted and all payments go the same way.
+  // On-screen convenience only (not stored): the SGD total of what is being recorded, at today's
+  // rates. Pay amounts count positive, receive amounts negative, so mixed directions show a net.
+  const [fetchedRates, setFetchedRates] = useState<Record<string, number> | null>(null)
+  const foreign = Array.from(new Set(entries.map(e => e.currency).filter(c => c !== CONVERT_TO)))
+  const foreignKey = foreign.join(',')
+  useEffect(() => {
+    if (rates || !foreignKey) return
+    let cancelled = false
+    fetch(`/api/rates?from=${foreignKey}&to=${CONVERT_TO}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (!cancelled && j?.rates) setFetchedRates(j.rates) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [rates, foreignKey])
+  const activeRates = rates ?? fetchedRates
+
   const filled = entries.flatMap((e, i) => {
     const c = checks[i]
     return c && c.status === 'ok' ? [{ entry: e, amount: c.amount }] : []
   })
-  const sameWay = filled.length > 0 && filled.every(f => f.entry.direction === filled[0]!.entry.direction)
-  const converted = rates && sameWay && filled.some(f => f.entry.currency !== CONVERT_TO)
-    ? sumConverted(filled.map(f => ({ currency: f.entry.currency, net: f.amount })), rates, CONVERT_TO)
+  const converted = activeRates && filled.some(f => f.entry.currency !== CONVERT_TO)
+    ? sumConverted(
+        filled.map(f => ({ currency: f.entry.currency, net: f.entry.direction === 'pay' ? f.amount : -f.amount })),
+        activeRates, CONVERT_TO)
     : null
   const showTotal = !!converted && converted.missing.length === 0
 
@@ -160,10 +175,10 @@ function SettleSheet({ group, rates, onClose, onConfirm }: SettleSheetProps) {
         {showTotal && converted && (
           <div className="flex justify-between text-sm pt-2.5 pb-1 px-1" style={{ borderTop: '0.5px solid rgba(128,128,128,0.25)' }}>
             <div>
-              <p className="font-bold">Total</p>
+              <p className="font-bold">{converted.total < 0 ? 'Total you receive' : 'Total you pay'}</p>
               <p style={{ fontSize: 11, color: 'var(--tg-theme-hint-color)' }}>at today&apos;s rates</p>
             </div>
-            <p className="font-bold">≈ {CONVERT_TO} {converted.total.toFixed(2)}</p>
+            <p className="font-bold">≈ {CONVERT_TO} {Math.abs(converted.total).toFixed(2)}</p>
           </div>
         )}
 
