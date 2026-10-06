@@ -6,6 +6,7 @@ import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
+import { breakdown, sumConverted, type CurrencyLine } from '@/lib/convert'
 
 interface BalancesData {
   balances: NamedBalance[]
@@ -280,17 +281,21 @@ export function BalancesPage() {
     return v !== null ? `≈ ${CONVERT_TO} ${v.toFixed(2)}` : null
   }
 
-  // My overall net across currencies in CONVERT_TO, or null if any rate is missing
-  const myNetConverted = (() => {
-    if (!showConverted) return null
-    let total = 0
-    for (const { currency, net } of myCurrencyLines) {
-      const v = toTarget(net, currency)
-      if (v === null) return null
-      total += v
-    }
-    return Math.round(total * 100) / 100
-  })()
+  // One person's balances across all currencies as a single CONVERT_TO figure (netted), plus the
+  // original amounts it is made of. Null unless converted view is on and at least one rate applied.
+  const combined = (lines: CurrencyLine[]) => {
+    if (!showConverted || lines.length === 0) return null
+    const sum = sumConverted(lines, directRates, CONVERT_TO)
+    // A total with a currency left out would be wrong, so unless every currency converted we keep
+    // the original per-currency lines (the banner says which currency has no rate).
+    if (!sum.usedAny || sum.missing.length > 0) return null
+    const note = lines.length > 1 || lines[0]?.currency !== CONVERT_TO ? breakdown(lines) : ''
+    return { total: sum.total, even: Math.abs(sum.total) < 0.005, note }
+  }
+  const myCombined = combined(myCurrencyLines)
+
+  // Currencies with a balance that the rate service had no rate for
+  const unrated = showConverted ? foreignCurrencies.filter(c => !directRates?.[c]) : []
 
   const formatRatesDate = (d: string) =>
     new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -347,7 +352,7 @@ export function BalancesPage() {
               </p>
               <p style={{ color: 'var(--tg-theme-hint-color)' }}>
                 {showConverted
-                  ? `ECB rates${ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}`
+                  ? `ECB rates${ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}${unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}`
                   : `${foreignCurrencies.join(', ')} · tap to see everything in ${CONVERT_TO}`}
               </p>
             </div>
@@ -407,29 +412,33 @@ export function BalancesPage() {
                 </p>
                 {myCurrencyLines.length === 0 ? (
                   <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>All settled up ✓</p>
+                ) : myCombined ? (
+                  <div>
+                    <p className="text-sm font-semibold" style={{
+                      color: myCombined.even
+                        ? 'var(--tg-theme-hint-color)'
+                        : myCombined.total > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                    }}>
+                      {myCombined.even
+                        ? `Evens out ≈ ${CONVERT_TO} 0.00`
+                        : myCombined.total > 0
+                          ? `You get back ≈ ${CONVERT_TO} ${myCombined.total.toFixed(2)}`
+                          : `You owe ≈ ${CONVERT_TO} ${Math.abs(myCombined.total).toFixed(2)}`}
+                    </p>
+                    {myCombined.note && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>{myCombined.note}</p>
+                    )}
+                  </div>
                 ) : (
-                  myCurrencyLines.map(({ currency, net }) => {
-                    const approx = approxStr(Math.abs(net), currency)
-                    return (
-                      <div key={currency}>
-                        <p className="text-xs font-medium" style={{
-                          color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                        }}>
-                          {net > 0
-                            ? `You get back ${currency} ${net.toFixed(2)}`
-                            : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
-                        </p>
-                        {approx && (
-                          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>{approx}</p>
-                        )}
-                      </div>
-                    )
-                  })
-                )}
-                {myNetConverted !== null && myCurrencyLines.some(l => l.currency !== CONVERT_TO) && Math.abs(myNetConverted) > 0.004 && (
-                  <p className="text-xs font-semibold mt-1.5">
-                    Total ≈ {CONVERT_TO} {Math.abs(myNetConverted).toFixed(2)} {myNetConverted > 0 ? 'owed to you' : 'you owe'}
-                  </p>
+                  myCurrencyLines.map(({ currency, net }) => (
+                    <p key={currency} className="text-xs font-medium" style={{
+                      color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                    }}>
+                      {net > 0
+                        ? `You get back ${currency} ${net.toFixed(2)}`
+                        : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
+                    </p>
+                  ))
                 )}
               </div>
 
@@ -478,6 +487,7 @@ export function BalancesPage() {
                 {otherMemberIds.map((memberId, idx) => {
                   const name = memberName(memberId)
                   const lines = memberCurrencyLines(memberId)
+                  const memberCombined = combined(lines)
                   const debts = memberDebts(memberId)
                   const expanded = expandedMembers.has(memberId)
                   const isLast = idx === otherMemberIds.length - 1
@@ -502,21 +512,28 @@ export function BalancesPage() {
                           <span className="flex flex-col items-end gap-0.5">
                             {lines.length === 0 ? (
                               <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
-                            ) : lines.map(({ currency, net }) => {
-                              const approx = approxStr(Math.abs(net), currency)
-                              return (
-                                <span key={currency} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                  <span className="text-xs font-bold" style={{
-                                    color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                                  }}>
-                                    {net > 0 ? 'gets back' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
-                                  </span>
-                                  {approx && (
-                                    <span style={{ fontSize: 10, color: 'var(--tg-theme-hint-color)' }}>{approx}</span>
-                                  )}
+                            ) : memberCombined ? (
+                              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                <span className="text-xs font-bold" style={{
+                                  color: memberCombined.even
+                                    ? 'var(--tg-theme-hint-color)'
+                                    : memberCombined.total > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                                }}>
+                                  {memberCombined.even
+                                    ? `evens out ≈ ${CONVERT_TO} 0.00`
+                                    : `${memberCombined.total > 0 ? 'gets back' : 'owes'} ≈ ${CONVERT_TO} ${Math.abs(memberCombined.total).toFixed(2)}`}
                                 </span>
-                              )
-                            })}
+                                {memberCombined.note && (
+                                  <span style={{ fontSize: 10, color: 'var(--tg-theme-hint-color)', textAlign: 'right' }}>{memberCombined.note}</span>
+                                )}
+                              </span>
+                            ) : lines.map(({ currency, net }) => (
+                              <span key={currency} className="text-xs font-bold" style={{
+                                color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                              }}>
+                                {net > 0 ? 'gets back' : 'owes'} {currency} {Math.abs(net).toFixed(2)}
+                              </span>
+                            ))}
                           </span>
                           {hasDetails && (
                             <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '12px' }}>
