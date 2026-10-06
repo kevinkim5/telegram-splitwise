@@ -64,6 +64,22 @@ export async function ensureSchema() {
       deleted_at     TIMESTAMPTZ
     )
   `
+  // Per-expense activity log (created / edited / deleted / restored). member_id is null for
+  // actions taken by the admin panel. Expenses created before this table existed get a
+  // "created" entry synthesised when the activity is read.
+  await sql`
+    CREATE TABLE IF NOT EXISTS expense_events (
+      id         SERIAL PRIMARY KEY,
+      expense_id INTEGER NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+      member_id  INTEGER REFERENCES members(id) ON DELETE SET NULL,
+      actor      VARCHAR(10) NOT NULL DEFAULT 'member' CHECK(actor IN ('member', 'admin')),
+      type       VARCHAR(10) NOT NULL CHECK(type IN ('created', 'edited', 'deleted', 'restored')),
+      changes    JSONB NOT NULL DEFAULT '[]'::jsonb,
+      summary    TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS idx_expense_events_expense ON expense_events(expense_id, created_at DESC)`
   // Receipt-scan usage log, used to rate limit the paid vision call per user
   await sql`
     CREATE TABLE IF NOT EXISTS receipt_scans (

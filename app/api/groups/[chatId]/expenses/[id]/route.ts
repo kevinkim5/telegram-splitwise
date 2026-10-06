@@ -7,6 +7,8 @@ import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
 import { ownsKey, receiptViewUrl } from '@/lib/receipt-storage'
+import { insertEvent, loadActivity, loadMemberNames } from '@/lib/expense-events'
+import { diffExpense, type ExpenseSnapshot } from '@/lib/expense-history'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -59,7 +61,8 @@ export async function GET(
     return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
   }
 
-  return NextResponse.json(withReceipt(expense, chatId))
+  const activity = await loadActivity(expenseId)
+  return NextResponse.json({ ...withReceipt(expense, chatId), activity })
 }
 
 export async function PUT(
@@ -114,6 +117,35 @@ export async function PUT(
 
   const expenseDate = date ?? (existing.date as string)
 
+  // What changed, for the activity log (names are stored as they were at the time)
+  const names = await loadMemberNames(group.id as number)
+  const before = await getExpenseWithSplits(expenseId) as Record<string, unknown> | null
+  const toSnapshot = (o: {
+    description: string; total_amount: number; currency: string; paid_by_member_id: number
+    split_type: ExpenseSnapshot['split_type']; date: string; category: string | null
+    splits: { member_id: number; amount: number }[]
+  }): ExpenseSnapshot => ({
+    ...o,
+    paid_by_name: names.get(o.paid_by_member_id) ?? 'Someone',
+    splits: o.splits.map(x => ({ member_id: x.member_id, member_name: names.get(x.member_id) ?? '', amount: Number(x.amount) })),
+  })
+  const changes = before
+    ? diffExpense(
+        toSnapshot({
+          description: before.description as string, total_amount: Number(before.total_amount),
+          currency: before.currency as string, paid_by_member_id: before.paid_by_member_id as number,
+          split_type: before.split_type as ExpenseSnapshot['split_type'], date: String(before.date),
+          category: (before.category as string | null) ?? null,
+          splits: before.splits as { member_id: number; amount: number }[],
+        }),
+        toSnapshot({
+          description, total_amount, currency: currency ?? (existing.currency as string),
+          paid_by_member_id, split_type, date: String(expenseDate), category: category ?? null,
+          splits: resolvedSplits,
+        }),
+      )
+    : []
+
   const memberIds = resolvedSplits.map(s => s.member_id)
   const amounts = resolvedSplits.map(s => s.amount)
 
@@ -132,6 +164,7 @@ export async function PUT(
     sql`INSERT INTO expense_splits (expense_id, member_id, amount)
         SELECT ${expenseId}, t.m, t.a
         FROM unnest(${memberIds}::int[], ${amounts}::numeric[]) AS t(m, a)`,
+    ...(changes.length > 0 ? [insertEvent(expenseId, member.id, 'edited', changes)] : []),
   ])
 
   const result = await getExpenseWithSplits(expenseId)
@@ -162,6 +195,9 @@ export async function DELETE(
   `
   if (!existing) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
 
-  await sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${expenseId}`
+  await sql.transaction([
+    sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${expenseId}`,
+    insertEvent(expenseId, member.id, 'deleted'),
+  ])
   return NextResponse.json({ ok: true })
 }

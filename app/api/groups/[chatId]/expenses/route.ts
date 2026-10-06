@@ -6,6 +6,8 @@ import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
+import { loadMemberNames } from '@/lib/expense-events'
+import { createdSummary } from '@/lib/expense-history'
 
 async function getExpenseWithSplits(expenseId: number) {
   const [exp] = await sql`
@@ -109,7 +111,15 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const memberIds = resolvedSplits.map(s => s.member_id)
   const amounts = resolvedSplits.map(s => s.amount)
 
-  // Single atomic query: insert expense + all splits via writable CTE
+  const names = await loadMemberNames(group.id as number)
+  const summary = createdSummary({
+    description, total_amount, currency: currency ?? (group.currency as string),
+    paid_by_member_id, paid_by_name: names.get(paid_by_member_id) ?? 'Someone',
+    split_type, date: expenseDate, category: category ?? null,
+    splits: resolvedSplits.map(r => ({ member_id: r.member_id, member_name: names.get(r.member_id) ?? '', amount: r.amount })),
+  })
+
+  // Single atomic query: insert expense + all splits + its "created" activity entry via writable CTE
   const [{ id: expenseId }] = await sql`
     WITH new_exp AS (
       INSERT INTO expenses (group_id, description, total_amount, currency, paid_by_member_id, split_type, created_by_member_id, date, category)
@@ -119,6 +129,9 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
       INSERT INTO expense_splits (expense_id, member_id, amount)
       SELECT new_exp.id, t.m, t.a
       FROM new_exp, unnest(${memberIds}::int[], ${amounts}::numeric[]) AS t(m, a)
+    ), _event AS (
+      INSERT INTO expense_events (expense_id, member_id, type, summary)
+      SELECT new_exp.id, ${currentMember.id}, 'created', ${summary} FROM new_exp
     )
     SELECT id FROM new_exp
   `
