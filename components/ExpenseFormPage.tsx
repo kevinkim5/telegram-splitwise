@@ -357,9 +357,12 @@ export function ExpenseFormPage({ editId }: Props) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
-      {/* Header: Back, title, and the primary action always in reach at the top-right */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+    <div className="flex-1 min-h-0 flex flex-col page-enter">
+      {/* Header: pinned while the form scrolls. Back, title, and the primary action at the top-right */}
+      <div
+        className="flex items-center justify-between gap-3 shrink-0 px-4 pt-4 pb-3"
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', borderBottom: '0.5px solid rgba(128,128,128,0.25)' }}
+      >
         <button
           type="button"
           onClick={handleBack}
@@ -384,6 +387,7 @@ export function ExpenseFormPage({ editId }: Props) {
         </button>
       </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-8">
       {error && (
         <div className="mb-4 p-3 rounded-xl text-sm" style={{ background: 'rgba(255,59,48,0.1)', color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
           {error}
@@ -748,6 +752,7 @@ export function ExpenseFormPage({ editId }: Props) {
           )}
         </div>
       </form>
+      </div>
 
       {showCurrencyPicker && (
         <CurrencyPicker
