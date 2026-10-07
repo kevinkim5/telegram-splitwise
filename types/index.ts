@@ -42,6 +42,23 @@ export interface Expense {
   paid_by_name?: string
   my_split_amount?: number
   splits?: ExpenseSplit[]
+  activity?: ActivityEvent[]
+}
+
+export interface ActivityChange {
+  field: 'description' | 'amount' | 'paid_by' | 'date' | 'category' | 'split' | 'receipt'
+  from?: string | null
+  to?: string | null
+}
+
+export interface ActivityEvent {
+  id: number | null
+  type: 'created' | 'edited' | 'deleted' | 'restored'
+  actor: 'member' | 'admin'
+  actor_name: string | null
+  created_at: string
+  changes: ActivityChange[]
+  summary: string | null
 }
 
 export interface Settlement {

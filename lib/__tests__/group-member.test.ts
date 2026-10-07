@@ -138,10 +138,14 @@ describe('DELETE /api/groups/[chatId]/expenses/[id]', () => {
       .mockResolvedValueOnce([{ id: 7 }])    // group found
       .mockResolvedValueOnce([{ id: 3 }])    // getGroupMember → is a member
       .mockResolvedValueOnce([{ id: 55 }])   // expense exists
-      .mockResolvedValueOnce([])             // UPDATE (soft delete)
+    // soft delete + "deleted" activity entry run as one transaction
+    const tx = vi.fn().mockResolvedValue([])
+    ;(sql as unknown as { transaction: unknown }).transaction = tx
 
     const res = await expenseDELETE(makeRequest(), { params })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
+    expect(tx).toHaveBeenCalledTimes(1)
+    expect((tx.mock.calls[0][0] as unknown[]).length).toBe(2)
   })
 })
