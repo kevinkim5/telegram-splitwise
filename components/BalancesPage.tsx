@@ -6,7 +6,7 @@ import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
-import { breakdown, sumConverted, type CurrencyLine } from '@/lib/convert'
+import { sumConverted, type CurrencyLine } from '@/lib/convert'
 import { buildPayments, checkAmount, groupDebtsByPerson, type Payment, type SettleGroup } from '@/lib/settle'
 import { CURRENCIES } from '@/components/CurrencyPicker'
 
@@ -249,11 +249,12 @@ export function BalancesPage() {
   const [notifySent, setNotifySent] = useState(false)
 
   // Currency conversion
-  const [converting, setConverting] = useState(false)
-  const [showConverted, setShowConverted] = useState(false)
   const [directRates, setDirectRates] = useState<Record<string, number> | null>(null)
-  const [convertError, setConvertError] = useState<string | null>(null)
+  const [ratesFailed, setRatesFailed] = useState(false)
+  const [ratesTry, setRatesTry] = useState(0) // bump to retry loading rates
   const [ratesDate, setRatesDate] = useState<string | null>(null)
+  // Everything is shown converted as soon as rates are in; until then (or if they fail) originals
+  const showConverted = directRates !== null
 
   const handleNotify = async () => {
     setNotifying(true)
@@ -294,25 +295,6 @@ export function BalancesPage() {
 
   useEffect(() => { loadBalances() }, [loadBalances])
 
-  const fetchRates = async () => {
-    if (directRates) { setShowConverted(v => !v); return }
-    setConverting(true)
-    setConvertError(null)
-    try {
-      const froms = foreignCurrencies.join(',')
-      const res = await fetch(`/api/rates?from=${froms}&to=${CONVERT_TO}`)
-      if (!res.ok) throw new Error('fetch failed')
-      const json = await res.json() as { rates: Record<string, number>; date?: string }
-      setDirectRates(json.rates)
-      setRatesDate(json.date ?? null)
-      setShowConverted(true)
-    } catch {
-      setConvertError("Couldn't load exchange rates. Check your connection and try again.")
-    } finally {
-      setConverting(false)
-    }
-  }
-
   // Record the chosen payments (one per currency) in a single request: all saved or none.
   const handleRecord = async (payments: Payment[]) => {
     const res = await fetch(`/api/groups/${chatId}/settlements/batch`, {
@@ -350,16 +332,6 @@ export function BalancesPage() {
   // The same debts, one group per person you owe or are owed by
   const settleGroups = groupDebtsByPerson(data?.simplified_debts ?? [], currentMember.id)
 
-  // My net per currency from balances_by_currency
-  const myCurrencyLines: { currency: string; net: number }[] = data
-    ? Object.entries(data.balances_by_currency).flatMap(([cur, bals]) => {
-        const mine = bals.find(b => b.member_id === currentMember.id)
-        return mine && Math.abs(mine.net_amount) > 0.005
-          ? [{ currency: cur, net: mine.net_amount }]
-          : []
-      })
-    : []
-
   // Other members (not me)
   const otherMemberIds = data
     ? [...new Set(data.balances.filter(b => b.member_id !== currentMember.id).map(b => b.member_id))]
@@ -396,22 +368,24 @@ export function BalancesPage() {
         .map(([cur]) => cur)
     : []
 
-  // The "You" rows always show an SGD total, so load rates as soon as there is a foreign currency
-  // to convert (the Convert button below only switches the combined view of everyone else).
+  // Rates load on their own as soon as there is a foreign currency to convert; everything on the
+  // page is then shown in CONVERT_TO, with the original amounts alongside.
   const foreignKey = foreignCurrencies.join(',')
   useEffect(() => {
-    if (!foreignKey || directRates) return
+    if (!foreignKey) return
     let cancelled = false
+    setRatesFailed(false)
     fetch(`/api/rates?from=${foreignKey}&to=${CONVERT_TO}`)
       .then(r => (r.ok ? r.json() : null))
       .then((j: { rates?: Record<string, number>; date?: string } | null) => {
-        if (cancelled || !j?.rates) return
+        if (cancelled) return
+        if (!j?.rates) { setRatesFailed(true); return }
         setDirectRates(j.rates)
         setRatesDate(j.date ?? null)
       })
-      .catch(() => {})
+      .catch(() => { if (!cancelled) setRatesFailed(true) })
     return () => { cancelled = true }
-  }, [foreignKey, directRates])
+  }, [foreignKey, ratesTry])
 
   // Convert an amount to CONVERT_TO. Null when no rate is available.
   const toTarget = (amount: number, fromCurrency: string): number | null => {
@@ -434,10 +408,8 @@ export function BalancesPage() {
     // A total with a currency left out would be wrong, so unless every currency converted we keep
     // the original per-currency lines (the banner says which currency has no rate).
     if (!sum.usedAny || sum.missing.length > 0) return null
-    const note = lines.length > 1 || lines[0]?.currency !== CONVERT_TO ? breakdown(lines) : ''
-    return { total: sum.total, even: Math.abs(sum.total) < 0.005, note }
+    return { total: sum.total, even: Math.abs(sum.total) < 0.005, approx: lines.some(l => l.currency !== CONVERT_TO) }
   }
-  const myCombined = combined(myCurrencyLines)
 
   // Currencies with a balance that the rate service had no rate for
   const unrated = showConverted ? foreignCurrencies.filter(c => !directRates?.[c]) : []
@@ -485,45 +457,26 @@ export function BalancesPage() {
           {notifyError}
         </p>
       )}
-      {data && !allSettled && foreignCurrencies.length > 0 && (
-        <div className="mb-5">
-          <div
-            className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5"
-            style={{ background: showConverted ? 'rgba(0,122,255,0.1)' : 'var(--tg-theme-secondary-bg-color)' }}
-          >
-            <div className="min-w-0 text-xs leading-snug">
-              <p className="font-semibold">
-                {showConverted ? `Showing ≈ ${CONVERT_TO}` : 'Amounts in multiple currencies'}
-              </p>
-              <p style={{ color: 'var(--tg-theme-hint-color)' }}>
-                {showConverted
-                  ? `ECB rates${ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}${unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}`
-                  : `${foreignCurrencies.join(', ')} · tap to see everything in ${CONVERT_TO}`}
-              </p>
-            </div>
-            <button
-              onClick={() => (showConverted ? setShowConverted(false) : fetchRates())}
-              disabled={converting}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg flex-shrink-0"
-              style={{
-                background: showConverted ? 'var(--tg-theme-bg-color)' : 'var(--tg-theme-button-color)',
-                color: showConverted ? 'var(--tg-theme-link-color)' : 'var(--tg-theme-button-text-color)',
-                border: 'none',
-                cursor: converting ? 'default' : 'pointer',
-                opacity: converting ? 0.6 : 1,
-              }}
-            >
-              {converting
-                ? 'Converting…'
-                : showConverted
-                  ? 'Show original'
-                  : convertError ? 'Retry' : `Convert to ${CONVERT_TO}`}
-            </button>
-          </div>
-          {convertError && !showConverted && (
-            <p className="text-xs mt-2 px-1" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-              {convertError}
+      {data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed) && (
+        <div className="mb-4 px-1 text-xs flex items-center justify-between gap-3" style={{ color: 'var(--tg-theme-hint-color)' }}>
+          {showConverted ? (
+            <p>
+              ECB rates{ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}
+              {unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}
             </p>
+          ) : (
+            <>
+              <p style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
+                Couldn&apos;t load exchange rates, so amounts are shown in their own currencies.
+              </p>
+              <button
+                onClick={() => setRatesTry(n => n + 1)}
+                className="font-semibold flex-shrink-0"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+              >
+                Retry
+              </button>
+            </>
           )}
         </div>
       )}
@@ -550,42 +503,15 @@ export function BalancesPage() {
           <div>
             <p className="tg-label mb-2">You</p>
             <div className="tg-section">
-              {/* Your net per currency */}
-              <div className="tg-list-item" style={{ borderBottom: myDebts.length > 0 ? undefined : 'none' }}>
-                <p className="text-sm font-medium mb-1">
-                  {currentMember.first_name}{currentMember.last_name ? ` ${currentMember.last_name}` : ''}
-                </p>
-                {myCurrencyLines.length === 0 ? (
+              {/* Nothing owed either way */}
+              {settleGroups.length === 0 && (
+                <div className="tg-list-item" style={{ borderBottom: 'none' }}>
+                  <p className="text-sm font-medium mb-1">
+                    {currentMember.first_name}{currentMember.last_name ? ` ${currentMember.last_name}` : ''}
+                  </p>
                   <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>All settled up ✓</p>
-                ) : myCombined ? (
-                  <div>
-                    <p className="text-sm font-semibold" style={{
-                      color: myCombined.even
-                        ? 'var(--tg-theme-hint-color)'
-                        : myCombined.total > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                    }}>
-                      {myCombined.even
-                        ? `Evens out ≈ ${CONVERT_TO} 0.00`
-                        : myCombined.total > 0
-                          ? `You get back ≈ ${CONVERT_TO} ${myCombined.total.toFixed(2)}`
-                          : `You owe ≈ ${CONVERT_TO} ${Math.abs(myCombined.total).toFixed(2)}`}
-                    </p>
-                    {myCombined.note && (
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--tg-theme-hint-color)' }}>{myCombined.note}</p>
-                    )}
-                  </div>
-                ) : (
-                  myCurrencyLines.map(({ currency, net }) => (
-                    <p key={currency} className="text-xs font-medium" style={{
-                      color: net > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                    }}>
-                      {net > 0
-                        ? `You get back ${currency} ${net.toFixed(2)}`
-                        : `You owe ${currency} ${Math.abs(net).toFixed(2)}`}
-                    </p>
-                  ))
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Debts involving you, one row per person */}
               {settleGroups.map((g, idx) => {
@@ -681,19 +607,14 @@ export function BalancesPage() {
                             {lines.length === 0 ? (
                               <span className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>Settled</span>
                             ) : memberCombined ? (
-                              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                <span className="text-xs font-bold" style={{
-                                  color: memberCombined.even
-                                    ? 'var(--tg-theme-hint-color)'
-                                    : memberCombined.total > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
-                                }}>
-                                  {memberCombined.even
-                                    ? `evens out ≈ ${CONVERT_TO} 0.00`
-                                    : `${memberCombined.total > 0 ? 'gets back' : 'owes'} ≈ ${CONVERT_TO} ${Math.abs(memberCombined.total).toFixed(2)}`}
-                                </span>
-                                {memberCombined.note && (
-                                  <span style={{ fontSize: 10, color: 'var(--tg-theme-hint-color)', textAlign: 'right' }}>{memberCombined.note}</span>
-                                )}
+                              <span className="text-xs font-bold" style={{
+                                color: memberCombined.even
+                                  ? 'var(--tg-theme-hint-color)'
+                                  : memberCombined.total > 0 ? 'var(--tg-theme-button-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                              }}>
+                                {memberCombined.even
+                                  ? `evens out ${CONVERT_TO} 0.00`
+                                  : `${memberCombined.total > 0 ? 'gets back' : 'owes'} ${memberCombined.approx ? '≈ ' : ''}${CONVERT_TO} ${Math.abs(memberCombined.total).toFixed(2)}`}
                               </span>
                             ) : lines.map(({ currency, net }) => (
                               <span key={currency} className="text-xs font-bold" style={{
@@ -723,10 +644,10 @@ export function BalancesPage() {
                                 {theyOwe ? `${name} owes ${other}` : `${other} owes ${name}`}
                                 {' '}
                                 <span className="font-semibold" style={{ color: 'var(--tg-theme-text-color)' }}>
-                                  {d.currency} {d.amount.toFixed(2)}
+                                  {approx ?? `${d.currency} ${d.amount.toFixed(2)}`}
                                 </span>
                                 {approx && (
-                                  <span style={{ color: 'var(--tg-theme-hint-color)', fontWeight: 400 }}> ({approx})</span>
+                                  <span style={{ color: 'var(--tg-theme-hint-color)', fontWeight: 400 }}> ({d.currency} {d.amount.toFixed(2)})</span>
                                 )}
                               </p>
                             )
