@@ -32,12 +32,10 @@ describe('buildNotifyMessage', () => {
       '',
       '<b>Cai</b> owes:',
       '  • @kev  ≈ SGD 10.00 (THB 250.00)',
-      '',
-      "<i>≈ SGD at today's exchange rates</i>",
     ].join('\n'))
   })
 
-  it('leaves SGD-only lines alone (no ≈, no breakdown, no rates footnote)', () => {
+  it('leaves SGD-only lines alone (no ≈, no breakdown)', () => {
     const msg = buildNotifyMessage('Trip', [debt(7, 8, 12, 'SGD')], display, RATES)
     expect(msg).toContain('  • @ann  SGD 12.00')
     expect(msg).not.toContain('≈')
@@ -135,7 +133,7 @@ describe('POST /notify-balances', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0].parse_mode).toBe('HTML')
     expect(sent[0].text).toMatch(/<b>@kev<\/b> owes:\n {2}• @ann {2}≈ SGD \d+\.\d\d \(JPY 3000\.00 \+ USD 18\.50\)/)
-    expect(sent[0].text).toContain("<i>≈ SGD at today's exchange rates</i>")
+    expect(sent[0].text).not.toContain('exchange rates')
   })
 
   it('still sends (in original currencies) when the rates service is down', async () => {

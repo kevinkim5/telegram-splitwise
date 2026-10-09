@@ -23,7 +23,6 @@ export function buildNotifyMessage(
     byDebtor.set(d.from_member_id, creditors)
   }
 
-  let converted = false
   const sections = [...byDebtor.entries()].map(([debtorId, creditors]) => {
     const rows = [...creditors.entries()].map(([creditorId, lines]) => {
       const parts = lines.map(l => `${l.currency} ${l.amount.toFixed(2)}`)
@@ -34,7 +33,6 @@ export function buildNotifyMessage(
       if (onlyTarget) {
         amount = parts.join(' + ')
       } else if (sum && sum.missing.length === 0) {
-        converted = true
         amount = `≈ ${NOTIFY_TARGET} ${sum.total.toFixed(2)} (${parts.join(' + ')})`
       } else {
         amount = parts.join(' + ')
@@ -48,6 +46,5 @@ export function buildNotifyMessage(
     `💰 <b>${esc(title)}</b> — outstanding balances`,
     '',
     sections.join('\n\n'),
-    ...(converted ? ['', `<i>≈ ${NOTIFY_TARGET} at today's exchange rates</i>`] : []),
   ].join('\n')
 }
