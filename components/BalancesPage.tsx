@@ -396,6 +396,23 @@ export function BalancesPage() {
         .map(([cur]) => cur)
     : []
 
+  // The "You" rows always show an SGD total, so load rates as soon as there is a foreign currency
+  // to convert (the Convert button below only switches the combined view of everyone else).
+  const foreignKey = foreignCurrencies.join(',')
+  useEffect(() => {
+    if (!foreignKey || directRates) return
+    let cancelled = false
+    fetch(`/api/rates?from=${foreignKey}&to=${CONVERT_TO}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((j: { rates?: Record<string, number>; date?: string } | null) => {
+        if (cancelled || !j?.rates) return
+        setDirectRates(j.rates)
+        setRatesDate(j.date ?? null)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [foreignKey, directRates])
+
   // Convert an amount to CONVERT_TO. Null when no rate is available.
   const toTarget = (amount: number, fromCurrency: string): number | null => {
     if (fromCurrency === CONVERT_TO) return amount
@@ -573,33 +590,49 @@ export function BalancesPage() {
               {/* Debts involving you, one row per person */}
               {settleGroups.map((g, idx) => {
                 const isLast = idx === settleGroups.length - 1
+                const owe = 'var(--tg-theme-destructive-text-color, #ff3b30)'
+                const get = 'var(--tg-theme-button-color)'
+                const hint = 'var(--tg-theme-hint-color)'
                 const lines = g.entries.map(e => ({ currency: e.currency, net: e.direction === 'pay' ? -e.owed : e.owed }))
-                const multi = g.entries.length > 1
-                const sum = showConverted && multi ? sumConverted(lines, directRates, CONVERT_TO) : null
-                const net = sum && sum.usedAny && sum.missing.length === 0 ? sum.total : null
-                const single = !multi ? approxStr(g.entries[0]!.owed, g.entries[0]!.currency) : null
+                // SGD total of everything with this person (signed: negative = you owe), only when every
+                // currency has a rate, never a partial total
+                const sum = directRates || g.entries.every(e => e.currency === CONVERT_TO)
+                  ? sumConverted(lines, directRates, CONVERT_TO) : null
+                const total = sum && sum.usedAny && sum.missing.length === 0 ? sum.total : null
+                const mixed = g.entries.some(e => e.direction === 'pay') && g.entries.some(e => e.direction === 'receive')
+                const only = g.entries.length === 1 ? g.entries[0]! : null
+
+                // Headline: "Jac owes you ≈ SGD 52.09" / "You owe Jac SGD 12.00"
+                let headline: string
+                let color = get
+                if (total !== null) {
+                  const approx = g.entries.some(e => e.currency !== CONVERT_TO) ? '≈ ' : ''
+                  const amount = `${approx}${CONVERT_TO} ${Math.abs(total).toFixed(2)}`
+                  if (Math.abs(total) < 0.005) { headline = `${g.personName}: evens out`; color = hint }
+                  else if (total < 0) { headline = `You owe ${g.personName} ${amount}${mixed ? ' net' : ''}`; color = owe }
+                  else { headline = `${g.personName} owes you ${amount}${mixed ? ' net' : ''}` }
+                } else if (only) {
+                  headline = only.direction === 'pay'
+                    ? `You owe ${g.personName} ${only.currency} ${only.owed.toFixed(2)}`
+                    : `${g.personName} owes you ${only.currency} ${only.owed.toFixed(2)}`
+                  color = only.direction === 'pay' ? owe : get
+                } else {
+                  headline = g.personName
+                  color = 'var(--tg-theme-text-color)'
+                }
+                // The original amounts, unless the headline already is the exact amount
+                const showLines = !!sum && (g.entries.length > 1 || (total !== null && only!.currency !== CONVERT_TO))
+                  || (!sum && g.entries.length > 1)
                 return (
                   <div key={g.personId} className="tg-list-item flex items-center justify-between gap-3"
                     style={{ borderBottom: isLast ? 'none' : undefined }}>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{g.personName}</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {g.entries.map(e => (
-                          <span key={e.key} className="text-xs font-bold" style={{
-                            borderRadius: 999, padding: '2px 9px',
-                            color: e.direction === 'pay' ? 'var(--tg-theme-destructive-text-color, #ff3b30)' : 'var(--tg-theme-button-color)',
-                            background: e.direction === 'pay' ? 'rgba(255,59,48,0.1)' : 'rgba(36,129,204,0.1)',
-                          }}>
-                            {e.direction === 'pay' ? 'you owe' : 'owes you'} {e.currency} {e.owed.toFixed(2)}
-                          </span>
-                        ))}
-                      </div>
-                      {net !== null && Math.abs(net) >= 0.005 && (
-                        <p className="text-xs mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                          net ≈ {CONVERT_TO} {Math.abs(net).toFixed(2)} {net < 0 ? 'you owe' : 'owed to you'}
+                      <p className="text-sm font-semibold" style={{ color }}>{headline}</p>
+                      {showLines && g.entries.map(e => (
+                        <p key={e.key} className="text-xs mt-0.5" style={{ color: e.direction === 'pay' ? owe : get, paddingLeft: 12 }}>
+                          {e.direction === 'pay' ? 'you owe' : 'owes you'} {e.currency} {e.owed.toFixed(2)}
                         </p>
-                      )}
-                      {single && <p className="text-xs mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>{single}</p>}
+                      ))}
                     </div>
                     <button
                       onClick={() => setSettleTarget(g)}
@@ -717,7 +750,7 @@ export function BalancesPage() {
       {settleTarget && (
         <SettleSheet
           group={settleTarget}
-          rates={showConverted ? directRates : null}
+          rates={directRates}
           onClose={() => setSettleTarget(null)}
           onConfirm={handleRecord}
         />
