@@ -560,7 +560,7 @@ export function ExpensesPage() {
     <>
     <div className="flex flex-col h-full">
     {/* Scrollable list */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24">
+    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab">
       {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />

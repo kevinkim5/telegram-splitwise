@@ -78,6 +78,19 @@ function Shell() {
   const active = tabFromPath(pathname)
   const [showMembers, setShowMembers] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  // While a text field has focus the on-screen keyboard is (or is about to be) up: the "+" would sit
+  // on top of what is being typed, so it steps aside until focus leaves the field.
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    const isField = (el: EventTarget | null) =>
+      el instanceof HTMLElement && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' ||
+        (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((el as HTMLInputElement).type)))
+    const on = (e: FocusEvent) => { if (isField(e.target)) setTyping(true) }
+    const off = () => setTyping(false)
+    document.addEventListener('focusin', on)
+    document.addEventListener('focusout', off)
+    return () => { document.removeEventListener('focusin', on); document.removeEventListener('focusout', off) }
+  }, [])
   // A tab mounts the first time it is opened and then stays mounted (hidden), so switching back
   // is instant and keeps its scroll position and anything typed or expanded in it.
   const [opened, setOpened] = useState<Set<TabKey>>(() => new Set([active]))
@@ -176,11 +189,17 @@ function Shell() {
       <button
         onClick={() => router.push(`/add?chatId=${chatId}`)}
         aria-label="Add expense"
+        aria-hidden={typing}
+        tabIndex={typing ? -1 : 0}
         className="absolute flex items-center justify-center"
         style={{
-          right: 16, bottom: 'calc(env(safe-area-inset-bottom) + 20px)', width: 52, height: 52, borderRadius: '50%',
+          // clear of the phone's bottom/side safe areas (browser env() and Telegram's own insets)
+          right: 'calc(16px + max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px)))',
+          bottom: 'calc(20px + max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)))',
+          width: 52, height: 52, borderRadius: '50%',
           background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)', border: 'none',
           fontSize: 30, lineHeight: 1, cursor: 'pointer', zIndex: 40, boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+          opacity: typing ? 0 : 1, pointerEvents: typing ? 'none' : 'auto', transition: 'opacity 0.12s',
         }}
       >
         +
