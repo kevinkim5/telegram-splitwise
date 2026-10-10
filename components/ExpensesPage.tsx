@@ -432,6 +432,9 @@ function SkeletonExpenseGroup({ count, first = false }: { count: number; first?:
   )
 }
 
+// How long typing must pause before the server is asked (typical typeahead range is 250-400ms)
+const SEARCH_PAUSE_MS = 350
+
 export function ExpensesPage() {
   const router = useRouter()
   const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
@@ -462,6 +465,10 @@ export function ExpensesPage() {
   const [showDate, setShowDate] = useState(false)
   const [summary, setSummary] = useState<CurrencyTotal[] | null>(null)
   const latestRequest = useRef(0)
+  // A new search/date range keeps the current results on screen (dimmed) until the answer arrives, instead of
+  // blanking to skeletons on every pause in typing
+  const [searching, setSearching] = useState(false)
+  const keepList = useRef(false)
   useEffect(() => {
     try { sessionStorage.setItem(storageKey, JSON.stringify(filters)) } catch { /* ignore */ }
   }, [filters, storageKey])
@@ -478,7 +485,12 @@ export function ExpensesPage() {
   // silent: a background refresh. Keeps what is on screen, and a failure is ignored.
   const fetchExpenses = useCallback(async (p: number, silent = false) => {
     const mine = ++latestRequest.current // a slower, older answer must never overwrite a newer one
-    if (!silent) { setLoading(true); setError(null) }
+    const keep = keepList.current
+    keepList.current = false
+    if (!silent) {
+      if (keep) setSearching(true); else setLoading(true)
+      setError(null)
+    }
     try {
       const res = await fetch(`/api/groups/${chatId}/expenses?${buildExpensesQuery({ page: p, filters })}`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -492,7 +504,7 @@ export function ExpensesPage() {
     } catch (e) {
       if (mine === latestRequest.current && !silent) setError(String(e))
     } finally {
-      if (mine === latestRequest.current && !silent) setLoading(false)
+      if (mine === latestRequest.current && !silent) { setLoading(false); setSearching(false) }
     }
   }, [chatId, apiHeaders, filters])
 
@@ -519,13 +531,12 @@ export function ExpensesPage() {
     refreshBalances(STALE_AFTER_MS)
   })
 
-  // A new search or date range starts from page 1 and shows a skeleton, not the previous results
+  // A new search or date range starts from page 1; the previous results stay (dimmed) until the answer lands
   const applyFilters = (next: ExpenseFilters) => {
+    if (next.q === filters.q && next.range.from === filters.range.from && next.range.to === filters.range.to) return
+    keepList.current = true
     setFilters(next)
     setPage(1)
-    setExpenses([])
-    setSummary(null)
-    setLoading(true)
     setError(null)
   }
   const setRange = (range: DateRange) => { setShowDate(false); applyFilters({ ...filters, range }) }
@@ -535,7 +546,7 @@ export function ExpensesPage() {
   useEffect(() => {
     const q = qInput.trim()
     if (q === filters.q) return
-    const t = setTimeout(() => applyFilters({ ...filters, q }), 300)
+    const t = setTimeout(() => applyFilters({ ...filters, q }), SEARCH_PAUSE_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qInput])
@@ -639,7 +650,7 @@ export function ExpensesPage() {
     </div>
     {filtersOn && !error && (
       <div className="flex-shrink-0 px-5 pb-1 text-xs flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--tg-theme-hint-color)', minHeight: 20 }} aria-live="polite">
-        {loading ? <span>Searching…</span> : (
+        {loading || searching ? <span>Searching…</span> : (
           <>
             <span>
               {total} expense{total === 1 ? '' : 's'}
@@ -657,7 +668,7 @@ export function ExpensesPage() {
     )}
 
     {/* Scrollable list */}
-    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab">
+    <div data-tab-scroll aria-busy={searching} className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab" style={{ opacity: searching ? 0.5 : 1, transition: 'opacity 0.15s' }}>
       {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />
