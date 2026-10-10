@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildExpensesQuery, escapeLike, hasFilters, inRange, isValidYmd, matchPreset, normalizeRange, parseFilterParams,
+  buildExpensesQuery, escapeLike, hasFilters, inRange, isValidYmd, matchPreset, normalizeRange, parseFilterParams, parsePaging,
   presetRange, rangeLabel, ymd,
 } from '@/lib/expense-filter'
 
@@ -101,5 +101,26 @@ describe('inRange', () => {
     expect(inRange(new Date(2026, 9, 5, 0, 1).toISOString(), r)).toBe(false)
     expect(inRange(new Date(2026, 9, 5).toISOString(), { from: '2026-10-02', to: null })).toBe(true)
     expect(ymd(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+})
+
+describe('paging', () => {
+  const sp = (s: string) => new URLSearchParams(s)
+  const F = { q: '', range: { from: null, to: null } }
+  it('defaults to the first 30', () => {
+    expect(parsePaging(sp(''))).toEqual({ page: 1, limit: 30, offset: 0 })
+  })
+  it('page still works, offset wins over page', () => {
+    expect(parsePaging(sp('page=3'))).toEqual({ page: 3, limit: 30, offset: 60 })
+    expect(parsePaging(sp('page=3&offset=5'))).toMatchObject({ offset: 5 })
+  })
+  it('clamps limit and offset, ignores junk', () => {
+    expect(parsePaging(sp('limit=99999')).limit).toBe(300)
+    expect(parsePaging(sp('limit=0')).limit).toBe(1)
+    expect(parsePaging(sp('limit=abc&offset=-4'))).toMatchObject({ limit: 30, offset: 0 })
+  })
+  it('builds offset/limit queries', () => {
+    expect(buildExpensesQuery({ offset: 30, limit: 30, filters: F })).toBe('offset=30&limit=30')
+    expect(buildExpensesQuery({ offset: 0, limit: 90, filters: { ...F, q: 'x' } })).toBe('offset=0&limit=90&q=x')
   })
 })
