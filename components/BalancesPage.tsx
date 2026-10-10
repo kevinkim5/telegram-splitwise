@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useGroupData } from '@/components/GroupData'
+import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
@@ -235,12 +236,12 @@ function SkeletonBalances() {
 // default currency, which only pre-selects the currency when adding an expense.
 
 export function BalancesPage() {
-  const router = useRouter()
   const { chatId, currentMember, apiHeaders } = useAppContext()
-  const [data, setData] = useState<BalancesData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const showSkeleton = useShowSkeleton(loading)
+  // One shared copy of the balances (the header's "You owe" line uses it too)
+  const { balances: data, balancesLoading: loading, balancesError: error, refreshBalances: loadBalances } = useGroupData()
+  const delayedSkeleton = useShowSkeleton(loading)
+  const showSkeleton = (loading && !data) || delayedSkeleton // skeleton straight away on first open
+  useOnTabShown(() => { loadBalances(STALE_AFTER_MS) }) // quietly refresh when coming back after a while
   const [settleTarget, setSettleTarget] = useState<SettleGroup | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
@@ -282,21 +283,6 @@ export function BalancesPage() {
     }
   }
 
-  const loadBalances = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setData(await res.json())
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [chatId, apiHeaders])
-
-  useEffect(() => { loadBalances() }, [loadBalances])
 
   // Record the chosen payments (one per currency) in a single request: all saved or none.
   const handleRecord = async (payments: Payment[]) => {
@@ -395,38 +381,52 @@ export function BalancesPage() {
     new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/?chatId=${chatId}`)}
-            className="text-sm font-medium"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
-          >
-            ← Back
-          </button>
-          <h1 className="font-bold text-lg">Balances</h1>
-        </div>
-        {data && !allSettled && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={handleNotify}
-              disabled={notifying}
-              className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
-              style={{
-                background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
-                border: 'none',
-                cursor: notifying ? 'default' : 'pointer',
-                color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
-                opacity: notifying ? 0.6 : 1,
-              }}
-            >
-              {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
-            </button>
+    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto p-4 pb-fab">
+      {/* One row: the rates note on the left, Notify Group on the right */}
+      {(() => {
+        const showRatesInfo = !!data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed)
+        const showNotify = !!data && !allSettled
+        if (!showRatesInfo && !showNotify) return null
+        return (
+          <div className="flex items-center justify-between gap-3 mb-4 px-1">
+            <div className="min-w-0 text-xs leading-snug" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {showRatesInfo && (showConverted ? (
+                <p>
+                  ECB rates{ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}
+                  {unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}
+                </p>
+              ) : (
+                <p>
+                  <span style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>Couldn&apos;t load exchange rates. </span>
+                  <button
+                    onClick={retryRates}
+                    className="font-semibold"
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+                  >
+                    Retry
+                  </button>
+                </p>
+              ))}
+            </div>
+            {showNotify && (
+              <button
+                onClick={handleNotify}
+                disabled={notifying}
+                className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
+                style={{
+                  background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
+                  border: 'none',
+                  cursor: notifying ? 'default' : 'pointer',
+                  color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
+                  opacity: notifying ? 0.6 : 1,
+                }}
+              >
+                {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
+              </button>
+            )}
           </div>
-        )}
-      </div>
+        )
+      })()}
 
       {/* Inline error rows */}
       {notifyError && (
@@ -434,34 +434,18 @@ export function BalancesPage() {
           {notifyError}
         </p>
       )}
-      {data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed) && (
-        <div className="mb-4 px-1 text-xs flex items-center justify-between gap-3" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          {showConverted ? (
-            <p>
-              ECB rates{ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}
-              {unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}
-            </p>
-          ) : (
-            <>
-              <p style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-                Couldn&apos;t load exchange rates, so amounts are shown in their own currencies.
-              </p>
-              <button
-                onClick={retryRates}
-                className="font-semibold flex-shrink-0"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
-              >
-                Retry
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       {showSkeleton && <SkeletonBalances />}
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
-          {error}
+          <p>Couldn&apos;t load balances. {error}</p>
+          <button
+            onClick={() => loadBalances()}
+            className="font-semibold mt-2"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 

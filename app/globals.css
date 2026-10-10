@@ -130,3 +130,10 @@ input[type="number"] {
   background-color: var(--tg-theme-secondary-bg-color);
   animation: skeletonPulse 1.6s ease-in-out infinite;
 }
+
+/* Space at the bottom of a scrolling tab so the last item stays clear of the floating "+" (52px
+   button + 20px gap + 20px breathing room), including the phone's bottom safe area. Telegram
+   publishes its own inset as --tg-safe-area-inset-*; the browser's env() covers the rest. */
+.pb-fab {
+  padding-bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)) + 92px);
+}

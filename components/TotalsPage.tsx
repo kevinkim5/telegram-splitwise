@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
+import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
 import { CONVERT_TO } from '@/lib/convert'
 import { useRates } from '@/lib/use-rates'
 import { combineTotals } from '@/lib/totals-all'
@@ -66,30 +66,35 @@ function SkeletonTotals() {
 }
 
 export function TotalsPage() {
-  const router = useRouter()
   const { chatId, group, apiHeaders } = useAppContext()
   const [data, setData] = useState<TotalsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null)
-  const showSkeleton = useShowSkeleton(loading)
+  const delayedSkeleton = useShowSkeleton(loading)
+  const showSkeleton = (loading && !data) || delayedSkeleton // skeleton straight away on first open
+  const loadedAt = useRef(0)
 
-  const fetchTotals = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  // silent: a background refresh that keeps what is on screen and ignores a failure
+  const fetchTotals = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(null) }
     try {
       const res = await fetch(`/api/groups/${chatId}/totals`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const d: TotalsData = await res.json()
       setData(d)
+      setError(null)
+      loadedAt.current = Date.now()
     } catch (e) {
-      setError(String(e))
+      if (!silent) setError(String(e))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [chatId, apiHeaders])
 
   useEffect(() => { fetchTotals() }, [fetchTotals])
+  // coming back to this tab after a while: refresh quietly
+  useOnTabShown(() => { if (Date.now() - loadedAt.current >= STALE_AFTER_MS) fetchTotals(true) })
 
   const isMultiCurrency = (data?.summary.length ?? 0) > 1
   // With several currencies the page opens on "All": everything converted into CONVERT_TO
@@ -121,27 +126,22 @@ export function TotalsPage() {
   })()
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto page-enter">
-      <div className="px-4 pt-4 pb-8 flex flex-col gap-4">
-
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push(`/?chatId=${chatId}`)}
-            className="text-sm font-medium"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
-          >
-            ← Back
-          </button>
-          <h1 className="font-bold text-lg">Totals</h1>
-        </div>
+    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto">
+      <div className="px-4 pt-3 pb-fab flex flex-col gap-4">
 
         {showSkeleton && <SkeletonTotals />}
 
         {/* Error */}
         {error && (
           <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-            {error}
+            <p>Couldn&apos;t load totals. {error}</p>
+            <button
+              onClick={() => fetchTotals()}
+              className="font-semibold mt-2"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+            >
+              Try again
+            </button>
           </div>
         )}
 
