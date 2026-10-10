@@ -378,55 +378,58 @@ export function BalancesPage() {
     new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24">
-      {/* Notify Group: the only action that lives in this tab's header row */}
-      {data && !allSettled && (
-        <div className="flex justify-end mb-3">
-          <button
-            onClick={handleNotify}
-            disabled={notifying}
-            className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
-            style={{
-              background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
-              border: 'none',
-              cursor: notifying ? 'default' : 'pointer',
-              color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
-              opacity: notifying ? 0.6 : 1,
-            }}
-          >
-            {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
-          </button>
-        </div>
-      )}
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-fab">
+      {/* One row: the rates note on the left, Notify Group on the right */}
+      {(() => {
+        const showRatesInfo = !!data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed)
+        const showNotify = !!data && !allSettled
+        if (!showRatesInfo && !showNotify) return null
+        return (
+          <div className="flex items-center justify-between gap-3 mb-4 px-1">
+            <div className="min-w-0 text-xs leading-snug" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {showRatesInfo && (showConverted ? (
+                <p>
+                  ECB rates{ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}
+                  {unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}
+                </p>
+              ) : (
+                <p>
+                  <span style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>Couldn&apos;t load exchange rates. </span>
+                  <button
+                    onClick={retryRates}
+                    className="font-semibold"
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+                  >
+                    Retry
+                  </button>
+                </p>
+              ))}
+            </div>
+            {showNotify && (
+              <button
+                onClick={handleNotify}
+                disabled={notifying}
+                className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
+                style={{
+                  background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
+                  border: 'none',
+                  cursor: notifying ? 'default' : 'pointer',
+                  color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
+                  opacity: notifying ? 0.6 : 1,
+                }}
+              >
+                {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Inline error rows */}
       {notifyError && (
         <p className="text-xs mb-3" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
           {notifyError}
         </p>
-      )}
-      {data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed) && (
-        <div className="mb-4 px-1 text-xs flex items-center justify-between gap-3" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          {showConverted ? (
-            <p>
-              ECB rates{ratesDate ? ` · ${formatRatesDate(ratesDate)}` : ''}
-              {unrated.length ? ` · no rate for ${unrated.join(', ')}` : ''}
-            </p>
-          ) : (
-            <>
-              <p style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
-                Couldn&apos;t load exchange rates, so amounts are shown in their own currencies.
-              </p>
-              <button
-                onClick={retryRates}
-                className="font-semibold flex-shrink-0"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
-              >
-                Retry
-              </button>
-            </>
-          )}
-        </div>
       )}
 
       {showSkeleton && <SkeletonBalances />}
