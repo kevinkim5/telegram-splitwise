@@ -7,6 +7,7 @@ import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
 import { loadMemberNames } from '@/lib/expense-events'
+import { escapeLike, parseFilterParams } from '@/lib/expense-filter'
 import { createdSummary } from '@/lib/expense-history'
 
 async function getExpenseWithSplits(expenseId: number) {
@@ -47,6 +48,12 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const myMemberId = me.id
 
+  // Optional filters: text (description, category or who paid) and a date range on the expense's date
+  const filters = parseFilterParams(searchParams)
+  if (!filters.ok) return NextResponse.json({ error: filters.error }, { status: 422 })
+  const pattern = filters.q ? `%${escapeLike(filters.q)}%` : null
+  const filtered = !!(pattern || filters.from || filters.to)
+
   const expenses = await sql`
     SELECT e.*,
            m.first_name || COALESCE(' ' || m.last_name, '') AS paid_by_name,
@@ -56,14 +63,39 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     JOIN members m ON m.id = e.paid_by_member_id
     LEFT JOIN expense_splits es_me ON es_me.expense_id = e.id AND es_me.member_id = ${myMemberId}
     WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
-    ORDER BY e.date DESC, e.created_at DESC
+      AND (${filters.from}::date IS NULL OR e.date >= ${filters.from}::date)
+      AND (${filters.to}::date IS NULL OR e.date <= ${filters.to}::date)
+      AND (${pattern}::text IS NULL
+           OR e.description ILIKE ${pattern} ESCAPE '\\'
+           OR e.category ILIKE ${pattern} ESCAPE '\\'
+           OR (m.first_name || COALESCE(' ' || m.last_name, '')) ILIKE ${pattern} ESCAPE '\\')
+    ORDER BY e.date DESC, e.created_at DESC, e.id DESC
     LIMIT ${limit} OFFSET ${offset}
   `
   const total = expenses.length > 0 ? parseInt(expenses[0].total_count as string) : 0
 
   const items = expenses.map(({ receipt_key, ...rest }) => ({ ...rest, has_receipt: !!receipt_key }))
 
-  return NextResponse.json({ total, page, items })
+  // Spend per currency over everything the filters match (all pages), so the screen can show
+  // "N expenses · ≈ SGD x" for the filtered set
+  const summary = filtered
+    ? await sql`
+        SELECT e.currency, SUM(e.total_amount)::float AS total, COUNT(*)::int AS count
+        FROM expenses e
+        JOIN members m ON m.id = e.paid_by_member_id
+        WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
+          AND (${filters.from}::date IS NULL OR e.date >= ${filters.from}::date)
+          AND (${filters.to}::date IS NULL OR e.date <= ${filters.to}::date)
+          AND (${pattern}::text IS NULL
+               OR e.description ILIKE ${pattern} ESCAPE '\\'
+               OR e.category ILIKE ${pattern} ESCAPE '\\'
+               OR (m.first_name || COALESCE(' ' || m.last_name, '')) ILIKE ${pattern} ESCAPE '\\')
+        GROUP BY e.currency
+        ORDER BY SUM(e.total_amount) DESC
+      `
+    : null
+
+  return NextResponse.json({ total, page, items, summary })
 }
 
 export async function POST(request: Request, props: { params: Promise<{ chatId: string }> }) {
