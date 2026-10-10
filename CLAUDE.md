@@ -71,7 +71,7 @@ Expense detail shows an Activity section (`components/ExpenseActivity.tsx`, from
 
 ### 2. Admin dashboard (`/admin`)
 
-Plain server-rendered Next.js pages (no Telegram context). Protected by NextAuth with GitHub OAuth; only the account whose numeric ID matches `ADMIN_GITHUB_ID` can log in (`auth.ts`). Middleware in `middleware.ts` guards all `/admin/*` routes. A group's Expenses list can show deleted expenses (with who deleted them), each row expands to its full history, and **Restore** brings a deleted expense back (logged as an admin `restored` event).
+Plain server-rendered Next.js pages (no Telegram context). Protected by NextAuth with GitHub OAuth; only the account whose numeric ID matches `ADMIN_GITHUB_ID` can log in (`auth.ts`). Middleware in `middleware.ts` guards all `/admin/*` routes. Tabs: **Groups** (search by name, sort last updated / A–Z, empty private chats hidden behind a checkbox, archive), **Users**, **Usage** (receipt-scan counts from `receipt_scans`: today / 7d / 30d, per day, per person; days in Singapore time). A group page shows balances like the app (SGD at ECB rates), its expenses paginated 50 per page (`?page=`), and **Show deleted** for expenses (`?deleted=1`, who deleted them, full history per row, **Restore** logged as an admin `restored` event) and for settlements (`?sdeleted=1`, **Restore**; settlements have no history log). Deleted settlements never count towards balances.
 
 ### API Routes (`app/api/`)
 
