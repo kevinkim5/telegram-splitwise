@@ -105,9 +105,9 @@ const pill: React.CSSProperties = { display: 'inline-block', fontSize: '0.625rem
 const restoreBtn: React.CSSProperties = { border: '1px solid #d1d5db', background: '#fff', color: '#111827', fontSize: '0.75rem', fontWeight: 600, borderRadius: 8, padding: '5px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }
 const heading: React.CSSProperties = { fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: grey, marginBottom: '0.375rem' }
 
-export function ExpensesList({ expenses, restore }: { expenses: AdminExpense[]; restore: (id: number) => Promise<void> }) {
+export function ExpensesList({ expenses, restore, emptyText = 'No expenses yet.' }: { expenses: AdminExpense[]; restore: (id: number) => Promise<void>; emptyText?: string }) {
   if (expenses.length === 0) {
-    return <div style={{ padding: '0.75rem 1rem', color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</div>
+    return <div style={{ padding: '0.75rem 1rem', color: '#6b7280', fontSize: '0.875rem' }}>{emptyText}</div>
   }
   return <>{expenses.map((e, i) => <Row key={e.id} e={e} last={i === expenses.length - 1} restore={restore} />)}</>
 }

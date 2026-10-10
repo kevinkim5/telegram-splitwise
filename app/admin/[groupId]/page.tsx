@@ -7,7 +7,10 @@ import { AdminBalances, type AdminMember } from './AdminBalances'
 import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
 import { SettlementsList, type AdminSettlement } from './SettlementsList'
 import { GroupTotals } from './GroupTotals'
-import { AdminTabs, parseTab, tabHref } from './AdminTabs'
+import { AdminTabs, parseTab } from './AdminTabs'
+import { ExpenseFilterBar } from './ExpenseFilterBar'
+import { expensesHref, isFiltered, parseAdminFilter } from '@/lib/admin-expense-filter'
+import { escapeLike } from '@/lib/expense-filter'
 import { ADMIN_PAGE_SIZE, pageCount, parsePage, rangeLabel } from '@/lib/pagination'
 import { insertEvent } from '@/lib/expense-events'
 import { ensureSchema } from '@/lib/db'
@@ -15,12 +18,14 @@ import type { Change } from '@/lib/expense-history'
 
 export const dynamic = 'force-dynamic'
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: '1.75rem' }}>
-      <h2 style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b7280', marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
-        {title}
-      </h2>
+      {title && (
+        <h2 style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#6b7280', marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
+          {title}
+        </h2>
+      )}
       <div style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
         {children}
       </div>
@@ -43,13 +48,16 @@ export default async function AdminGroupPage({
   searchParams,
 }: {
   params: Promise<{ groupId: string }>
-  searchParams?: Promise<{ tab?: string; page?: string; deleted?: string; sdeleted?: string }>
+  searchParams?: Promise<{ tab?: string; page?: string; deleted?: string; sdeleted?: string; q?: string; from?: string; to?: string }>
 }) {
   const { groupId } = await params
   const sp = (await searchParams) ?? {}
   const tab = parseTab(sp.tab)
   const showDeleted = sp.deleted === '1'            // include deleted expenses in the list
   const showDeletedSettlements = sp.sdeleted === '1'
+  const filter = parseAdminFilter(sp)
+  const filtered = isFiltered(filter)
+  const pattern = filter.q ? `%${escapeLike(filter.q)}%` : null
 
   const [group] = await sql`SELECT * FROM groups WHERE id = ${parseInt(groupId)}`
   if (!group) {
@@ -82,7 +90,34 @@ export default async function AdminGroupPage({
   const deletedExpenseCount = Number(counts?.deleted ?? 0)
   const activeSettlementCount = Number(sCounts?.active ?? 0)
   const deletedSettlementCount = Number(sCounts?.deleted ?? 0)
-  const listTotal = showDeleted ? activeExpenseCount + deletedExpenseCount : activeExpenseCount
+  // With a search or date range the list, its page count and totals follow the matches
+  const [match] = tab === 'expenses' && filtered ? await sql`
+    SELECT COUNT(*) FILTER (WHERE e.deleted_at IS NULL)::int AS active,
+           COUNT(*) FILTER (WHERE e.deleted_at IS NOT NULL)::int AS deleted
+    FROM expenses e JOIN members m ON m.id = e.paid_by_member_id
+    WHERE e.group_id = ${group.id}
+      AND (${filter.from}::date IS NULL OR e.date >= ${filter.from}::date)
+      AND (${filter.to}::date IS NULL OR e.date <= ${filter.to}::date)
+      AND (${pattern}::text IS NULL
+           OR e.description ILIKE ${pattern} ESCAPE '\\'
+           OR e.category ILIKE ${pattern} ESCAPE '\\'
+           OR (m.first_name || COALESCE(' ' || m.last_name, '')) ILIKE ${pattern} ESCAPE '\\')
+  ` : [null]
+  const matchActive = match ? Number(match.active) : activeExpenseCount
+  const matchDeleted = match ? Number(match.deleted) : deletedExpenseCount
+  const matchTotals = tab === 'expenses' && filtered ? await sql`
+    SELECT e.currency, SUM(e.total_amount)::float AS total
+    FROM expenses e JOIN members m ON m.id = e.paid_by_member_id
+    WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
+      AND (${filter.from}::date IS NULL OR e.date >= ${filter.from}::date)
+      AND (${filter.to}::date IS NULL OR e.date <= ${filter.to}::date)
+      AND (${pattern}::text IS NULL
+           OR e.description ILIKE ${pattern} ESCAPE '\\'
+           OR e.category ILIKE ${pattern} ESCAPE '\\'
+           OR (m.first_name || COALESCE(' ' || m.last_name, '')) ILIKE ${pattern} ESCAPE '\\')
+    GROUP BY e.currency ORDER BY SUM(e.total_amount) DESC
+  ` : []
+  const listTotal = showDeleted ? matchActive + matchDeleted : matchActive
   const page = parsePage(sp.page, listTotal)
   const pages = pageCount(listTotal)
 
@@ -108,6 +143,12 @@ export default async function AdminGroupPage({
       JOIN expense_splits es ON es.expense_id = e.id
       JOIN members sm ON sm.id = es.member_id
       WHERE e.group_id = ${group.id} AND (${showDeleted}::boolean OR e.deleted_at IS NULL)
+        AND (${filter.from}::date IS NULL OR e.date >= ${filter.from}::date)
+        AND (${filter.to}::date IS NULL OR e.date <= ${filter.to}::date)
+        AND (${pattern}::text IS NULL
+             OR e.description ILIKE ${pattern} ESCAPE '\\'
+             OR e.category ILIKE ${pattern} ESCAPE '\\'
+             OR (m.first_name || COALESCE(' ' || m.last_name, '')) ILIKE ${pattern} ESCAPE '\\')
       GROUP BY e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, e.deleted_at,
                m.first_name, m.last_name, cm.first_name, cm.last_name
       ORDER BY e.date DESC, e.created_at DESC, e.id DESC
@@ -260,15 +301,12 @@ export default async function AdminGroupPage({
 
   // Links inside a tab keep that tab's other view options (page, deleted toggles)
   const href = (over: { page?: number; deleted?: boolean; sdeleted?: boolean }) => {
-    const q = new URLSearchParams()
-    if (tab !== 'overview') q.set('tab', tab)
     const del = over.deleted ?? showDeleted
     const sdel = over.sdeleted ?? showDeletedSettlements
     const pg = over.page ?? page
-    if (tab === 'expenses') {
-      if (pg > 1) q.set('page', String(pg))
-      if (del) q.set('deleted', '1')
-    }
+    if (tab === 'expenses') return expensesHref(group.id as number, filter, { deleted: del, page: pg })
+    const q = new URLSearchParams()
+    if (tab !== 'overview') q.set('tab', tab)
     if (tab === 'settlements' && sdel) q.set('sdeleted', '1')
     const qs = q.toString()
     return `/admin/${group.id}${qs ? `?${qs}` : ''}`
@@ -328,7 +366,15 @@ export default async function AdminGroupPage({
       )}
 
       {tab === 'expenses' && (
-        <Section title={`Expenses (${activeExpenseCount})`}>
+        <Section>
+          <ExpenseFilterBar
+            groupId={group.id as number}
+            filter={filter}
+            showDeleted={showDeleted}
+            summary={filtered
+              ? `${matchActive} of ${activeExpenseCount} expense${activeExpenseCount === 1 ? '' : 's'} match${matchTotals.length ? ' · ' + matchTotals.map(t => `${t.currency} ${Number(t.total).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(' + ') : ''}`
+              : null}
+          />
           {deletedExpenseCount > 0 && (
             <div style={{ padding: '0.5rem 1rem', borderBottom: '0.5px solid #f3f4f6' }}>
               <Link href={href({ deleted: !showDeleted, page: 1 })} style={{ fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
@@ -336,7 +382,7 @@ export default async function AdminGroupPage({
               </Link>
             </div>
           )}
-          <ExpensesList expenses={adminExpenses} restore={restoreExpense} />
+          <ExpensesList expenses={adminExpenses} restore={restoreExpense} emptyText={filtered ? 'No expenses match.' : 'No expenses yet.'} />
           {listTotal > ADMIN_PAGE_SIZE && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.625rem 1rem', borderTop: '0.5px solid #f3f4f6', fontSize: '0.8125rem' }}>
               {page > 1
@@ -352,7 +398,7 @@ export default async function AdminGroupPage({
       )}
 
       {tab === 'settlements' && (
-        <Section title={`Settlements (${activeSettlementCount})`}>
+        <Section>
           {deletedSettlementCount > 0 && (
             <div style={{ padding: '0.5rem 1rem', borderBottom: '0.5px solid #f3f4f6' }}>
               <Link href={href({ sdeleted: !showDeletedSettlements })} style={{ fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
@@ -365,7 +411,7 @@ export default async function AdminGroupPage({
       )}
 
       {tab === 'members' && (
-        <Section title={`Members (${memberCount})`}>
+        <Section>
           {members.map((m, i) => (
             <Row key={String(m.id)} last={i === members.length - 1}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
