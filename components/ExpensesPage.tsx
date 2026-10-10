@@ -8,6 +8,10 @@ import type { ActivityEvent, Expense, ExpenseSplit, Member, Settlement } from '@
 import { ExpenseActivity } from '@/components/ExpenseActivity'
 import { useGroupData } from '@/components/GroupData'
 import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
+import { DateChip, DateSheet, SearchField } from '@/components/ExpenseFilters'
+import { NO_FILTERS, buildExpensesQuery, hasFilters, hasRange, inRange, rangeLabel, type DateRange, type ExpenseFilters } from '@/lib/expense-filter'
+import { summarizeTotals, type CurrencyTotal } from '@/lib/group-totals'
+import { useRates } from '@/lib/use-rates'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -428,6 +432,9 @@ function SkeletonExpenseGroup({ count, first = false }: { count: number; first?:
   )
 }
 
+// How long typing must pause before the server is asked (typical typeahead range is 250-400ms)
+const SEARCH_PAUSE_MS = 350
+
 export function ExpensesPage() {
   const router = useRouter()
   const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
@@ -440,30 +447,66 @@ export function ExpensesPage() {
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState | null>(null)
 
+  // ── search and date filter ──
+  // Kept for the browser session (per group) so coming back from editing an expense, or reopening the
+  // app, finds the list the way it was left. The tab itself stays mounted, so tab switches keep it too.
+  const storageKey = `split.expense-filters.${chatId}`
+  const [filters, setFilters] = useState<ExpenseFilters>(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey)
+      if (raw) {
+        const f = JSON.parse(raw) as ExpenseFilters
+        if (typeof f.q === 'string' && f.range && typeof f.range === 'object') return { q: f.q, range: { from: f.range.from ?? null, to: f.range.to ?? null } }
+      }
+    } catch { /* storage unavailable or corrupt: start clean */ }
+    return NO_FILTERS
+  })
+  const [qInput, setQInput] = useState(filters.q)
+  const [showDate, setShowDate] = useState(false)
+  const [summary, setSummary] = useState<CurrencyTotal[] | null>(null)
+  const latestRequest = useRef(0)
+  // A new search/date range keeps the current results on screen (dimmed) until the answer arrives, instead of
+  // blanking to skeletons on every pause in typing
+  const [searching, setSearching] = useState(false)
+  const keepList = useRef(false)
+  useEffect(() => {
+    try { sessionStorage.setItem(storageKey, JSON.stringify(filters)) } catch { /* ignore */ }
+  }, [filters, storageKey])
+  // Settlements have no description to search: a text search leaves them out, a date range narrows them
+  const visibleSettlements = filters.q.trim() ? [] : hasRange(filters.range) ? settlements.filter(x => inRange(x.created_at, filters.range)) : settlements
+
   // First open: show the skeleton straight away (no blank frame). Later reloads of data we already
   // have only show it if they drag on.
   const delayedSkeleton = useShowSkeleton(loading)
-  const showSkeleton = (loading && expenses.length === 0 && settlements.length === 0) || delayedSkeleton
+  const showSkeleton = (loading && expenses.length === 0 && visibleSettlements.length === 0) || delayedSkeleton
   const { refreshBalances } = useGroupData()
   const loadedAt = useRef(0)
 
   // silent: a background refresh. Keeps what is on screen, and a failure is ignored.
   const fetchExpenses = useCallback(async (p: number, silent = false) => {
-    if (!silent) { setLoading(true); setError(null) }
+    const mine = ++latestRequest.current // a slower, older answer must never overwrite a newer one
+    const keep = keepList.current
+    keepList.current = false
+    if (!silent) {
+      if (keep) setSearching(true); else setLoading(true)
+      setError(null)
+    }
     try {
-      const res = await fetch(`/api/groups/${chatId}/expenses?page=${p}`, { headers: apiHeaders })
+      const res = await fetch(`/api/groups/${chatId}/expenses?${buildExpensesQuery({ page: p, filters })}`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
+      if (mine !== latestRequest.current) return
       setExpenses(data.items)
       setTotal(data.total)
+      setSummary(data.summary ?? null)
       setError(null)
       loadedAt.current = Date.now()
     } catch (e) {
-      if (!silent) setError(String(e))
+      if (mine === latestRequest.current && !silent) setError(String(e))
     } finally {
-      if (!silent) setLoading(false)
+      if (mine === latestRequest.current && !silent) { setLoading(false); setSearching(false) }
     }
-  }, [chatId, apiHeaders])
+  }, [chatId, apiHeaders, filters])
 
   const fetchBalance = refreshBalances // the header's "You owe" line and the Balances tab share one copy
 
@@ -487,6 +530,31 @@ export function ExpensesPage() {
     fetchSettlements()
     refreshBalances(STALE_AFTER_MS)
   })
+
+  // A new search or date range starts from page 1; the previous results stay (dimmed) until the answer lands
+  const applyFilters = (next: ExpenseFilters) => {
+    if (next.q === filters.q && next.range.from === filters.range.from && next.range.to === filters.range.to) return
+    keepList.current = true
+    setFilters(next)
+    setPage(1)
+    setError(null)
+  }
+  const setRange = (range: DateRange) => { setShowDate(false); applyFilters({ ...filters, range }) }
+  const clearAll = () => { setQInput(''); applyFilters(NO_FILTERS) }
+
+  // Search as you type, but only ask the server once typing pauses
+  useEffect(() => {
+    const q = qInput.trim()
+    if (q === filters.q) return
+    const t = setTimeout(() => applyFilters({ ...filters, q }), SEARCH_PAUSE_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qInput])
+  const flushSearch = () => { const q = qInput.trim(); if (q !== filters.q) applyFilters({ ...filters, q }) }
+
+  const filtersOn = hasFilters(filters)
+  const { rates: summaryRates } = useRates((summary ?? []).map(t => t.currency))
+  const summaryView = summary && summary.length > 0 ? summarizeTotals(summary, summaryRates) : null
 
   const handleDelete = (id: number, onSuccess?: () => void) => {
     const tg = window.Telegram?.WebApp
@@ -575,8 +643,32 @@ export function ExpensesPage() {
   return (
     <>
     <div className="flex flex-col h-full">
+    {/* Search and date filter: pinned above the list */}
+    <div className="flex-shrink-0 px-4 pt-2 pb-1 flex items-center gap-2">
+      <SearchField value={qInput} onChange={setQInput} onSubmit={flushSearch} />
+      <DateChip range={filters.range} onOpen={() => setShowDate(true)} onClear={() => setRange({ from: null, to: null })} />
+    </div>
+    {filtersOn && !error && (
+      <div className="flex-shrink-0 px-5 pb-1 text-xs flex items-center gap-1.5 flex-wrap" style={{ color: 'var(--tg-theme-hint-color)', minHeight: 20 }} aria-live="polite">
+        {loading || searching ? <span>Searching…</span> : (
+          <>
+            <span>
+              {total} expense{total === 1 ? '' : 's'}
+              {summaryView && summaryView.mode === 'converted' && ` · ≈ SGD ${(summaryView.total ?? 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {summaryView && summaryView.mode === 'plain' && summaryView.total !== null && ` · SGD ${summaryView.total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {summaryView && summaryView.mode === 'original' && ` · ${summaryView.rows.map(r => `${r.currency} ${r.total.toFixed(2)}`).join(' + ')}`}
+            </span>
+            <span aria-hidden>·</span>
+            <button onClick={clearAll} className="font-semibold" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}>
+              Clear filters
+            </button>
+          </>
+        )}
+      </div>
+    )}
+
     {/* Scrollable list */}
-    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab">
+    <div data-tab-scroll aria-busy={searching} className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab" style={{ opacity: searching ? 0.5 : 1, transition: 'opacity 0.15s' }}>
       {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />
@@ -597,20 +689,33 @@ export function ExpensesPage() {
         </div>
       )}
 
-      {!loading && !error && expenses.length === 0 && settlements.length === 0 && (
+      {!loading && !error && expenses.length === 0 && visibleSettlements.length === 0 && !filtersOn && (
         <div className="flex flex-col items-center py-16 gap-3">
           <div className="text-5xl">🧾</div>
           <p className="font-medium">No expenses yet</p>
           <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Tap + Add to record your first expense
+            Tap + to record your first expense
           </p>
+        </div>
+      )}
+
+      {!loading && !error && expenses.length === 0 && visibleSettlements.length === 0 && filtersOn && (
+        <div className="flex flex-col items-center py-16 gap-2 text-center">
+          <div className="text-5xl">🔍</div>
+          <p className="font-medium">No expenses match</p>
+          <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {[filters.q.trim() ? `“${filters.q.trim()}”` : '', hasRange(filters.range) ? rangeLabel(filters.range, new Date()) : ''].filter(Boolean).join(' · ')}
+          </p>
+          <button onClick={clearAll} className="font-semibold mt-2" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}>
+            Clear filters
+          </button>
         </div>
       )}
 
       {(() => {
         const allItems = [
           ...expenses.map(e => ({ kind: 'expense' as const, ts: new Date(e.date).getTime(), dateStr: e.date, data: e })),
-          ...settlements.map(s => ({ kind: 'settlement' as const, ts: new Date(s.created_at).getTime(), dateStr: s.created_at, data: s })),
+          ...visibleSettlements.map(s => ({ kind: 'settlement' as const, ts: new Date(s.created_at).getTime(), dateStr: s.created_at, data: s })),
         ].sort((a, b) => b.ts - a.ts)
 
         type ListItem = typeof allItems[number]
@@ -760,6 +865,8 @@ export function ExpensesPage() {
     </div>
 
     </div>
+
+    {showDate && <DateSheet range={filters.range} onApply={setRange} onClose={() => setShowDate(false)} />}
 
     {detail && (
       <DetailPanel

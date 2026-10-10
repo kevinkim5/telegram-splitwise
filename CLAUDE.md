@@ -62,6 +62,14 @@ An expense can have at most one receipt image, stored in a private Vercel Blob s
 - Viewing: expense GET returns `has_receipt` and a 15-minute `receipt_url`, a same-origin link to `GET /api/groups/[chatId]/expenses/[id]/receipt?exp=…&sig=…` (HMAC-signed, bound to the expense and current image) that streams the private blob, so `<img src>` works without Telegram headers. The list returns only `has_receipt`. The storage key is never sent to clients. Deleting an expense is a soft delete, so its image is kept.
 - Receipt photos reach Google when Auto-fill is tapped. On Gemini's free tier Google may use submitted content to improve its products.
 
+### Expense search and date filter
+
+The Expenses tab has a search box and a date chip (`components/ExpenseFilters.tsx`, logic in `lib/expense-filter.ts`). `GET /api/groups/[chatId]/expenses` takes `q` (matched, case-insensitively and with LIKE wildcards escaped, against description, category label and payer name), `from` / `to` (YYYY-MM-DD, inclusive, on the expense's own date; a reversed range is swapped, a malformed date is a 422) and `page`; when any filter is set it also returns `summary` (spend per currency for the whole filtered set, not just the page), which the screen converts to SGD with the shared rates. The date sheet has Quick presets (Mon-Sun weeks), a single Day, and a Range with either end optional. Settlements are narrowed by the date range client-side and hidden during a text search. Search is debounced (350 ms, Enter searches at once); while a new search loads the current results stay on screen, dimmed, instead of flashing to skeletons; a stale response never overwrites a newer one, and the filters are kept per group in `sessionStorage` so they survive tab switches and coming back from Add/Edit.
+
+### Parked UI decisions (surface if the user wants to revisit)
+
+- **Search bar placement (Expenses tab):** kept as-is (it scrolls with the list) by choice. Options discussed: pin it under the tabs; or pin it but hide on scroll down / show on scroll up (preferred if changed, since header + tabs + FAB already use screen space); the same tuck-away could apply to the header. Mock up before building.
+
 ### Expense activity
 
 Expense detail shows an Activity section (`components/ExpenseActivity.tsx`, from `activity` on `GET /expenses/[id]`): who changed what (old → new), plus deleted/restored entries. The Edit page keeps Save top-right, disabled until a real change (changed fields outlined), with a discard prompt on Back; Add has its button top-right too.
