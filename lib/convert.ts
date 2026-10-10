@@ -1,3 +1,6 @@
+// The currency everything is summed and shown in when converting
+export const CONVERT_TO = 'SGD'
+
 export interface CurrencyLine {
   currency: string
   net: number // positive = gets back, negative = owes
