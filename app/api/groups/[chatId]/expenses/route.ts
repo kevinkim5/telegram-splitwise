@@ -7,7 +7,7 @@ import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId } from '@/lib/parse-params'
 import { expenseBodySchema } from '@/lib/schemas'
 import { loadMemberNames } from '@/lib/expense-events'
-import { escapeLike, parseFilterParams } from '@/lib/expense-filter'
+import { escapeLike, parseFilterParams, parsePaging } from '@/lib/expense-filter'
 import { createdSummary } from '@/lib/expense-history'
 
 async function getExpenseWithSplits(expenseId: number) {
@@ -37,9 +37,7 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
 
   const { searchParams } = new URL(request.url)
-  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
-  const limit = 30
-  const offset = (page - 1) * limit
+  const { page, limit, offset } = parsePaging(searchParams)
 
   const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
   if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
