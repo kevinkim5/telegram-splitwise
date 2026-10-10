@@ -183,14 +183,13 @@ export function TotalsPage() {
               </div>
             )}
 
-            {/* "All" needs rates: say so while they load, or when they can't be used */}
-            {showingAll && ratesPending && (
-              <p className="text-xs px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Loading exchange rates…</p>
-            )}
-            {showingAll && (ratesFailed || (combined && !combined.ok)) && (
+            {/* "All" needs rates. While they load show a skeleton; only say something is wrong once we
+                know: the request failed, or it worked but a currency has no rate */}
+            {showingAll && ratesPending && <SkeletonTotals />}
+            {showingAll && !ratesPending && (ratesFailed || (rates && combined && !combined.ok)) && (
               <div className="flex items-center justify-between gap-3 px-1 text-xs" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
                 <p>
-                  {combined && !combined.ok && rates
+                  {rates && combined && !combined.ok
                     ? `No exchange rate for ${combined.missing.join(', ')}, so there is no combined total. Pick a currency instead.`
                     : "Couldn't load exchange rates, so there is no combined total. Pick a currency instead."}
                 </p>
