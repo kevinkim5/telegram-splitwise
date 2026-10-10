@@ -18,6 +18,7 @@ export function SearchField({ value, onChange, onSubmit }: { value: string; onCh
       style={{ background: 'var(--tg-theme-section-bg-color)', borderRadius: 10, padding: '0 10px', gap: 6, height: 36 }}
     >
       <span aria-hidden style={{ fontSize: 13, color: hint }}>🔍</span>
+      {/* 16px on purpose: iOS Safari zooms the page into any input smaller than that (see .tg-input) */}
       <input
         ref={ref}
         type="search"
@@ -32,7 +33,7 @@ export function SearchField({ value, onChange, onSubmit }: { value: string; onCh
         spellCheck={false}
         maxLength={100}
         className="flex-1 min-w-0"
-        style={{ background: 'none', border: 'none', outline: 'none', fontSize: 14, color: 'var(--tg-theme-text-color)', WebkitAppearance: 'none' }}
+        style={{ background: 'none', border: 'none', outline: 'none', fontSize: 16, color: 'var(--tg-theme-text-color)', WebkitAppearance: 'none' }}
       />
       {value && (
         <button
@@ -120,7 +121,7 @@ export function DateSheet({ range, onApply, onClose }: { range: DateRange; onApp
         value={value}
         onChange={e => set(e.target.value)}
         className="tg-input"
-        style={{ background: 'var(--tg-theme-secondary-bg-color)', borderRadius: 11, padding: '11px 12px', width: '100%', fontSize: 15 }}
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', borderRadius: 11, padding: '11px 12px', width: '100%', fontSize: 16 }}
       />
     </label>
   )
