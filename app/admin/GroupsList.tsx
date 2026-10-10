@@ -3,8 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArchiveButton } from './ArchiveButton'
+import { useRates } from '@/lib/use-rates'
+import { CONVERT_TO } from '@/lib/convert'
+import { summarizeTotals } from '@/lib/group-totals'
 import { filterSortGroups, isEmptyPrivateChat, type AdminGroupRow, type GroupSort } from '@/lib/admin-groups'
 
+const money = (n: number) => n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const dateFmt = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 export function GroupsList({ groups, archive }: { groups: AdminGroupRow[]; archive: (id: number) => Promise<void> }) {
@@ -12,6 +16,8 @@ export function GroupsList({ groups, archive }: { groups: AdminGroupRow[]; archi
   const [sort, setSort] = useState<GroupSort>('updated')
   const [showEmpty, setShowEmpty] = useState(false)
 
+  // One rates request for the whole list (every currency used by any group)
+  const { rates } = useRates(groups.flatMap(g => g.totals.map(t => t.currency)))
   const hiddenCount = groups.filter(isEmptyPrivateChat).length
   const shown = filterSortGroups(groups, { query, sort, showEmpty })
 
@@ -75,6 +81,23 @@ export function GroupsList({ groups, archive }: { groups: AdminGroupRow[]; archi
                     Updated {dateFmt(g.last_activity)} · created {dateFmt(g.created_at)}
                   </span>
                 </div>
+
+                {g.totals.length > 0 && (() => {
+                  const sum = summarizeTotals(g.totals, rates)
+                  const text = sum.mode === 'converted'
+                    ? `≈ ${CONVERT_TO} ${money(sum.total ?? 0)}`
+                    : sum.mode === 'plain'
+                      ? `${CONVERT_TO} ${money(sum.total ?? 0)}`
+                      : g.totals.map(t => `${t.currency} ${t.total.toFixed(2)}`).join(' · ') // rates loading, or one is missing
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.625rem', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+                      {sum.mode === 'converted' && g.totals.length > 1 && (
+                        <span style={{ fontSize: '0.6875rem', color: '#9ca3af', flexShrink: 0 }}>{g.totals.length} currencies</span>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   {[
