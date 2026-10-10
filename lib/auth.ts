@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { TelegramUser } from '@/types'
+import { logRequest } from '@/lib/request-log'
 
 export function validateInitData(initData: string): TelegramUser | null {
   const botToken = process.env.BOT_TOKEN
@@ -47,5 +48,7 @@ export function getAuthUser(request: Request): TelegramUser | null {
     request.headers.get('x-telegram-init-data') ??
     request.headers.get('Authorization')?.replace('Bearer ', '') ??
     ''
-  return validateInitData(initData)
+  const user = validateInitData(initData)
+  if (process.env.NODE_ENV !== 'test') logRequest(request, user)
+  return user
 }
