@@ -64,7 +64,7 @@ An expense can have at most one receipt image, stored in a private Vercel Blob s
 
 ### App icon
 
-`app/icon.svg` (favicon) and `app/apple-icon.png` (180px, full-bleed, regenerate from the SVG with `rx="0"`) are picked up by Next automatically, for the Mini App and `/admin` alike.
+`app/favicon.ico` (the user's own, 16/32/48px) is picked up by Next automatically, for the Mini App and `/admin` alike. There is no `apple-icon.png`; add a square PNG of at least 180px at `app/apple-icon.png` for a sharp iOS home-screen icon.
 
 ### Expense search and date filter
 
