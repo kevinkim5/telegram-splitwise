@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
 import { AdminBalances, type AdminMember } from './AdminBalances'
 import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
+import { SettlementsList, type AdminSettlement } from './SettlementsList'
+import { ADMIN_PAGE_SIZE, pageCount, parsePage, rangeLabel } from '@/lib/pagination'
 import { insertEvent } from '@/lib/expense-events'
 import { ensureSchema } from '@/lib/db'
 import type { Change } from '@/lib/expense-history'
@@ -24,6 +26,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+const pagerLink: React.CSSProperties = { color: '#2563eb', fontWeight: 600, textDecoration: 'none', minWidth: 64 }
+
 function Row({ children, last }: { children: React.ReactNode; last?: boolean }) {
   return (
     <div style={{ padding: '0.75rem 1rem', borderBottom: last ? 'none' : '0.5px solid #f3f4f6' }}>
@@ -34,15 +38,31 @@ function Row({ children, last }: { children: React.ReactNode; last?: boolean }) 
 
 export default async function AdminGroupPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupId: string }>
+  searchParams?: Promise<{ page?: string; deleted?: string; sdeleted?: string }>
 }) {
   const { groupId } = await params
+  const sp = (await searchParams) ?? {}
+  const showDeleted = sp.deleted === '1'            // include deleted expenses in the list
+  const showDeletedSettlements = sp.sdeleted === '1'
 
   const [group] = await sql`SELECT * FROM groups WHERE id = ${parseInt(groupId)}`
   if (!group) {
     return <div style={{ padding: '3rem' }}>Group not found.</div>
   }
+
+  const [counts] = await sql`
+    SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL)::int AS active,
+           COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted
+    FROM expenses WHERE group_id = ${group.id}
+  `
+  const activeExpenseCount = Number(counts?.active ?? 0)
+  const deletedExpenseCount = Number(counts?.deleted ?? 0)
+  const listTotal = showDeleted ? activeExpenseCount + deletedExpenseCount : activeExpenseCount
+  const page = parsePage(sp.page, listTotal)
+  const pages = pageCount(listTotal)
 
   const [members, expenseRows, settlementRows, splitRows, currencyTotals] = await Promise.all([
     sql`SELECT * FROM members WHERE group_id = ${group.id} ORDER BY first_name`,
@@ -62,21 +82,21 @@ export default async function AdminGroupPage({
       JOIN members cm ON cm.id = e.created_by_member_id
       JOIN expense_splits es ON es.expense_id = e.id
       JOIN members sm ON sm.id = es.member_id
-      WHERE e.group_id = ${group.id}
+      WHERE e.group_id = ${group.id} AND (${showDeleted}::boolean OR e.deleted_at IS NULL)
       GROUP BY e.id, e.description, e.total_amount, e.currency, e.date, e.category, e.created_at, e.deleted_at,
                m.first_name, m.last_name, cm.first_name, cm.last_name
-      ORDER BY e.date DESC, e.created_at DESC
-      LIMIT 100
+      ORDER BY e.date DESC, e.created_at DESC, e.id DESC
+      LIMIT ${ADMIN_PAGE_SIZE} OFFSET ${(page - 1) * ADMIN_PAGE_SIZE}
     `,
     sql`
-      SELECT s.*,
+      SELECT s.id, s.from_member_id, s.to_member_id, s.amount, s.currency, s.created_at, s.deleted_at,
         fm.first_name || COALESCE(' ' || fm.last_name, '') AS from_name,
         tm.first_name || COALESCE(' ' || tm.last_name, '') AS to_name
       FROM settlements s
       JOIN members fm ON fm.id = s.from_member_id
       JOIN members tm ON tm.id = s.to_member_id
-      WHERE s.group_id = ${group.id} AND s.deleted_at IS NULL
-      ORDER BY s.created_at DESC
+      WHERE s.group_id = ${group.id}
+      ORDER BY s.created_at DESC, s.id DESC
     `,
     sql`
       SELECT e.paid_by_member_id, e.currency, es.member_id, es.amount
@@ -150,7 +170,6 @@ export default async function AdminGroupPage({
       history,
     }
   })
-  const activeExpenseCount = adminExpenses.filter(e => !e.deleted).length
 
   async function restoreExpense(expenseId: number) {
     'use server'
@@ -163,6 +182,16 @@ export default async function AdminGroupPage({
       sql`UPDATE expenses SET deleted_at = NULL WHERE id = ${expenseId}`,
       insertEvent(expenseId, null, 'restored', [], null, 'admin'),
     ])
+    revalidatePath(`/admin/${group.id}`)
+  }
+
+  async function restoreSettlement(settlementId: number) {
+    'use server'
+    if (!(await auth())) throw new Error('Unauthorized')
+    await sql`
+      UPDATE settlements SET deleted_at = NULL
+      WHERE id = ${settlementId} AND group_id = ${group.id} AND deleted_at IS NOT NULL
+    `
     revalidatePath(`/admin/${group.id}`)
   }
 
@@ -190,6 +219,7 @@ export default async function AdminGroupPage({
     }
   }
   for (const r of settlementRows) {
+    if (r.deleted_at) continue // deleted payments don't count towards balances
     const from = r.from_member_id as number
     const to = r.to_member_id as number
     const amount = parseFloat(r.amount as string)
@@ -208,6 +238,31 @@ export default async function AdminGroupPage({
     }))
     return simplifyDebts(balances)
   })
+
+  // Links that keep the other view options (page, deleted toggles) when one of them changes
+  const href = (over: { page?: number; deleted?: boolean; sdeleted?: boolean }) => {
+    const q = new URLSearchParams()
+    const del = over.deleted ?? showDeleted
+    const sdel = over.sdeleted ?? showDeletedSettlements
+    const pg = over.page ?? page
+    if (pg > 1) q.set('page', String(pg))
+    if (del) q.set('deleted', '1')
+    if (sdel) q.set('sdeleted', '1')
+    const qs = q.toString()
+    return `/admin/${group.id}${qs ? `?${qs}` : ''}`
+  }
+  const adminSettlements: AdminSettlement[] = settlementRows.map(r => ({
+    id: r.id as number,
+    from: String(r.from_name),
+    to: String(r.to_name),
+    currency: String(r.currency),
+    amount: Number(r.amount),
+    date: new Date(r.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    deleted: !!r.deleted_at,
+    deletedDate: r.deleted_at ? new Date(r.deleted_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null,
+  }))
+  const activeSettlementCount = adminSettlements.filter(x => !x.deleted).length
+  const deletedSettlementCount = adminSettlements.length - activeSettlementCount
 
   const adminMembers: AdminMember[] = members.map(m => ({
     id: m.id as number,
@@ -277,32 +332,37 @@ export default async function AdminGroupPage({
 
       {/* Expenses */}
       <Section title={`Expenses (${activeExpenseCount})`}>
+        {deletedExpenseCount > 0 && (
+          <div style={{ padding: '0.5rem 1rem', borderBottom: '0.5px solid #f3f4f6' }}>
+            <Link href={href({ deleted: !showDeleted, page: 1 })} style={{ fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+              {showDeleted ? 'Hide deleted' : `Show deleted (${deletedExpenseCount})`}
+            </Link>
+          </div>
+        )}
         <ExpensesList expenses={adminExpenses} restore={restoreExpense} />
+        {listTotal > ADMIN_PAGE_SIZE && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.625rem 1rem', borderTop: '0.5px solid #f3f4f6', fontSize: '0.8125rem' }}>
+            {page > 1
+              ? <Link href={href({ page: page - 1 })} style={pagerLink}>← Newer</Link>
+              : <span style={{ ...pagerLink, color: '#d1d5db' }}>← Newer</span>}
+            <span style={{ color: '#6b7280' }}>{rangeLabel(page, listTotal)} · page {page} of {pages}</span>
+            {page < pages
+              ? <Link href={href({ page: page + 1 })} style={pagerLink}>Older →</Link>
+              : <span style={{ ...pagerLink, color: '#d1d5db' }}>Older →</span>}
+          </div>
+        )}
       </Section>
 
       {/* Settlements */}
-      <Section title={`Settlements (${settlementRows.length})`}>
-        {settlementRows.length === 0 ? (
-          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>No settlements yet.</span></Row>
-        ) : (
-          settlementRows.map((s, i) => (
-            <Row key={String(s.id)} last={i === settlementRows.length - 1}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.875rem' }}>
-                  <span style={{ fontWeight: 500 }}>{String(s.from_name)}</span>
-                  <span style={{ color: '#9ca3af' }}> paid </span>
-                  <span style={{ fontWeight: 500 }}>{String(s.to_name)}</span>
-                </span>
-                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#16a34a', marginLeft: '0.75rem', flexShrink: 0 }}>
-                  {String(s.currency)} {Number(s.amount).toFixed(2)}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
-                {new Date(s.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </div>
-            </Row>
-          ))
+      <Section title={`Settlements (${activeSettlementCount})`}>
+        {deletedSettlementCount > 0 && (
+          <div style={{ padding: '0.5rem 1rem', borderBottom: '0.5px solid #f3f4f6' }}>
+            <Link href={href({ sdeleted: !showDeletedSettlements })} style={{ fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+              {showDeletedSettlements ? 'Hide deleted' : `Show deleted (${deletedSettlementCount})`}
+            </Link>
+          </div>
         )}
+        <SettlementsList settlements={adminSettlements} showDeleted={showDeletedSettlements} restore={restoreSettlement} />
       </Section>
     </div>
   )

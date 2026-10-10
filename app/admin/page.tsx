@@ -1,8 +1,8 @@
 import { sql } from '@/lib/sql'
 import { auth, signOut } from '@/auth'
 import { revalidatePath } from 'next/cache'
-import Link from 'next/link'
 import { ensureSchema } from '@/lib/db'
+import { AdminNav } from './AdminNav'
 import { GroupsList } from './GroupsList'
 import { isEmptyPrivateChat, type AdminGroupRow } from '@/lib/admin-groups'
 
@@ -114,15 +114,7 @@ export default async function AdminPage() {
         {activeGroups.length - emptyPrivate} groups{emptyPrivate > 0 ? ` (+${emptyPrivate} empty private)` : ''} · {totalMembers} members · {totalExpenses} expenses
       </p>
 
-      {/* Nav */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem' }}>
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', padding: '0.375rem 0.75rem', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
-          Groups
-        </span>
-        <Link href="/admin/users" style={{ fontSize: '0.875rem', fontWeight: 400, color: '#6b7280', textDecoration: 'none', padding: '0.375rem 0.75rem', borderRadius: '999px' }}>
-          Users
-        </Link>
-      </div>
+      <AdminNav active="groups" style={{ marginBottom: '1.5rem' }} />
 
       <GroupsList groups={groupRows} archive={archiveGroup} />
 
