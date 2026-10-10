@@ -1,6 +1,7 @@
 import { sql } from '@/lib/sql'
 import { signOut } from '@/auth'
 import Link from 'next/link'
+import { AdminNav } from '../AdminNav'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,15 +52,7 @@ export default async function AdminUsersPage() {
         {users.length} users
       </p>
 
-      {/* Nav */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem' }}>
-        <Link href="/admin" style={{ fontSize: '0.875rem', fontWeight: 400, color: '#6b7280', textDecoration: 'none', padding: '0.375rem 0.75rem', borderRadius: '999px' }}>
-          Groups
-        </Link>
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', padding: '0.375rem 0.75rem', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
-          Users
-        </span>
-      </div>
+      <AdminNav active="users" />
 
       {/* Users list */}
       <div className="admin-users-list" style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>

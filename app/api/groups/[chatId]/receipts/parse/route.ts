@@ -11,9 +11,9 @@ import {
   ReceiptParseError,
 } from '@/lib/receipt-parse'
 
-export const maxDuration = 30
+import { SCANS_PER_HOUR } from '@/lib/receipt-limits'
 
-const SCANS_PER_HOUR = 20
+export const maxDuration = 30
 
 // Reads a receipt photo and returns suggested expense fields. The image is processed in memory
 // and not stored; storing happens separately once the expense is saved.

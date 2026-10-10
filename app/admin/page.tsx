@@ -1,24 +1,45 @@
 import { sql } from '@/lib/sql'
-import { signOut } from '@/auth'
+import { auth, signOut } from '@/auth'
 import { revalidatePath } from 'next/cache'
-import Link from 'next/link'
-import { ArchiveButton } from './ArchiveButton'
+import { ensureSchema } from '@/lib/db'
+import { AdminNav } from './AdminNav'
+import { GroupsList } from './GroupsList'
+import { isEmptyPrivateChat, type AdminGroupRow } from '@/lib/admin-groups'
 
 export const dynamic = 'force-dynamic'
 
-async function archiveGroup(id: number, _formData: FormData) {
+async function archiveGroup(id: number) {
   'use server'
+  if (!(await auth())) throw new Error('Unauthorized')
   await sql`UPDATE groups SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL`
   revalidatePath('/admin')
 }
 
-
+// The activity log table is created by ensureSchema(), which normally runs when someone opens the
+// app. If an admin gets here first after a deploy, create it now and retry once.
+async function withSchema<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch {
+    await ensureSchema()
+    return run()
+  }
+}
 
 export default async function AdminPage() {
-  const [activeGroups, archivedGroups] = await Promise.all([
+  const [activeGroups, archivedGroups] = await withSchema(() => Promise.all([
     sql`
       SELECT
-        g.id, g.title, g.currency, g.created_at,
+        g.id, g.title, g.currency, g.created_at, g.chat_id::text AS chat_id,
+        -- last time anything happened in the group: someone joined, an expense or settlement was
+        -- added or deleted, or an expense was edited (GREATEST ignores the NULLs of empty groups)
+        GREATEST(
+          g.created_at,
+          (SELECT MAX(created_at) FROM members WHERE group_id = g.id),
+          (SELECT MAX(GREATEST(created_at, deleted_at)) FROM expenses WHERE group_id = g.id),
+          (SELECT MAX(GREATEST(created_at, deleted_at)) FROM settlements WHERE group_id = g.id),
+          (SELECT MAX(ev.created_at) FROM expense_events ev JOIN expenses e ON e.id = ev.expense_id WHERE e.group_id = g.id)
+        ) AS last_activity,
         (SELECT COUNT(*) FROM members     WHERE group_id = g.id)                          AS member_count,
         (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL)   AS expense_count,
         (SELECT COUNT(*) FROM settlements WHERE group_id = g.id AND deleted_at IS NULL)   AS settlement_count,
@@ -55,7 +76,21 @@ export default async function AdminPage() {
       WHERE g.deleted_at IS NOT NULL
       ORDER BY g.deleted_at DESC
     `,
-  ])
+  ]))
+
+  const groupRows: AdminGroupRow[] = activeGroups.map(g => ({
+    id: g.id as number,
+    title: String(g.title),
+    currency: String(g.currency),
+    created_at: new Date(g.created_at as string).toISOString(),
+    last_activity: new Date(g.last_activity as string).toISOString(),
+    chat_id: String(g.chat_id),
+    member_count: Number(g.member_count),
+    expense_count: Number(g.expense_count),
+    settlement_count: Number(g.settlement_count),
+    is_settled: !!g.is_settled,
+  }))
+  const emptyPrivate = groupRows.filter(isEmptyPrivateChat).length
 
   const totalMembers  = activeGroups.reduce((s, g) => s + Number(g.member_count), 0)
   const totalExpenses = activeGroups.reduce((s, g) => s + Number(g.expense_count), 0)
@@ -76,77 +111,12 @@ export default async function AdminPage() {
         </form>
       </div>
       <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
-        {activeGroups.length} groups · {totalMembers} members · {totalExpenses} expenses
+        {activeGroups.length - emptyPrivate} groups{emptyPrivate > 0 ? ` (+${emptyPrivate} empty private)` : ''} · {totalMembers} members · {totalExpenses} expenses
       </p>
 
-      {/* Nav */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem' }}>
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', padding: '0.375rem 0.75rem', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}>
-          Groups
-        </span>
-        <Link href="/admin/users" style={{ fontSize: '0.875rem', fontWeight: 400, color: '#6b7280', textDecoration: 'none', padding: '0.375rem 0.75rem', borderRadius: '999px' }}>
-          Users
-        </Link>
-      </div>
+      <AdminNav active="groups" style={{ marginBottom: '1.5rem' }} />
 
-      {/* Active group cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
-        {activeGroups.map(g => (
-          <div key={String(g.id)} style={{ display: 'flex', alignItems: 'stretch', gap: '0.5rem' }}>
-            <Link
-              href={`/admin/${g.id}`}
-              style={{ textDecoration: 'none', color: 'inherit', flex: 1 }}
-            >
-              <div style={{ background: '#fff', borderRadius: '14px', padding: '1rem 1.125rem', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', transition: 'box-shadow 0.15s', height: '100%' }}>
-
-                {/* Row 1: title + status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#111827' }}>{String(g.title)}</span>
-                  {g.is_settled ? (
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#16a34a', background: '#f0fdf4', borderRadius: '999px', padding: '0.1875rem 0.625rem', flexShrink: 0, marginLeft: '0.75rem' }}>
-                      Settled
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#dc2626', background: '#fef2f2', borderRadius: '999px', padding: '0.1875rem 0.625rem', flexShrink: 0, marginLeft: '0.75rem' }}>
-                      Outstanding
-                    </span>
-                  )}
-                </div>
-
-                {/* Row 2: currency + date */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', background: '#eff6ff', borderRadius: '6px', padding: '0.125rem 0.5rem' }}>
-                    {String(g.currency)}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                    {new Date(g.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
-
-                {/* Row 3: stats */}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {[
-                    { label: 'members',     value: String(g.member_count) },
-                    { label: 'expenses',    value: String(g.expense_count) },
-                    { label: 'settlements', value: String(g.settlement_count) },
-                  ].map(({ label, value }) => (
-                    <div key={label} style={{ flex: 1, background: '#f9fafb', borderRadius: '8px', padding: '0.4375rem 0.625rem' }}>
-                      <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>{value}</div>
-                      <div style={{ fontSize: '0.6875rem', color: '#9ca3af', marginTop: '0.125rem' }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-
-              </div>
-            </Link>
-
-            {/* Archive button — separate from the link */}
-            <form action={archiveGroup.bind(null, g.id as number)} style={{ display: 'flex' }}>
-              <ArchiveButton groupTitle={String(g.title)} />
-            </form>
-          </div>
-        ))}
-      </div>
+      <GroupsList groups={groupRows} archive={archiveGroup} />
 
       {/* Archived groups */}
       {archivedGroups.length > 0 && (

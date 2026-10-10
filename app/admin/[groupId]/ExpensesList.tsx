@@ -106,21 +106,8 @@ const restoreBtn: React.CSSProperties = { border: '1px solid #d1d5db', backgroun
 const heading: React.CSSProperties = { fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: grey, marginBottom: '0.375rem' }
 
 export function ExpensesList({ expenses, restore }: { expenses: AdminExpense[]; restore: (id: number) => Promise<void> }) {
-  const [showDeleted, setShowDeleted] = useState(false)
-  const deletedCount = expenses.filter(e => e.deleted).length
-  const rows = showDeleted ? expenses : expenses.filter(e => !e.deleted)
-
-  return (
-    <>
-      {deletedCount > 0 && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.5rem 1rem', fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
-          <input type="checkbox" checked={showDeleted} onChange={ev => setShowDeleted(ev.target.checked)} />
-          Show deleted ({deletedCount})
-        </label>
-      )}
-      {rows.length === 0
-        ? <div style={{ padding: '0.75rem 1rem', color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</div>
-        : rows.map((e, i) => <Row key={e.id} e={e} last={i === rows.length - 1} restore={restore} />)}
-    </>
-  )
+  if (expenses.length === 0) {
+    return <div style={{ padding: '0.75rem 1rem', color: '#6b7280', fontSize: '0.875rem' }}>No expenses yet.</div>
+  }
+  return <>{expenses.map((e, i) => <Row key={e.id} e={e} last={i === expenses.length - 1} restore={restore} />)}</>
 }
