@@ -9,7 +9,7 @@ import { ExpenseActivity } from '@/components/ExpenseActivity'
 import { useGroupData } from '@/components/GroupData'
 import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
 import { DateChip, DateSheet, SearchField } from '@/components/ExpenseFilters'
-import { NO_FILTERS, buildExpensesQuery, hasFilters, hasRange, inRange, rangeLabel, type DateRange, type ExpenseFilters } from '@/lib/expense-filter'
+import { MAX_PAGE_LIMIT, NO_FILTERS, PAGE_SIZE, buildExpensesQuery, hasFilters, hasRange, inRange, rangeLabel, type DateRange, type ExpenseFilters } from '@/lib/expense-filter'
 import { summarizeTotals, type CurrencyTotal } from '@/lib/group-totals'
 import { useRates } from '@/lib/use-rates'
 
@@ -442,7 +442,9 @@ export function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [settlements, setSettlements] = useState<Settlement[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [moreError, setMoreError] = useState(false)
+  const expensesRef = useRef<Expense[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState | null>(null)
@@ -482,21 +484,29 @@ export function ExpensesPage() {
   const { refreshBalances } = useGroupData()
   const loadedAt = useRef(0)
 
-  // silent: a background refresh. Keeps what is on screen, and a failure is ignored.
-  const fetchExpenses = useCallback(async (p: number, silent = false) => {
+  // silent: a background refresh. Keeps what is on screen (re-requesting as many rows as are already loaded, so
+  // "Load more" progress and scroll position survive), and a failure is ignored.
+  const fetchExpenses = useCallback(async (silent = false) => {
     const mine = ++latestRequest.current // a slower, older answer must never overwrite a newer one
     const keep = keepList.current
     keepList.current = false
     if (!silent) {
       if (keep) setSearching(true); else setLoading(true)
       setError(null)
+      setMoreError(false)
     }
+    const had = expensesRef.current
+    const limit = silent ? Math.min(MAX_PAGE_LIMIT, Math.max(PAGE_SIZE, had.length)) : PAGE_SIZE
     try {
-      const res = await fetch(`/api/groups/${chatId}/expenses?${buildExpensesQuery({ page: p, filters })}`, { headers: apiHeaders })
+      const res = await fetch(`/api/groups/${chatId}/expenses?${buildExpensesQuery({ offset: 0, limit, filters })}`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       if (mine !== latestRequest.current) return
-      setExpenses(data.items)
+      const fresh = data.items as Expense[]
+      // beyond the refresh cap, keep the older rows that were loaded further down
+      const freshIds = new Set(fresh.map(e => e.id))
+      const tail = silent ? had.slice(limit).filter(e => !freshIds.has(e.id)) : []
+      setExpenses([...fresh, ...tail])
       setTotal(data.total)
       setSummary(data.summary ?? null)
       setError(null)
@@ -508,6 +518,29 @@ export function ExpensesPage() {
     }
   }, [chatId, apiHeaders, filters])
 
+  // Append the next 30. A newer reload (filters changed, refresh) makes this answer stale and it is dropped.
+  const loadMore = async () => {
+    if (loadingMore) return
+    const mine = latestRequest.current
+    setLoadingMore(true)
+    setMoreError(false)
+    try {
+      const res = await fetch(`/api/groups/${chatId}/expenses?${buildExpensesQuery({ offset: expensesRef.current.length, limit: PAGE_SIZE, filters })}`, { headers: apiHeaders })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      if (mine !== latestRequest.current) return
+      setExpenses(prev => {
+        const ids = new Set(prev.map(e => e.id))
+        return [...prev, ...(data.items as Expense[]).filter(e => !ids.has(e.id))]
+      })
+      setTotal(data.total)
+    } catch {
+      if (mine === latestRequest.current) setMoreError(true)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const fetchBalance = refreshBalances // the header's "You owe" line and the Balances tab share one copy
 
   const fetchSettlements = useCallback(async () => {
@@ -518,7 +551,8 @@ export function ExpensesPage() {
     } catch { /* ignore */ }
   }, [chatId, apiHeaders])
 
-  useEffect(() => { fetchExpenses(page) }, [fetchExpenses, page])
+  useEffect(() => { expensesRef.current = expenses }, [expenses])
+  useEffect(() => { fetchExpenses() }, [fetchExpenses])
   useEffect(() => { fetchBalance() }, [fetchBalance])
   useEffect(() => { fetchSettlements() }, [fetchSettlements])
 
@@ -526,17 +560,16 @@ export function ExpensesPage() {
   // something), without a skeleton or losing the scroll position.
   useOnTabShown(() => {
     if (Date.now() - loadedAt.current < STALE_AFTER_MS) return
-    fetchExpenses(page, true)
+    fetchExpenses(true)
     fetchSettlements()
     refreshBalances(STALE_AFTER_MS)
   })
 
-  // A new search or date range starts from page 1; the previous results stay (dimmed) until the answer lands
+  // A new search or date range starts again from the first 30; the previous results stay (dimmed) until the answer lands
   const applyFilters = (next: ExpenseFilters) => {
     if (next.q === filters.q && next.range.from === filters.range.from && next.range.to === filters.range.to) return
     keepList.current = true
     setFilters(next)
-    setPage(1)
     setError(null)
   }
   const setRange = (range: DateRange) => { setShowDate(false); applyFilters({ ...filters, range }) }
@@ -561,7 +594,7 @@ export function ExpensesPage() {
     const doDelete = async () => {
       try {
         await fetch(`/api/groups/${chatId}/expenses/${id}`, { method: 'DELETE', headers: apiHeaders })
-        fetchExpenses(page)
+        fetchExpenses(true)
         fetchBalance()
         onSuccess?.()
       } catch (e) {
@@ -637,8 +670,7 @@ export function ExpensesPage() {
 
   const navigate = (path: string) => router.push(`${path}?chatId=${chatId}`)
 
-  const pageSize = 30
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const hasMore = expenses.length < total
 
   return (
     <>
@@ -680,7 +712,7 @@ export function ExpensesPage() {
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
           <p>Couldn&apos;t load expenses. {error}</p>
           <button
-            onClick={() => { fetchExpenses(page); fetchSettlements() }}
+            onClick={() => { fetchExpenses(); fetchSettlements() }}
             className="font-semibold mt-2"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
           >
@@ -839,28 +871,21 @@ export function ExpensesPage() {
         })
       })()}
 
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-6 mt-4 py-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(p => p - 1)}
-            className="text-2xl disabled:opacity-30"
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            ‹
-          </button>
-          <span className="text-sm" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {page} / {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => p + 1)}
-            className="text-2xl disabled:opacity-30"
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            ›
-          </button>
-        </div>
+      {!loading && !error && expenses.length > 0 && (
+        hasMore ? (
+          <div className="flex justify-center py-4">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="font-semibold text-sm px-6 py-3 tg-section"
+              style={{ borderRadius: 12, border: 'none', cursor: 'pointer', opacity: loadingMore ? 0.6 : 1, color: moreError ? 'var(--tg-theme-destructive-text-color, #d33)' : 'var(--tg-theme-link-color)' }}
+            >
+              {loadingMore ? 'Loading…' : moreError ? "Couldn't load more · Try again" : 'Load more'}
+            </button>
+          </div>
+        ) : (
+          <p className="text-center text-xs py-4" style={{ color: 'var(--tg-theme-hint-color)' }}>You&apos;ve reached the first expense</p>
+        )
       )}
     </div>
 

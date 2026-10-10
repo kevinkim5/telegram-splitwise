@@ -94,14 +94,32 @@ export function rangeLabel(r: DateRange, today: Date): string {
 }
 
 // ── request / validation ──
-export function buildExpensesQuery(o: { page: number; filters: ExpenseFilters }): string {
-  const p = new URLSearchParams({ page: String(o.page) })
+export const PAGE_SIZE = 30
+export const MAX_PAGE_LIMIT = 300
+
+// page (1-based) is the simple form; offset + limit let "Load more" append, and a quiet refresh re-request
+// everything already loaded in one call (limit is capped)
+export function buildExpensesQuery(o: { page?: number; offset?: number; limit?: number; filters: ExpenseFilters }): string {
+  const p = new URLSearchParams()
+  if (o.offset !== undefined) p.set('offset', String(o.offset))
+  else p.set('page', String(o.page ?? 1))
+  if (o.limit !== undefined) p.set('limit', String(o.limit))
   const q = o.filters.q.trim().slice(0, MAX_QUERY_LENGTH)
   if (q) p.set('q', q)
   const r = normalizeRange(o.filters.range)
   if (r.from) p.set('from', r.from)
   if (r.to) p.set('to', r.to)
   return p.toString()
+}
+
+// Server side: limit 1..MAX_PAGE_LIMIT (default PAGE_SIZE); an explicit offset wins over page
+export function parsePaging(sp: URLSearchParams): { page: number; limit: number; offset: number } {
+  const int = (k: string) => { const n = parseInt(sp.get(k) ?? '', 10); return Number.isFinite(n) ? n : null }
+  const limit = Math.min(MAX_PAGE_LIMIT, Math.max(1, int('limit') ?? PAGE_SIZE))
+  const page = Math.max(1, int('page') ?? 1)
+  const off = int('offset')
+  const offset = off !== null ? Math.max(0, off) : (page - 1) * limit
+  return { page, limit, offset }
 }
 
 // Escape the characters that mean something to LIKE, so searching "50%" or "a_b" finds exactly that
