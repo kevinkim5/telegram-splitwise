@@ -800,7 +800,6 @@ export function ExpensesPage() {
                             >
                               Paid
                             </span>
-                            <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
                           </div>
                         </div>
                       </div>
@@ -859,7 +858,6 @@ export function ExpensesPage() {
                           ) : (
                             <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>{isSolo ? 'No balance' : 'Not involved'}</p>
                           )}
-                          <span style={{ color: 'var(--tg-theme-hint-color)', fontSize: '18px', lineHeight: 1 }}>›</span>
                         </div>
                       </div>
                     </div>
