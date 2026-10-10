@@ -3,7 +3,7 @@ import { filterSortGroups, isEmptyPrivateChat, type AdminGroupRow } from '@/lib/
 
 const g = (id: number, title: string, over: Partial<AdminGroupRow> = {}): AdminGroupRow => ({
   id, title, currency: 'SGD', created_at: '2026-01-01T00:00:00Z', last_activity: '2026-01-01T00:00:00Z',
-  chat_id: String(-1000 - id), member_count: 3, expense_count: 2, settlement_count: 0, is_settled: false, ...over,
+  chat_id: String(-1000 - id), member_count: 3, expense_count: 2, settlement_count: 0, is_settled: false, totals: [], ...over,
 })
 
 const rows = [

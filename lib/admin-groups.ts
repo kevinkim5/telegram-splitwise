@@ -9,6 +9,7 @@ export interface AdminGroupRow {
   expense_count: number
   settlement_count: number
   is_settled: boolean
+  totals: { currency: string; total: number }[] // spent per currency (active expenses)
 }
 
 export type GroupSort = 'updated' | 'name'

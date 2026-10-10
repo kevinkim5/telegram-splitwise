@@ -29,12 +29,13 @@ export default async function AdminUsersPage() {
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
-      <style>{`
+      {/* raw CSS: React would escape the quotes in a text child and break the rules */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .admin-users-list details summary { list-style: none; }
         .admin-users-list details summary::-webkit-details-marker { display: none; }
         .admin-users-list details summary::after { content: '▼'; font-size: 10px; color: #9ca3af; flex-shrink: 0; }
         .admin-users-list details[open] summary::after { content: '▲'; }
-      `}</style>
+      ` }} />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
