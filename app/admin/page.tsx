@@ -43,6 +43,9 @@ export default async function AdminPage() {
         (SELECT COUNT(*) FROM members     WHERE group_id = g.id)                          AS member_count,
         (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL)   AS expense_count,
         (SELECT COUNT(*) FROM settlements WHERE group_id = g.id AND deleted_at IS NULL)   AS settlement_count,
+        (SELECT COALESCE(json_agg(json_build_object('currency', t.currency, 'total', t.total) ORDER BY t.currency), '[]'::json)
+           FROM (SELECT currency, SUM(total_amount)::float AS total
+                 FROM expenses WHERE group_id = g.id AND deleted_at IS NULL GROUP BY currency) t)   AS totals,
         NOT EXISTS (
           SELECT 1
           FROM (
@@ -89,6 +92,7 @@ export default async function AdminPage() {
     expense_count: Number(g.expense_count),
     settlement_count: Number(g.settlement_count),
     is_settled: !!g.is_settled,
+    totals: (g.totals as { currency: string; total: number }[]).map(t => ({ currency: String(t.currency), total: Number(t.total) })),
   }))
   const emptyPrivate = groupRows.filter(isEmptyPrivateChat).length
 
