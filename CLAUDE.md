@@ -51,11 +51,8 @@ All routes under `app/` (except `/admin`) are the Mini App embedded in Telegram.
 **Context:** `AppProvider` exposes `useAppContext()` which provides `chatId`, `group`, `currentMember`, `members`, `apiHeaders`, and refresh helpers. Every client component consumes this instead of calling the Telegram SDK directly.
 
 **Pages:**
-- `/` — expense list (`components/ExpensesPage.tsx`)
-- `/add` — add expense form
-- `/edit/[id]` — edit expense
-- `/balances` — who owes whom (simplified debt view)
-- `/totals` — spending totals per member
+- `/`, `/balances`, `/totals` — one persistent screen, `components/GroupShell.tsx` (route group `app/(group)/`): a fixed-height header (group name, a one-line SGD "You owe" from `useGroupData()`, members, settings), pill tabs Expenses / Balances / Totals, and a floating "+". Each tab (`ExpensesPage`, `BalancesPage`, `TotalsPage`) mounts the first time it is opened and then stays mounted (hidden, `inert`), so switching is instant and keeps scroll. Tab clicks use `history.replaceState` (no server round trip, no history entry); the route pages themselves render nothing and only provide the URLs. Balances are loaded once in `components/GroupData.tsx` and shared by the header and the Balances tab; anything that changes them calls `refreshBalances()`.
+- `/add`, `/edit/[id]` — full-screen add / edit expense form (Back and Save pinned at the top)
 
 ### Receipts (optional feature)
 

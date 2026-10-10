@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
+import { useGroupData } from '@/components/GroupData'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
@@ -235,11 +235,9 @@ function SkeletonBalances() {
 // default currency, which only pre-selects the currency when adding an expense.
 
 export function BalancesPage() {
-  const router = useRouter()
   const { chatId, currentMember, apiHeaders } = useAppContext()
-  const [data, setData] = useState<BalancesData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // One shared copy of the balances (the header's "You owe" line uses it too)
+  const { balances: data, balancesLoading: loading, balancesError: error, refreshBalances: loadBalances } = useGroupData()
   const showSkeleton = useShowSkeleton(loading)
   const [settleTarget, setSettleTarget] = useState<SettleGroup | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
@@ -282,21 +280,6 @@ export function BalancesPage() {
     }
   }
 
-  const loadBalances = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setData(await res.json())
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [chatId, apiHeaders])
-
-  useEffect(() => { loadBalances() }, [loadBalances])
 
   // Record the chosen payments (one per currency) in a single request: all saved or none.
   const handleRecord = async (payments: Payment[]) => {
@@ -395,38 +378,26 @@ export function BalancesPage() {
     new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-8 page-enter">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-24">
+      {/* Notify Group: the only action that lives in this tab's header row */}
+      {data && !allSettled && (
+        <div className="flex justify-end mb-3">
           <button
-            onClick={() => router.push(`/?chatId=${chatId}`)}
-            className="text-sm font-medium"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+            onClick={handleNotify}
+            disabled={notifying}
+            className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
+            style={{
+              background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
+              border: 'none',
+              cursor: notifying ? 'default' : 'pointer',
+              color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
+              opacity: notifying ? 0.6 : 1,
+            }}
           >
-            ← Back
+            {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
           </button>
-          <h1 className="font-bold text-lg">Balances</h1>
         </div>
-        {data && !allSettled && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={handleNotify}
-              disabled={notifying}
-              className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
-              style={{
-                background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
-                border: 'none',
-                cursor: notifying ? 'default' : 'pointer',
-                color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
-                opacity: notifying ? 0.6 : 1,
-              }}
-            >
-              {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Inline error rows */}
       {notifyError && (
