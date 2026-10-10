@@ -6,7 +6,7 @@ import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { ActivityEvent, Expense, ExpenseSplit, Member, Settlement } from '@/types'
 import { ExpenseActivity } from '@/components/ExpenseActivity'
-import { CurrencyPicker } from '@/components/CurrencyPicker'
+import { useGroupData } from '@/components/GroupData'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -24,36 +24,6 @@ function formatDateHeader(dateStr: string) {
 function getDateKey(dateStr: string): string {
   const d = new Date(dateStr)
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-type CurrencyBalance = { amount: number; currency: string }
-
-const AVATAR_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD',
-  '#F39C12', '#1ABC9C', '#9B59B6', '#E67E22', '#2ECC71',
-]
-
-function MemberAvatar({ member, size = 36 }: { member: { id: number; first_name: string; photo_url?: string | null }; size?: number }) {
-  const color = AVATAR_COLORS[member.id % AVATAR_COLORS.length]
-  if (member.photo_url) {
-    return (
-      <img
-        src={member.photo_url}
-        alt={member.first_name}
-        width={size}
-        height={size}
-        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-      />
-    )
-  }
-  return (
-    <div
-      className="flex items-center justify-center text-sm font-bold flex-shrink-0"
-      style={{ width: size, height: size, borderRadius: '50%', background: color, color: '#fff', fontSize: size * 0.4 }}
-    >
-      {member.first_name[0].toUpperCase()}
-    </div>
-  )
 }
 
 type DetailState =
@@ -76,15 +46,6 @@ function TrashIcon() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
       <path d="M10 11v6M14 11v6"/>
       <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-    </svg>
-  )
-}
-
-function GearIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     </svg>
   )
 }
@@ -433,113 +394,6 @@ function DetailPanel({
   )
 }
 
-function MembersSheet({ onClose }: { onClose: () => void }) {
-  const { members } = useAppContext()
-  return (
-    <div
-      className="fixed inset-0 flex items-end justify-center z-50"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        className="w-full rounded-t-2xl flex flex-col"
-        style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}
-      >
-        <div className="flex justify-between items-center p-4 pb-3">
-          <h2 className="text-lg font-bold">Group Members</h2>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}
-          >
-            ×
-          </button>
-        </div>
-        <div className="overflow-y-auto px-4 pb-6">
-          <div className="tg-section">
-            {members.map((m, idx) => (
-              <div
-                key={m.id}
-                className="tg-list-item flex items-center gap-3"
-                style={{ borderBottom: idx === members.length - 1 ? 'none' : undefined }}
-              >
-                <MemberAvatar member={m} size={36} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {m.first_name}{m.last_name ? ` ${m.last_name}` : ''}
-                  </p>
-                  {m.username && (
-                    <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>@{m.username}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SettingsSheet({ onClose }: { onClose: () => void }) {
-  const { chatId, group, apiHeaders, refreshGroup } = useAppContext()
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
-
-  const handleCurrencySelect = async (currency: string) => {
-    try {
-      await fetch(`/api/groups/${chatId}/settings`, {
-        method: 'PUT',
-        headers: apiHeaders,
-        body: JSON.stringify({ currency }),
-      })
-      await refreshGroup()
-      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
-    } catch { /* ignore */ }
-    setShowCurrencyPicker(false)
-  }
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 flex items-end justify-center z-50"
-        style={{ background: 'rgba(0,0,0,0.5)' }}
-        onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      >
-        <div className="w-full rounded-t-2xl flex flex-col" style={{ background: 'var(--tg-theme-bg-color)', maxHeight: '70dvh' }}>
-          <div className="flex justify-between items-center p-4 pb-3">
-            <h2 className="text-lg font-bold">Group Settings</h2>
-            <button onClick={onClose}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '24px', color: 'var(--tg-theme-hint-color)' }}>
-              ×
-            </button>
-          </div>
-          <div className="px-4 pb-6">
-            <p className="tg-label mb-2">Default Currency</p>
-            <div className="tg-section">
-              <button
-                onClick={() => setShowCurrencyPicker(true)}
-                className="w-full flex items-center justify-between"
-                style={{ padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-              >
-                <span className="text-sm">Currency</span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--tg-theme-button-color)' }}>
-                  {group.currency} ›
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      {showCurrencyPicker && (
-        <CurrencyPicker
-          current={group.currency}
-          onSelect={handleCurrencySelect}
-          onClose={() => setShowCurrencyPicker(false)}
-        />
-      )}
-    </>
-  )
-}
-
 function SkeletonExpenseItem() {
   return (
     <div className="tg-section" style={{ borderRadius: 12 }}>
@@ -583,13 +437,10 @@ export function ExpensesPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [myBalances, setMyBalances] = useState<CurrencyBalance[] | null>(null)
-  const [showMembers, setShowMembers] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [detail, setDetail] = useState<DetailState | null>(null)
 
   const showSkeleton = useShowSkeleton(loading)
-  const showBalanceShimmer = useShowSkeleton(myBalances === null)
+  const { refreshBalances } = useGroupData()
 
   const fetchExpenses = useCallback(async (p: number) => {
     setLoading(true)
@@ -607,19 +458,7 @@ export function ExpensesPage() {
     }
   }, [chatId, apiHeaders])
 
-  const fetchBalance = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
-      if (!res.ok) return
-      const data = await res.json()
-      const byCurrency = data.balances_by_currency as Record<string, Array<{ member_id: number; net_amount: number }>>
-      const lines = Object.entries(byCurrency).flatMap(([cur, bals]) => {
-        const mine = bals.find(b => b.member_id === currentMember.id)
-        return mine && Math.abs(mine.net_amount) > 0.005 ? [{ amount: mine.net_amount, currency: cur }] : []
-      })
-      setMyBalances(lines)
-    } catch { /* ignore */ }
-  }, [chatId, apiHeaders, currentMember.id])
+  const fetchBalance = refreshBalances // the header's "You owe" line and the Balances tab share one copy
 
   const fetchSettlements = useCallback(async () => {
     try {
@@ -717,120 +556,11 @@ export function ExpensesPage() {
   const pageSize = 30
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const balanceLines: { text: string; color: string }[] = myBalances === null ? []
-    : myBalances.length === 0
-      ? [{ text: 'All settled up ✓', color: 'var(--tg-theme-hint-color)' }]
-      : (() => {
-          const owe = myBalances.filter(b => b.amount < 0)
-          const getBack = myBalances.filter(b => b.amount > 0)
-          const lines: { text: string; color: string }[] = []
-          if (owe.length > 0)
-            lines.push({ text: 'You owe ' + owe.map(b => `${b.currency} ${Math.abs(b.amount).toFixed(2)}`).join(' + '), color: 'var(--tg-theme-destructive-text-color, #ff3b30)' })
-          if (getBack.length > 0)
-            lines.push({ text: 'You get back ' + getBack.map(b => `${b.currency} ${b.amount.toFixed(2)}`).join(' + '), color: 'var(--tg-theme-button-color)' })
-          return lines
-        })()
-
   return (
     <>
-    <div className="flex flex-col h-full page-enter">
-    {/* Fixed header */}
-    <div
-      className="flex-shrink-0 px-4 pt-4 pb-3"
-      style={{ background: 'var(--tg-theme-bg-color)', boxShadow: '0 1px 0 rgba(0,0,0,0.08)' }}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0 pr-3">
-          <h1 className="font-bold text-lg leading-tight">{group.title}</h1>
-          {showBalanceShimmer
-            ? <div className="skeleton" style={{ height: 12, width: 134, borderRadius: 3, marginTop: 4 }} />
-            : balanceLines.length > 0
-              ? <div className="mt-0.5 flex flex-col gap-0">
-                  {balanceLines.map((line, i) => (
-                    <p key={i} className="text-xs font-medium" style={{ color: line.color }}>{line.text}</p>
-                  ))}
-                </div>
-              : null
-          }
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => setShowMembers(true)}
-            className="flex items-center"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            aria-label="Group members"
-          >
-            {members.slice(0, 3).map((m, i) => (
-              <div
-                key={m.id}
-                style={{
-                  marginRight: -8,
-                  borderRadius: '50%',
-                  border: '2px solid var(--tg-theme-bg-color)',
-                  lineHeight: 0,
-                  flexShrink: 0,
-                }}
-              >
-                <MemberAvatar member={m} size={26} />
-              </div>
-            ))}
-            {members.length > 3 && (
-              <div
-                className="flex items-center justify-center flex-shrink-0"
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: '50%',
-                  background: 'var(--tg-theme-secondary-bg-color)',
-                  border: '2px solid var(--tg-theme-bg-color)',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  color: 'var(--tg-theme-hint-color)',
-                  marginLeft: 0,
-                }}
-              >
-                +{members.length - 3}
-              </div>
-            )}
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center justify-center w-8 h-8 rounded-full"
-            style={{ background: 'var(--tg-theme-secondary-bg-color)', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-hint-color)', marginLeft: 4 }}
-            aria-label="Group settings"
-          >
-            <GearIcon />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => navigate('/balances')}
-          className="flex-1 py-2 rounded-xl text-sm font-medium"
-          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
-        >
-          Balances
-        </button>
-        <button
-          onClick={() => navigate('/totals')}
-          className="flex-1 py-2 rounded-xl text-sm font-medium"
-          style={{ background: 'var(--tg-theme-section-bg-color)', border: '1px solid rgba(0,0,0,0.12)', cursor: 'pointer', color: 'var(--tg-theme-text-color)' }}
-        >
-          Totals
-        </button>
-        <button
-          onClick={() => navigate('/add')}
-          className="flex-1 tg-btn py-2 rounded-xl text-sm font-medium"
-          style={{ width: 'auto' }}
-        >
-          + Add
-        </button>
-      </div>
-    </div>
-
+    <div className="flex flex-col h-full">
     {/* Scrollable list */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-8">
+    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-24">
       {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />
@@ -1007,9 +737,6 @@ export function ExpensesPage() {
     </div>
 
     </div>
-
-    {showMembers && <MembersSheet onClose={() => setShowMembers(false)} />}
-    {showSettings && <SettingsSheet onClose={() => setShowSettings(false)} />}
 
     {detail && (
       <DetailPanel
