@@ -3,6 +3,7 @@ import { auth, signOut } from '@/auth'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { simplifyDebts, type NamedBalance } from '@/lib/balances'
+import { AdminBalances, type AdminMember } from './AdminBalances'
 import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
 import { insertEvent } from '@/lib/expense-events'
 import { ensureSchema } from '@/lib/db'
@@ -208,6 +209,15 @@ export default async function AdminGroupPage({
     return simplifyDebts(balances)
   })
 
+  const adminMembers: AdminMember[] = members.map(m => ({
+    id: m.id as number,
+    name: memberNameMap.get(m.id as number) ?? 'Unknown',
+    lines: [...netByCurrency.entries()].flatMap(([currency, byMember]) => {
+      const net = Math.round((byMember.get(m.id as number) ?? 0) * 100) / 100
+      return Math.abs(net) > 0.005 ? [{ currency, net }] : []
+    }),
+  }))
+
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
 
@@ -244,26 +254,9 @@ export default async function AdminGroupPage({
       )}
       {currencyTotals.length === 0 && <div style={{ marginBottom: '1.5rem' }} />}
 
-      {/* Balances */}
+      {/* Balances: shown like the app's Balances page */}
       <Section title="Outstanding Balances">
-        {allDebts.length === 0 ? (
-          <Row last><span style={{ color: '#6b7280', fontSize: '0.875rem' }}>All settled up ✓</span></Row>
-        ) : (
-          allDebts.map((d, i) => (
-            <Row key={i} last={i === allDebts.length - 1}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.875rem' }}>
-                  <span style={{ fontWeight: 500 }}>{d.from_name}</span>
-                  <span style={{ color: '#9ca3af' }}> owes </span>
-                  <span style={{ fontWeight: 500 }}>{d.to_name}</span>
-                </span>
-                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#dc2626', marginLeft: '0.75rem', flexShrink: 0 }}>
-                  {d.currency} {d.amount.toFixed(2)}
-                </span>
-              </div>
-            </Row>
-          ))
-        )}
+        <AdminBalances members={adminMembers} debts={allDebts} />
       </Section>
 
       {/* Members */}
