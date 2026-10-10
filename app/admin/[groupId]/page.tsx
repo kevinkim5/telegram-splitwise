@@ -6,6 +6,7 @@ import { simplifyDebts, type NamedBalance } from '@/lib/balances'
 import { AdminBalances, type AdminMember } from './AdminBalances'
 import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
 import { SettlementsList, type AdminSettlement } from './SettlementsList'
+import { GroupTotals } from './GroupTotals'
 import { AdminTabs, parseTab, tabHref } from './AdminTabs'
 import { ADMIN_PAGE_SIZE, pageCount, parsePage, rangeLabel } from '@/lib/pagination'
 import { insertEvent } from '@/lib/expense-events'
@@ -316,17 +317,7 @@ export default async function AdminGroupPage({
       <p style={{ color: '#6b7280', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>
         {memberCount} members · {activeExpenseCount} expenses
       </p>
-      {currencyTotals.length > 0 && (
-        <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', marginBottom: '1.5rem' }}>
-          {currencyTotals.map((t, i) => (
-            <span key={String(t.currency)}>
-              {i > 0 && <span style={{ color: '#d1d5db', margin: '0 0.375rem' }}>·</span>}
-              {String(t.currency)} {Number(t.total).toFixed(2)}
-            </span>
-          ))}
-        </p>
-      )}
-      {currencyTotals.length === 0 && <div style={{ marginBottom: '1.5rem' }} />}
+      <GroupTotals totals={currencyTotals.map(t => ({ currency: String(t.currency), total: Number(t.total) }))} />
 
       <AdminTabs groupId={group.id as number} active={tab} />
 
