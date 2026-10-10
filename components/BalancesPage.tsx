@@ -6,7 +6,8 @@ import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
-import { sumConverted, type CurrencyLine } from '@/lib/convert'
+import { CONVERT_TO, sumConverted, type CurrencyLine } from '@/lib/convert'
+import { useRates } from '@/lib/use-rates'
 import { buildPayments, checkAmount, groupDebtsByPerson, type Payment, type SettleGroup } from '@/lib/settle'
 import { CURRENCIES } from '@/components/CurrencyPicker'
 
@@ -232,7 +233,6 @@ function SkeletonBalances() {
 
 // Balances can be converted to this currency on demand. Independent of the group's
 // default currency, which only pre-selects the currency when adding an expense.
-const CONVERT_TO = 'SGD'
 
 export function BalancesPage() {
   const router = useRouter()
@@ -249,11 +249,14 @@ export function BalancesPage() {
   const [notifySent, setNotifySent] = useState(false)
 
   // Currency conversion
-  const [directRates, setDirectRates] = useState<Record<string, number> | null>(null)
-  const [ratesFailed, setRatesFailed] = useState(false)
-  const [ratesTry, setRatesTry] = useState(0) // bump to retry loading rates
-  const [ratesDate, setRatesDate] = useState<string | null>(null)
-  // Everything is shown converted as soon as rates are in; until then (or if they fail) originals
+  const foreignCurrencies = data
+    ? Object.entries(data.balances_by_currency)
+        .filter(([cur, bals]) => cur !== CONVERT_TO && bals.some(b => Math.abs(b.net_amount) > 0.005))
+        .map(([cur]) => cur)
+    : []
+  // Rates load on their own once there is a foreign currency; everything is then shown converted
+  // (until then, or if they can't load, in the original currencies)
+  const { rates: directRates, date: ratesDate, failed: ratesFailed, retry: retryRates } = useRates(foreignCurrencies)
   const showConverted = directRates !== null
 
   const handleNotify = async () => {
@@ -361,32 +364,6 @@ export function BalancesPage() {
   const memberName = (id: number) =>
     data?.balances.find(b => b.member_id === id)?.member_name ?? 'Unknown'
 
-  // Currencies with an outstanding balance that differ from the conversion target
-  const foreignCurrencies = data
-    ? Object.entries(data.balances_by_currency)
-        .filter(([cur, bals]) => cur !== CONVERT_TO && bals.some(b => Math.abs(b.net_amount) > 0.005))
-        .map(([cur]) => cur)
-    : []
-
-  // Rates load on their own as soon as there is a foreign currency to convert; everything on the
-  // page is then shown in CONVERT_TO, with the original amounts alongside.
-  const foreignKey = foreignCurrencies.join(',')
-  useEffect(() => {
-    if (!foreignKey) return
-    let cancelled = false
-    setRatesFailed(false)
-    fetch(`/api/rates?from=${foreignKey}&to=${CONVERT_TO}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then((j: { rates?: Record<string, number>; date?: string } | null) => {
-        if (cancelled) return
-        if (!j?.rates) { setRatesFailed(true); return }
-        setDirectRates(j.rates)
-        setRatesDate(j.date ?? null)
-      })
-      .catch(() => { if (!cancelled) setRatesFailed(true) })
-    return () => { cancelled = true }
-  }, [foreignKey, ratesTry])
-
   // Convert an amount to CONVERT_TO. Null when no rate is available.
   const toTarget = (amount: number, fromCurrency: string): number | null => {
     if (fromCurrency === CONVERT_TO) return amount
@@ -470,7 +447,7 @@ export function BalancesPage() {
                 Couldn&apos;t load exchange rates, so amounts are shown in their own currencies.
               </p>
               <button
-                onClick={() => setRatesTry(n => n + 1)}
+                onClick={retryRates}
                 className="font-semibold flex-shrink-0"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
               >

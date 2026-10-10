@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
+import { CONVERT_TO } from '@/lib/convert'
+import { useRates } from '@/lib/use-rates'
+import { combineTotals } from '@/lib/totals-all'
 
 interface CurrencySummary {
   currency: string
@@ -25,6 +28,8 @@ interface TotalsData {
   summary: CurrencySummary[]
   by_category: CategoryEntry[]
 }
+
+const ALL = 'ALL'
 
 function SkeletonTotals() {
   return (
@@ -77,10 +82,6 @@ export function TotalsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const d: TotalsData = await res.json()
       setData(d)
-      // Functional update: only initialises if still null — safe against stale closures
-      if (d.summary.length > 0) {
-        setSelectedCurrency(prev => prev ?? d.summary[0].currency)
-      }
     } catch (e) {
       setError(String(e))
     } finally {
@@ -90,10 +91,34 @@ export function TotalsPage() {
 
   useEffect(() => { fetchTotals() }, [fetchTotals])
 
-  const activeCurrency = selectedCurrency ?? data?.summary[0]?.currency ?? group.currency
-  const activeSummary = data?.summary.find(s => s.currency === activeCurrency)
-  const activeCats = (data?.by_category ?? []).filter(c => c.currency === activeCurrency)
   const isMultiCurrency = (data?.summary.length ?? 0) > 1
+  // With several currencies the page opens on "All": everything converted into CONVERT_TO
+  const activeCurrency = selectedCurrency ?? (isMultiCurrency ? ALL : data?.summary[0]?.currency) ?? group.currency
+  const showingAll = isMultiCurrency && activeCurrency === ALL
+  const { rates, date: ratesDate, failed: ratesFailed, retry: retryRates } =
+    useRates(isMultiCurrency ? data!.summary.map(s => s.currency) : [])
+  const combined = showingAll && data ? combineTotals(data.summary, data.by_category, rates) : null
+  const ratesPending = showingAll && !rates && !ratesFailed && (data?.summary.some(s => s.currency !== CONVERT_TO) ?? false)
+
+  // What the cards and category list show: one currency, or the converted "All"
+  const view = (() => {
+    if (!data) return null
+    if (showingAll) {
+      if (!combined || !combined.ok) return null
+      return {
+        label: `≈ ${CONVERT_TO}`,
+        group_total: combined.group_total, my_total: combined.my_total, count: combined.count,
+        cats: combined.categories,
+      }
+    }
+    const sum = data.summary.find(x => x.currency === activeCurrency)
+    if (!sum) return null
+    return {
+      label: sum.currency,
+      group_total: sum.group_total, my_total: sum.my_total, count: sum.count,
+      cats: data.by_category.filter(c => c.currency === activeCurrency),
+    }
+  })()
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto page-enter">
@@ -136,7 +161,7 @@ export function TotalsPage() {
             {/* Currency pills (multi-currency only) */}
             {isMultiCurrency && (
               <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-                {data.summary.map(s => (
+                {[ALL, ...data.summary.map(s => s.currency)].map(cur => ({ currency: cur })).map(s => (
                   <button
                     key={s.currency}
                     onClick={() => setSelectedCurrency(s.currency)}
@@ -152,14 +177,42 @@ export function TotalsPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    {s.currency}
+                    {s.currency === ALL ? `All · ${CONVERT_TO}` : s.currency}
                   </button>
                 ))}
               </div>
             )}
 
+            {/* "All" needs rates: say so while they load, or when they can't be used */}
+            {showingAll && ratesPending && (
+              <p className="text-xs px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Loading exchange rates…</p>
+            )}
+            {showingAll && (ratesFailed || (combined && !combined.ok)) && (
+              <div className="flex items-center justify-between gap-3 px-1 text-xs" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
+                <p>
+                  {combined && !combined.ok && rates
+                    ? `No exchange rate for ${combined.missing.join(', ')}, so there is no combined total. Pick a currency instead.`
+                    : "Couldn't load exchange rates, so there is no combined total. Pick a currency instead."}
+                </p>
+                {!rates && (
+                  <button
+                    onClick={retryRates}
+                    className="font-semibold flex-shrink-0"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)' }}
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            )}
+            {showingAll && view && (
+              <p className="text-xs px-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                ECB rates{ratesDate ? ` · ${new Date(`${ratesDate}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+              </p>
+            )}
+
             {/* Summary cards */}
-            {activeSummary && (
+            {view && (
               <div className="grid grid-cols-2 gap-3">
                 <div
                   className="rounded-2xl p-4 flex flex-col gap-1"
@@ -169,10 +222,10 @@ export function TotalsPage() {
                     Group total
                   </p>
                   <p className="font-bold leading-tight" style={{ fontSize: '18px' }}>
-                    {activeSummary.currency} {activeSummary.group_total.toFixed(2)}
+                    {view.label} {view.group_total.toFixed(2)}
                   </p>
                   <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                    {activeSummary.count} expense{activeSummary.count !== 1 ? 's' : ''}
+                    {view.count} expense{view.count !== 1 ? 's' : ''}
                   </p>
                 </div>
 
@@ -187,11 +240,11 @@ export function TotalsPage() {
                     className="font-bold leading-tight"
                     style={{ fontSize: '18px', color: 'var(--tg-theme-button-color)' }}
                   >
-                    {activeSummary.currency} {activeSummary.my_total.toFixed(2)}
+                    {view.label} {view.my_total.toFixed(2)}
                   </p>
                   <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                    {activeSummary.group_total > 0
-                      ? `${((activeSummary.my_total / activeSummary.group_total) * 100).toFixed(0)}% of total`
+                    {view.group_total > 0
+                      ? `${((view.my_total / view.group_total) * 100).toFixed(0)}% of total`
                       : '—'}
                   </p>
                 </div>
@@ -199,14 +252,14 @@ export function TotalsPage() {
             )}
 
             {/* Category breakdown */}
-            {activeCats.length > 0 && (
+            {view && view.cats.length > 0 && (
               <>
                 <p className="tg-label">By category</p>
                 <div className="tg-section">
-                  {activeCats.map((cat, idx) => {
-                    const isLast = idx === activeCats.length - 1
-                    const barPct = activeSummary && activeSummary.group_total > 0
-                      ? (cat.group_total / activeSummary.group_total) * 100
+                  {view.cats.map((cat, idx) => {
+                    const isLast = idx === view.cats.length - 1
+                    const barPct = view.group_total > 0
+                      ? (cat.group_total / view.group_total) * 100
                       : 0
                     const emoji = cat.category ? cat.category.split(' ')[0] : '🧾'
                     const label = cat.category
@@ -215,7 +268,7 @@ export function TotalsPage() {
 
                     return (
                       <div
-                        key={`${cat.currency}-${cat.category ?? '_null'}`}
+                        key={`${view.label}-${cat.category ?? '_null'}`}
                         style={{
                           padding: '12px 16px',
                           borderBottom: isLast ? 'none' : '0.5px solid rgba(0,0,0,0.08)',
@@ -227,12 +280,12 @@ export function TotalsPage() {
                             <div className="min-w-0">
                               <p className="text-sm font-semibold truncate">{label}</p>
                               <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                                {cat.count} expense{cat.count !== 1 ? 's' : ''} · you {cat.currency} {cat.my_total.toFixed(2)}
+                                {cat.count} expense{cat.count !== 1 ? 's' : ''} · you {view.label} {cat.my_total.toFixed(2)}
                               </p>
                             </div>
                           </div>
                           <p className="text-sm font-bold flex-shrink-0">
-                            {cat.currency} {cat.group_total.toFixed(2)}
+                            {view.label} {cat.group_total.toFixed(2)}
                           </p>
                         </div>
 
