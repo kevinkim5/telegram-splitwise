@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppContext } from '@/components/AppProvider'
 import { useGroupData } from '@/components/GroupData'
+import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { SimplifiedDebt } from '@/types'
 import type { NamedBalance } from '@/lib/balances'
@@ -238,7 +239,9 @@ export function BalancesPage() {
   const { chatId, currentMember, apiHeaders } = useAppContext()
   // One shared copy of the balances (the header's "You owe" line uses it too)
   const { balances: data, balancesLoading: loading, balancesError: error, refreshBalances: loadBalances } = useGroupData()
-  const showSkeleton = useShowSkeleton(loading)
+  const delayedSkeleton = useShowSkeleton(loading)
+  const showSkeleton = (loading && !data) || delayedSkeleton // skeleton straight away on first open
+  useOnTabShown(() => { loadBalances(STALE_AFTER_MS) }) // quietly refresh when coming back after a while
   const [settleTarget, setSettleTarget] = useState<SettleGroup | null>(null)
   const [expandedMembers, setExpandedMembers] = useState<Set<number>>(new Set())
 
@@ -378,7 +381,7 @@ export function BalancesPage() {
     new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-4 pb-fab">
+    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto p-4 pb-fab">
       {/* One row: the rates note on the left, Notify Group on the right */}
       {(() => {
         const showRatesInfo = !!data && !allSettled && foreignCurrencies.length > 0 && (showConverted || ratesFailed)
@@ -435,7 +438,14 @@ export function BalancesPage() {
       {showSkeleton && <SkeletonBalances />}
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
-          {error}
+          <p>Couldn&apos;t load balances. {error}</p>
+          <button
+            onClick={() => loadBalances()}
+            className="font-semibold mt-2"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 

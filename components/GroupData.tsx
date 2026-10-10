@@ -15,7 +15,8 @@ interface GroupDataValue {
   balances: BalancesData | null
   balancesError: string | null
   balancesLoading: boolean
-  refreshBalances: () => Promise<void>
+  // maxAgeMs: skip the request if the data is newer than this (used when returning to a tab)
+  refreshBalances: (maxAgeMs?: number) => Promise<void>
 }
 
 const Ctx = createContext<GroupDataValue | null>(null)
@@ -29,9 +30,11 @@ export function GroupDataProvider({ children }: { children: React.ReactNode }) {
   const [balancesError, setBalancesError] = useState<string | null>(null)
   const [balancesLoading, setBalancesLoading] = useState(true)
   const inflight = useRef<Promise<void> | null>(null)
+  const lastAt = useRef(0)
 
-  const refreshBalances = useCallback((): Promise<void> => {
+  const refreshBalances = useCallback((maxAgeMs = 0): Promise<void> => {
     if (inflight.current) return inflight.current // don't stack requests
+    if (maxAgeMs > 0 && Date.now() - lastAt.current < maxAgeMs) return Promise.resolve()
     const run = (async () => {
       try {
         const res = await fetch(`/api/groups/${chatId}/balances`, { headers: apiHeaders })
@@ -41,6 +44,7 @@ export function GroupDataProvider({ children }: { children: React.ReactNode }) {
         if (!json || typeof json.balances_by_currency !== 'object' || !Array.isArray(json.simplified_debts)) throw new Error('Unexpected response')
         setBalances(json)
         setBalancesError(null)
+        lastAt.current = Date.now()
       } catch (e) {
         setBalancesError(String(e))
       } finally {

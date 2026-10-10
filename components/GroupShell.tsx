@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { GroupDataProvider, useGroupData } from '@/components/GroupData'
@@ -11,6 +11,7 @@ import { TotalsPage } from '@/components/TotalsPage'
 import { CONVERT_TO, sumConverted } from '@/lib/convert'
 import { useRates } from '@/lib/use-rates'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
+import { TabActiveContext } from '@/components/TabActive'
 
 type TabKey = 'expenses' | 'balances' | 'totals'
 
@@ -75,31 +76,56 @@ function Shell() {
   const router = useRouter()
   const pathname = usePathname()
   const { chatId, group, members } = useAppContext()
-  const active = tabFromPath(pathname)
+  // The active tab is plain local state, set the moment a tab is tapped. The URL is kept in step
+  // with it, but nothing waits on the router, so a tap always shows the new tab in the same frame.
+  const [active, setActive] = useState<TabKey>(() => tabFromPath(pathname))
+  useEffect(() => {
+    const onPop = () => setActive(tabFromPath(window.location.pathname)) // browser back / forward
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   const [showMembers, setShowMembers] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   // While a text field has focus the on-screen keyboard is (or is about to be) up: the "+" would sit
   // on top of what is being typed, so it steps aside until focus leaves the field.
   const [typing, setTyping] = useState(false)
   useEffect(() => {
-    const isField = (el: EventTarget | null) =>
-      el instanceof HTMLElement && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' ||
+    const isField = (el: Element | null) =>
+      !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' ||
         (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((el as HTMLInputElement).type)))
-    const on = (e: FocusEvent) => { if (isField(e.target)) setTyping(true) }
-    const off = () => setTyping(false)
-    document.addEventListener('focusin', on)
-    document.addEventListener('focusout', off)
-    return () => { document.removeEventListener('focusin', on); document.removeEventListener('focusout', off) }
+    // Look at what actually has focus, after the event settles. (A focused field that is removed
+    // from the page, e.g. a closing sheet, doesn't always send a blur, so never trust a flag.)
+    const sync = () => setTimeout(() => setTyping(isField(document.activeElement)), 0)
+    document.addEventListener('focusin', sync)
+    document.addEventListener('focusout', sync)
+    document.addEventListener('pointerdown', sync)
+    return () => {
+      document.removeEventListener('focusin', sync)
+      document.removeEventListener('focusout', sync)
+      document.removeEventListener('pointerdown', sync)
+    }
   }, [])
-  // A tab mounts the first time it is opened and then stays mounted (hidden), so switching back
-  // is instant and keeps its scroll position and anything typed or expanded in it.
+  // A tab mounts the first time it is opened and then stays mounted (hidden with display:none),
+  // so switching back is instant and keeps what was loaded, typed or expanded in it.
   const [opened, setOpened] = useState<Set<TabKey>>(() => new Set([active]))
   useEffect(() => { setOpened(prev => (prev.has(active) ? prev : new Set(prev).add(active))) }, [active])
 
+  // display:none resets a scroller, so remember each tab's scroll position and put it back
+  const panels = useRef<Partial<Record<TabKey, HTMLDivElement | null>>>({})
+  const scrollTops = useRef<Partial<Record<TabKey, number>>>({})
+  const scroller = (key: TabKey) => panels.current[key]?.querySelector<HTMLElement>('[data-tab-scroll]') ?? null
+  useLayoutEffect(() => {
+    const el = scroller(active)
+    if (el) el.scrollTop = scrollTops.current[active] ?? 0
+  }, [active])
+
   const switchTab = (tab: (typeof TABS)[number]) => {
     if (tab.key === active) return
+    const leaving = scroller(active)
+    if (leaving) scrollTops.current[active] = leaving.scrollTop
     window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.()
-    // Update the URL without a server round trip or a history entry
+    setActive(tab.key)
+    // Keep the URL in step without a server round trip or a history entry
     window.history.replaceState(null, '', `${tab.path}?chatId=${chatId}`)
   }
 
@@ -172,16 +198,18 @@ function Shell() {
           ['expenses', ExpensesPage],
           ['balances', BalancesPage],
           ['totals', TotalsPage],
-        ] as const).map(([key, Tab]) => opened.has(key) && (
+        ] as const).map(([key, Tab]) => (opened.has(key) || key === active) && (
           <div
             key={key}
+            ref={el => { panels.current[key] = el }}
             role="tabpanel"
-            aria-hidden={key !== active}
-            inert={key !== active}
-            className="absolute inset-0 flex flex-col"
-            style={{ visibility: key === active ? 'visible' : 'hidden' }}
+            hidden={key !== active}
+            className="absolute inset-0 flex-col"
+            style={{ display: key === active ? 'flex' : 'none' }}
           >
-            <Tab />
+            <TabActiveContext.Provider value={key === active}>
+              <Tab />
+            </TabActiveContext.Provider>
           </div>
         ))}
       </div>

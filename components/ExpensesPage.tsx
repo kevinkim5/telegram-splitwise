@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppContext } from '@/components/AppProvider'
 import { useShowSkeleton } from '@/lib/use-show-skeleton'
 import type { ActivityEvent, Expense, ExpenseSplit, Member, Settlement } from '@/types'
 import { ExpenseActivity } from '@/components/ExpenseActivity'
 import { useGroupData } from '@/components/GroupData'
+import { STALE_AFTER_MS, useOnTabShown } from '@/components/TabActive'
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -439,22 +440,28 @@ export function ExpensesPage() {
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState | null>(null)
 
-  const showSkeleton = useShowSkeleton(loading)
+  // First open: show the skeleton straight away (no blank frame). Later reloads of data we already
+  // have only show it if they drag on.
+  const delayedSkeleton = useShowSkeleton(loading)
+  const showSkeleton = (loading && expenses.length === 0 && settlements.length === 0) || delayedSkeleton
   const { refreshBalances } = useGroupData()
+  const loadedAt = useRef(0)
 
-  const fetchExpenses = useCallback(async (p: number) => {
-    setLoading(true)
-    setError(null)
+  // silent: a background refresh. Keeps what is on screen, and a failure is ignored.
+  const fetchExpenses = useCallback(async (p: number, silent = false) => {
+    if (!silent) { setLoading(true); setError(null) }
     try {
       const res = await fetch(`/api/groups/${chatId}/expenses?page=${p}`, { headers: apiHeaders })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setExpenses(data.items)
       setTotal(data.total)
+      setError(null)
+      loadedAt.current = Date.now()
     } catch (e) {
-      setError(String(e))
+      if (!silent) setError(String(e))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [chatId, apiHeaders])
 
@@ -471,6 +478,15 @@ export function ExpensesPage() {
   useEffect(() => { fetchExpenses(page) }, [fetchExpenses, page])
   useEffect(() => { fetchBalance() }, [fetchBalance])
   useEffect(() => { fetchSettlements() }, [fetchSettlements])
+
+  // Coming back to this tab: quietly refresh if it has been a while (someone may have added
+  // something), without a skeleton or losing the scroll position.
+  useOnTabShown(() => {
+    if (Date.now() - loadedAt.current < STALE_AFTER_MS) return
+    fetchExpenses(page, true)
+    fetchSettlements()
+    refreshBalances(STALE_AFTER_MS)
+  })
 
   const handleDelete = (id: number, onSuccess?: () => void) => {
     const tg = window.Telegram?.WebApp
@@ -560,7 +576,7 @@ export function ExpensesPage() {
     <>
     <div className="flex flex-col h-full">
     {/* Scrollable list */}
-    <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab">
+    <div data-tab-scroll className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 pb-fab">
       {showSkeleton && (
         <>
           <SkeletonExpenseGroup count={3} first />
@@ -570,7 +586,14 @@ export function ExpensesPage() {
 
       {error && (
         <div className="py-4 text-center text-sm" style={{ color: 'var(--tg-theme-destructive-text-color)' }}>
-          {error}
+          <p>Couldn&apos;t load expenses. {error}</p>
+          <button
+            onClick={() => { fetchExpenses(page); fetchSettlements() }}
+            className="font-semibold mt-2"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tg-theme-link-color)', fontSize: 'inherit' }}
+          >
+            Try again
+          </button>
         </div>
       )}
 
