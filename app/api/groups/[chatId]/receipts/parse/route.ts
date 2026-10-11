@@ -6,12 +6,14 @@ import { parseChatId } from '@/lib/parse-params'
 import { readReceiptImage } from '@/lib/receipt-image'
 import {
   isEmptyReceipt,
+  newScanTiming,
   parseReceipt,
   receiptParsingConfigured,
   ReceiptParseError,
 } from '@/lib/receipt-parse'
 
 import { SCANS_PER_HOUR } from '@/lib/receipt-limits'
+import { outcomeFromStatus, timingInsertValues, type ScanOutcome } from '@/lib/scan-timing'
 
 export const maxDuration = 30
 
@@ -48,19 +50,36 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   }
   const [scan] = await sql`INSERT INTO receipt_scans (telegram_user_id) VALUES (${user.id}) RETURNING id`
 
+  // How long this scan took goes to receipt_scan_timings (admin Usage page). Best effort: a logging
+  // failure never changes the answer.
+  const timing = newScanTiming()
+  const started = Date.now()
+  const logTiming = async (outcome: ScanOutcome) => {
+    const v = timingInsertValues({ telegramUserId: user.id, outcome, totalMs: Date.now() - started, timing })
+    await sql`
+      INSERT INTO receipt_scan_timings
+        (telegram_user_id, model, outcome, total_ms, gemini_ms, attempts, http_status, image_bytes, prompt_tokens, thought_tokens, output_tokens)
+      VALUES (${v.user}, ${v.model}, ${v.outcome}, ${v.totalMs}, ${v.geminiMs}, ${v.attempts}, ${v.httpStatus}, ${v.imageBytes}, ${v.promptTokens}, ${v.thoughtTokens}, ${v.outputTokens})
+    `.catch(() => {})
+  }
+
   try {
-    const receipt = await parseReceipt(image.bytes, image.type)
+    const receipt = await parseReceipt(image.bytes, image.type, timing)
     if (isEmptyReceipt(receipt)) {
+      await logTiming('unreadable')
       return NextResponse.json({ error: "Couldn't read this receipt. Try a clearer photo." }, { status: 422 })
     }
+    await logTiming('ok')
     return NextResponse.json(receipt)
   } catch (err) {
     if (err instanceof ReceiptParseError) {
       // The provider failed (overloaded, quota, timeout): that wasn't the user's scan, so don't count it
       if (scan?.id) await sql`DELETE FROM receipt_scans WHERE id = ${scan.id}`.catch(() => {})
+      await logTiming(outcomeFromStatus(err.status))
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
     console.error('Receipt parse error:', err)
+    await logTiming('error')
     return NextResponse.json({ error: 'Receipt scanning failed. Try again.' }, { status: 500 })
   }
 }

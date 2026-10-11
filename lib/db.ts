@@ -89,6 +89,25 @@ export async function ensureSchema() {
     )
   `
   await sql`CREATE INDEX IF NOT EXISTS idx_receipt_scans_user ON receipt_scans(telegram_user_id, created_at DESC)`
+  // One row per scan attempt with how long it took (failures included, unlike receipt_scans), for the admin Usage page
+  await sql`
+    CREATE TABLE IF NOT EXISTS receipt_scan_timings (
+      id               SERIAL PRIMARY KEY,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      telegram_user_id BIGINT NOT NULL,
+      model            TEXT,
+      outcome          TEXT NOT NULL,
+      total_ms         INTEGER NOT NULL,
+      gemini_ms        INTEGER,
+      attempts         INTEGER,
+      http_status      INTEGER,
+      image_bytes      INTEGER,
+      prompt_tokens    INTEGER,
+      thought_tokens   INTEGER,
+      output_tokens    INTEGER
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS idx_receipt_scan_timings_created ON receipt_scan_timings(created_at DESC)`
   await sql`CREATE INDEX IF NOT EXISTS idx_expenses_group    ON expenses(group_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_splits_expense    ON expense_splits(expense_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_splits_member     ON expense_splits(member_id)`
