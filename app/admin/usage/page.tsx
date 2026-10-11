@@ -3,6 +3,7 @@ import { signOut } from '@/auth'
 import { ensureSchema } from '@/lib/db'
 import { SCANS_PER_HOUR } from '@/lib/receipt-limits'
 import { AdminNav } from '../AdminNav'
+import { fmtMs } from '@/lib/scan-timing'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,30 @@ async function load() {
       ORDER BY d30 DESC, total DESC
       LIMIT 100
     `,
+    // Speed. 'answered' = Google replied (ok or unreadable); the others are failures with how long they took
+    sql`
+      SELECT
+        COALESCE(model, 'unknown') AS model,
+        COUNT(*) FILTER (WHERE outcome IN ('ok', 'unreadable'))::int                                              AS answered,
+        COUNT(*) FILTER (WHERE outcome NOT IN ('ok', 'unreadable'))::int                                          AS failed,
+        percentile_cont(0.5)  WITHIN GROUP (ORDER BY total_ms) FILTER (WHERE outcome IN ('ok', 'unreadable'))    AS p50,
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY total_ms) FILTER (WHERE outcome IN ('ok', 'unreadable'))    AS p95,
+        AVG(total_ms) FILTER (WHERE outcome IN ('ok', 'unreadable'))                                              AS avg_ms,
+        AVG(thought_tokens) FILTER (WHERE outcome IN ('ok', 'unreadable'))                                        AS avg_thought,
+        AVG(prompt_tokens)  FILTER (WHERE outcome IN ('ok', 'unreadable'))                                        AS avg_prompt,
+        AVG(image_bytes)    FILTER (WHERE outcome IN ('ok', 'unreadable'))                                        AS avg_bytes
+      FROM receipt_scan_timings
+      WHERE created_at > NOW() - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY answered DESC
+    `,
+    sql`
+      SELECT created_at, COALESCE(model, 'unknown') AS model, outcome, total_ms, gemini_ms, attempts,
+             prompt_tokens, thought_tokens, output_tokens, image_bytes
+      FROM receipt_scan_timings
+      ORDER BY created_at DESC, id DESC
+      LIMIT 15
+    `,
   ])
   try {
     return await run()
@@ -70,7 +95,7 @@ function Stat({ label, value, sub }: { label: string; value: number | string; su
 }
 
 export default async function AdminUsagePage() {
-  const [[totals], perDayRows, users] = await load()
+  const [[totals], perDayRows, users, speedByModel, recentTimings] = await load()
 
   // The last 14 days including today, zero-filled, newest first (days in Singapore time)
   const counts = new Map(perDayRows.map(r => [r.day as string, Number(r.scans)]))
@@ -114,6 +139,48 @@ export default async function AdminUsagePage() {
       <p style={{ fontSize: '0.6875rem', color: grey, marginBottom: '1.25rem', paddingLeft: '0.25rem' }}>
         {Number(totals?.total ?? 0)} scans in total{totals?.since ? `, since ${new Date(totals.since as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ })}` : ''}
       </p>
+
+      {/* Speed */}
+      <p style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: grey, marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>
+        Speed (last 30 days)
+      </p>
+      <div style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.06)', marginBottom: '0.5rem' }}>
+        {speedByModel.length === 0 && <div style={{ padding: '0.75rem 1rem', color: '#6b7280', fontSize: '0.875rem' }}>No timings yet. They are recorded from the next scan on.</div>}
+        {speedByModel.map((m, i) => (
+          <div key={String(m.model)} style={{ padding: '0.75rem 1rem', borderBottom: i === speedByModel.length - 1 ? 'none' : '0.5px solid #f3f4f6' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem' }}>
+              <span style={{ fontWeight: 500, fontSize: '0.875rem', overflowWrap: 'anywhere' }}>{String(m.model)}</span>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>{fmtMs(m.p50 as number | null)}<span style={{ color: grey, fontWeight: 400, fontSize: '0.6875rem' }}> median</span></span>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: grey, marginTop: '0.125rem' }}>
+              slowest 1 in 20: {fmtMs(m.p95 as number | null)} · average {fmtMs(m.avg_ms as number | null)} · {Number(m.answered)} answered
+              {Number(m.failed) > 0 && <span style={{ color: '#b91c1c' }}> · {Number(m.failed)} failed</span>}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: grey }}>
+              avg thinking tokens {m.avg_thought === null ? '—' : Math.round(Number(m.avg_thought))} · avg input tokens {m.avg_prompt === null ? '—' : Math.round(Number(m.avg_prompt))} · avg image {m.avg_bytes === null ? '—' : `${Math.round(Number(m.avg_bytes) / 1024)} KB`}
+            </div>
+          </div>
+        ))}
+      </div>
+      {recentTimings.length > 0 && (
+        <details style={{ marginBottom: '1.5rem' }}>
+          <summary style={{ fontSize: '0.8125rem', color: '#2563eb', fontWeight: 600, cursor: 'pointer', padding: '0.25rem' }}>Latest {recentTimings.length} scans</summary>
+          <div style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.06)', marginTop: '0.5rem' }}>
+            {recentTimings.map((t, i) => (
+              <div key={`${String(t.created_at)}-${i}`} style={{ padding: '0.5rem 1rem', borderBottom: i === recentTimings.length - 1 ? 'none' : '0.5px solid #f3f4f6', fontSize: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <span style={{ color: '#6b7280' }}>{fmtWhen(t.created_at as string)} · {String(t.model)}</span>
+                  <span style={{ fontWeight: 600, color: t.outcome === 'ok' ? '#111827' : '#b91c1c' }}>{fmtMs(t.total_ms as number)} · {String(t.outcome).replace('_', ' ')}</span>
+                </div>
+                <div style={{ color: grey }}>
+                  google {fmtMs(t.gemini_ms as number | null)}{Number(t.attempts) > 1 ? ` (${Number(t.attempts)} tries)` : ''} · thinking {t.thought_tokens ?? '—'} · in {t.prompt_tokens ?? '—'} · out {t.output_tokens ?? '—'}{t.image_bytes ? ` · ${Math.round(Number(t.image_bytes) / 1024)} KB` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      {recentTimings.length === 0 && <div style={{ marginBottom: '1.5rem' }} />}
 
       {/* Per day */}
       <p style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: grey, marginBottom: '0.5rem', paddingLeft: '0.25rem' }}>

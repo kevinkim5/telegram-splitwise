@@ -109,14 +109,34 @@ const RESPONSE_SCHEMA = {
   required: ['merchant', 'total', 'currency', 'date', 'category'],
 }
 
+// What one scan cost, filled in by parseReceipt as it goes (even when it throws), so the route can
+// log it for the admin Usage page. Nothing here changes how a scan behaves.
+export interface ScanTiming {
+  model: string
+  imageBytes: number
+  attempts: number
+  geminiMs: number | null // the last request to Google, start to response headers
+  httpStatus: number | null
+  promptTokens: number | null
+  thoughtTokens: number | null
+  outputTokens: number | null
+}
+
+export function newScanTiming(): ScanTiming {
+  return { model: '', imageBytes: 0, attempts: 0, geminiMs: null, httpStatus: null, promptTokens: null, thoughtTokens: null, outputTokens: null }
+}
+
 export async function parseReceipt(
   bytes: Uint8Array,
   mediaType: ReceiptMediaType,
+  timing: ScanTiming = newScanTiming(),
 ): Promise<ParsedReceipt> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new ReceiptParseError('Receipt scanning is not configured', 503)
 
   const model = process.env.GEMINI_RECEIPT_MODEL || DEFAULT_MODEL
+  timing.model = model
+  timing.imageBytes = bytes.byteLength
   const today = new Date().toISOString().slice(0, 10)
   const prompt = [
     'Read this receipt and return the details as JSON.',
@@ -153,12 +173,22 @@ export async function parseReceipt(
   })
 
   const started = Date.now()
-  const callOnce = () => fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-    body,
-    signal: AbortSignal.timeout(Math.max(1000, TOTAL_BUDGET_MS - (Date.now() - started))),
-  })
+  const callOnce = async () => {
+    const t0 = Date.now()
+    timing.attempts++
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body,
+        signal: AbortSignal.timeout(Math.max(1000, TOTAL_BUDGET_MS - (Date.now() - started))),
+      })
+      timing.httpStatus = r.status
+      return r
+    } finally {
+      timing.geminiMs = Date.now() - t0
+    }
+  }
   const timedOut = new ReceiptParseError('Receipt scanning took too long. Try again, or fill in the details yourself.', 504)
 
   let res: Response
@@ -201,7 +231,12 @@ export async function parseReceipt(
 
   const json = await res.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    usageMetadata?: { promptTokenCount?: number; thoughtsTokenCount?: number; candidatesTokenCount?: number }
   }
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  timing.promptTokens = num(json.usageMetadata?.promptTokenCount)
+  timing.thoughtTokens = num(json.usageMetadata?.thoughtsTokenCount)
+  timing.outputTokens = num(json.usageMetadata?.candidatesTokenCount)
   const text = json.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('')
   if (!text) return { ...EMPTY_RECEIPT } // blocked or empty response: treated as unreadable
 
