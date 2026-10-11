@@ -98,8 +98,7 @@ describe('POST /notify-balances', () => {
     vi.mocked(getAuthUser).mockReturnValue({ id: 99, first_name: 'Kev' } as never)
     mockSql.mockImplementation(((strings: TemplateStringsArray) => {
       const q = strings.join('?').replace(/\s+/g, ' ').trim()
-      if (/^SELECT id, title FROM groups/.test(q)) return Promise.resolve([{ id: 5, title: 'Tokyo Trip' }])
-      if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 7 }])
+      if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve([{ id: 5, title: 'Tokyo Trip', currency: 'SGD', member_id: 7 }])
       if (/^SELECT id, first_name, last_name, username FROM members/.test(q)) {
         return Promise.resolve([{ id: 7, first_name: 'Kev', username: 'kev' }, { id: 8, first_name: 'Ann', username: 'ann' }])
       }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { loadSimplifiedDebts } from '@/lib/group-balances'
 import { parseChatId } from '@/lib/parse-params'
@@ -31,11 +31,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   }
   const items = parsed.data.settlements
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const me = await getGroupMember(group.id as number, user.id)
-  if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const me = access.member
 
   // You can only record payments that involve you, and each currency at most once per direction
   const seen = new Set<string>()

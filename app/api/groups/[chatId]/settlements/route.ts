@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { parseChatId } from '@/lib/parse-params'
 import { settlementBodySchema } from '@/lib/schemas'
@@ -14,11 +14,10 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const chatIdBig = parseChatId(chatId)
   if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const settlements = await sql`
     SELECT s.*,
@@ -51,11 +50,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     return NextResponse.json({ error: 'from and to must differ' }, { status: 422 })
   }
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   if (!await validateGroupMembers(group.id as number, [from_member_id, to_member_id])) {
     return NextResponse.json({ error: 'One or more member IDs do not belong to this group' }, { status: 422 })

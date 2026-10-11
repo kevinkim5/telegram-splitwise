@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { parseChatId } from '@/lib/parse-params'
 import { readReceiptImage } from '@/lib/receipt-image'
 import {
@@ -31,11 +31,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     return NextResponse.json({ error: 'Receipt scanning is not set up yet' }, { status: 503 })
   }
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const image = await readReceiptImage(request)
   if (!image.ok) return NextResponse.json({ error: image.error }, { status: image.status })

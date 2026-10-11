@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { loadSimplifiedDebts } from '@/lib/group-balances'
 import { buildNotifyMessage, NOTIFY_TARGET } from '@/lib/notify-message'
 import { fetchRates } from '@/lib/rates'
@@ -17,11 +17,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const chatIdBig = parseChatId(chatId)
   if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id, title FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const callerMember = await getGroupMember(group.id as number, user.id)
-  if (!callerMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const callerMember = access.member
 
   const members = await sql`
     SELECT id, first_name, last_name, username FROM members WHERE group_id = ${group.id}

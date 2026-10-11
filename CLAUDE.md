@@ -88,7 +88,7 @@ All Mini App endpoints live under `app/api/groups/[chatId]/`. The pattern is:
 
 1. Validate the Telegram init data with `getAuthUser()`.
 2. Resolve `chatId` (bigint) with `parseChatId()`.
-3. Confirm the caller is a member of the group with `getGroupMember()`.
+3. Confirm the group exists and the caller is a member in one query with `requireGroupMember()` (`lib/group-access.ts`): returns the group and member, or the 404 `Group not found` / 403 `Forbidden` response to return. Each Neon query is an HTTP round trip, so keep a route's round trips few: batch independent reads with `sql.transaction([...], { isolationLevel: 'RepeatableRead', readOnly: true })` (one round trip, one snapshot).
 4. Parse and validate the request body with Zod schemas from `lib/schemas.ts`.
 5. Execute SQL and return JSON.
 

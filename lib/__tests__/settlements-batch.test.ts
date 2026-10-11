@@ -33,8 +33,7 @@ function routeSql() {
   insertValues = []
   mockSql.mockImplementation(((strings: TemplateStringsArray, ...vals: unknown[]) => {
     const q = strings.join('?').replace(/\s+/g, ' ').trim()
-    if (/^SELECT id FROM groups WHERE chat_id/.test(q)) return Promise.resolve([{ id: 5 }])
-    if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve(isMember ? [{ id: ME }] : [])
+    if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve([{ id: 5, title: 'Trip', currency: 'SGD', member_id: isMember ? ME : null }])
     if (/^SELECT id FROM members WHERE group_id = \? AND id = ANY/.test(q)) {
       const ids = vals[1] as number[]
       return Promise.resolve(ids.filter(i => memberRowsForValidation.includes(i)).map(id => ({ id })))

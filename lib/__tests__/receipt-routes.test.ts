@@ -40,9 +40,13 @@ function routeSql(handlers: Handler[]) {
 const sqlTexts = () => mockSql.mock.calls.map(c => (c[0] as unknown as string[]).join('?'))
 const refunded = () => sqlTexts().some(t => t.includes('DELETE FROM receipt_scans'))
 
+// group + membership are one query now: the group row carries the caller's member id (null = not a member)
+const GROUP_ROW = { id: 5, title: 'Trip', currency: 'SGD' }
 const memberOk: Handler[] = [
-  [/FROM groups/, [{ id: 5 }]],
-  [/FROM members WHERE group_id/, [{ id: 7 }]],
+  [/FROM groups/, [{ ...GROUP_ROW, member_id: 7 }]],
+]
+const notMember: Handler[] = [
+  [/FROM groups/, [{ ...GROUP_ROW, member_id: null }]],
 ]
 
 function imgReq(url: string, method: string, body: Uint8Array = JPEG, headers: Record<string, string> = {}) {
@@ -109,7 +113,7 @@ describe('POST /receipts/parse', () => {
 
   it('403s for a non-member and never calls the model', async () => {
     process.env.GEMINI_API_KEY = 'gem-test'
-    routeSql([[/FROM groups/, [{ id: 5 }]], [/FROM members/, []]])
+    routeSql(notMember)
     expect((await call()).status).toBe(403)
     expect(fetchCalls).toHaveLength(0)
   })
@@ -308,8 +312,7 @@ describe('POST /receipts/parse: timing log', () => {
     mockSql.mockImplementation(((strings: TemplateStringsArray) => {
       const q = strings.join('?')
       if (q.includes('receipt_scan_timings')) return Promise.reject(new Error('table missing'))
-      if (q.includes('FROM groups')) return Promise.resolve([{ id: 5 }])
-      if (q.includes('FROM members WHERE group_id')) return Promise.resolve([{ id: 7 }])
+      if (q.includes('FROM groups')) return Promise.resolve([{ id: 5, title: 'Trip', currency: 'SGD', member_id: 7 }])
       if (q.includes('INSERT INTO receipt_scans')) return Promise.resolve([{ id: 77 }])
       if (q.includes('FROM receipt_scans')) return Promise.resolve([{ n: 0 }])
       return Promise.resolve([])
@@ -403,7 +406,7 @@ describe('PUT /expenses/[id]/receipt', () => {
 
   it('403s for a non-member', async () => {
     Object.assign(process.env, BLOB_ENV)
-    routeSql([[/FROM groups/, [{ id: 5 }]], [/FROM members/, []]])
+    routeSql(notMember)
     expect((await put_()).status).toBe(403)
   })
 
@@ -616,7 +619,7 @@ describe('environment folders', () => {
     expect(mockGet).not.toHaveBeenCalled()
 
     routeSql([
-      [/FROM groups/, [{ id: 5 }]], [/FROM members WHERE group_id/, [{ id: 7 }]],
+      ...memberOk,
       [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'x', receipt_key: foreign }]],
       [/FROM expense_splits/, []],
     ])
@@ -633,8 +636,7 @@ describe('GET /expenses/[id] receipt fields', () => {
   it('returns has_receipt and a signed receipt_url, and hides receipt_key', async () => {
     Object.assign(process.env, BLOB_ENV)
     routeSql([
-      [/FROM groups/, [{ id: 5 }]],
-      [/FROM members WHERE group_id/, [{ id: 7 }]],
+      ...memberOk,
       [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: 'staging/staging/receipts/5/42-abc.jpg' }]],
       [/FROM expense_splits/, []],
     ])
@@ -648,8 +650,7 @@ describe('GET /expenses/[id] receipt fields', () => {
   it('returns has_receipt false and no URL for an expense without a receipt', async () => {
     Object.assign(process.env, BLOB_ENV)
     routeSql([
-      [/FROM groups/, [{ id: 5 }]],
-      [/FROM members WHERE group_id/, [{ id: 7 }]],
+      ...memberOk,
       [/FROM expenses e/, [{ id: 42, group_id: 5, description: 'Lunch', receipt_key: null }]],
       [/FROM expense_splits/, []],
     ])

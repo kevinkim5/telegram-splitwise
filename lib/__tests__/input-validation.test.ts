@@ -12,12 +12,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
-vi.mock('@/lib/group-member', () => ({ getGroupMember: vi.fn() }))
 vi.mock('@/lib/validate-group-members', () => ({ validateGroupMembers: vi.fn() }))
 
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 
 import { GET as expensesGET, POST as expensesPOST } from '../../app/api/groups/[chatId]/expenses/route'
@@ -27,7 +25,6 @@ import { PUT as settingsPUT } from '../../app/api/groups/[chatId]/settings/route
 
 const mockSql = vi.mocked(sql)
 const mockGetAuthUser = vi.mocked(getAuthUser)
-const mockGetGroupMember = vi.mocked(getGroupMember)
 const mockValidateGroupMembers = vi.mocked(validateGroupMembers)
 
 const authedUser = { id: 99, first_name: 'Alice' }
@@ -203,10 +200,9 @@ describe('POST /expenses — valid frontend payload (regression)', () => {
   }
 
   it('accepts the payload and creates the expense', async () => {
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
     mockValidateGroupMembers.mockResolvedValueOnce(true)
     mockSql
-      .mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])  // group lookup
+      .mockResolvedValueOnce([{ id: 7, currency: 'SGD', member_id: 5 }])  // group + membership lookup
       .mockResolvedValueOnce([{ id: 55 }])                   // INSERT CTE
       .mockResolvedValueOnce([{ id: 55, description: 'Team dinner', group_id: 7 }]) // getExpenseWithSplits
       .mockResolvedValueOnce([])                             // splits
@@ -216,10 +212,9 @@ describe('POST /expenses — valid frontend payload (regression)', () => {
   })
 
   it('accepts a decimal amount (e.g. SGD 12.50)', async () => {
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
     mockValidateGroupMembers.mockResolvedValueOnce(true)
     mockSql
-      .mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])
+      .mockResolvedValueOnce([{ id: 7, currency: 'SGD', member_id: 5 }])
       .mockResolvedValueOnce([{ id: 56 }])
       .mockResolvedValueOnce([{ id: 56, description: 'Coffee', group_id: 7 }])
       .mockResolvedValueOnce([])
@@ -243,10 +238,9 @@ describe('POST /settlements — valid frontend payload (regression)', () => {
   }
 
   it('accepts the payload and creates the settlement', async () => {
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
     mockValidateGroupMembers.mockResolvedValueOnce(true)
     mockSql
-      .mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])  // group lookup
+      .mockResolvedValueOnce([{ id: 7, currency: 'SGD', member_id: 5 }])  // group + membership lookup
       .mockResolvedValueOnce([{ id: 88 }])                   // INSERT
       .mockResolvedValueOnce([{ id: 88, from_name: 'Alice', to_name: 'Bob', amount: 45 }])
 
@@ -261,8 +255,7 @@ describe('PUT /settings — Zod rejects invalid currency before hitting the DB',
   const params = Promise.resolve({ chatId: '123' })
 
   beforeEach(() => {
-    mockSql.mockResolvedValueOnce([{ id: 7 }])       // group lookup
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 }) // membership check
+    mockSql.mockResolvedValueOnce([{ id: 7, member_id: 5 }]) // group + membership lookup
   })
 
   it('rejects lowercase currency code (sgd)', async () => {
@@ -307,9 +300,8 @@ describe('PUT /settings — valid frontend payload (regression)', () => {
   const params = Promise.resolve({ chatId: '123' })
 
   it('accepts a valid 3-letter uppercase currency (SGD) and returns updated settings', async () => {
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])                          // group lookup
+      .mockResolvedValueOnce([{ id: 7, member_id: 5 }])            // group + membership lookup
       .mockResolvedValueOnce([])                                     // UPDATE
       .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD' }]) // SELECT after update
 
@@ -323,9 +315,8 @@ describe('PUT /settings — valid frontend payload (regression)', () => {
   })
 
   it('accepts USD as a valid currency', async () => {
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])
+      .mockResolvedValueOnce([{ id: 7, member_id: 5 }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'USD' }])
 
