@@ -234,6 +234,91 @@ describe('POST /receipts/parse', () => {
   })
 })
 
+describe('POST /receipts/parse: timing log', () => {
+  const call = () => parsePOST(imgReq('http://x/receipts/parse', 'POST'), parseProps)
+  const okFields = { merchant: 'Kopi', total: 4.5, currency: 'SGD', date: null, category: null }
+  const timingInsert = () => {
+    const c = mockSql.mock.calls.find(c => (c[0] as unknown as string[]).join('?').includes('INSERT INTO receipt_scan_timings'))
+    return c ? (c as unknown[]).slice(1) : null
+  }
+  // insert order: user, model, outcome, total_ms, gemini_ms, attempts, http_status, image_bytes, prompt, thought, output
+
+  beforeEach(() => {
+    process.env.GEMINI_API_KEY = 'gem-test'
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]]])
+  })
+
+  it('records model, time, tries, status, image size and Google\'s token counts for a good scan', async () => {
+    fetchImpl = () => new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify(okFields) }] } }],
+      usageMetadata: { promptTokenCount: 1180, thoughtsTokenCount: 640, candidatesTokenCount: 55 },
+    }), { status: 200 })
+    expect((await call()).status).toBe(200)
+    const v = timingInsert()!
+    expect(v[0]).toBe(99)
+    expect(v[1]).toBe('gemini-flash-latest')
+    expect(v[2]).toBe('ok')
+    expect(typeof v[3]).toBe('number')
+    expect(typeof v[4]).toBe('number')
+    expect(v.slice(5)).toEqual([1, 200, JPEG.byteLength, 1180, 640, 55])
+  })
+
+  it('a missing usageMetadata is stored as null, not zero', async () => {
+    fetchImpl = () => geminiOk(okFields)
+    await call()
+    expect(timingInsert()!.slice(8)).toEqual([null, null, null])
+  })
+
+  it('records unreadable photos, quota hits and timeouts as their own outcomes', async () => {
+    fetchImpl = () => geminiOk({ merchant: null, total: null, currency: null, date: null, category: null })
+    await call()
+    expect(timingInsert()![2]).toBe('unreadable')
+
+    mockSql.mockClear()
+    fetchImpl = () => new Response('quota', { status: 429 })
+    await call()
+    expect(timingInsert()![2]).toBe('rate_limited')
+    expect(timingInsert()![6]).toBe(429)
+
+    mockSql.mockClear()
+    fetchImpl = () => { throw new Error('aborted') }
+    await call()
+    expect(timingInsert()![2]).toBe('timeout')
+  })
+
+  it('a failed scan is still timed (even though it is refunded), with both tries counted', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    try {
+      fetchImpl = () => new Response('overloaded', { status: 503 })
+      const p = call()
+      for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(1000)
+      expect((await p).status).toBe(503)
+    } finally {
+      vi.useRealTimers()
+    }
+    const v = timingInsert()!
+    expect(v[2]).toBe('overloaded')
+    expect(v[5]).toBe(2)
+    expect(refunded()).toBe(true)
+  })
+
+  it('if writing the timing fails the scan still succeeds', async () => {
+    routeSql([...memberOk, [/INSERT INTO receipt_scans/, [{ id: 77 }]], [/FROM receipt_scans/, [{ n: 0 }]],
+      [/INSERT INTO receipt_scan_timings/, () => { throw new Error('table missing') }]])
+    mockSql.mockImplementation(((strings: TemplateStringsArray) => {
+      const q = strings.join('?')
+      if (q.includes('receipt_scan_timings')) return Promise.reject(new Error('table missing'))
+      if (q.includes('FROM groups')) return Promise.resolve([{ id: 5 }])
+      if (q.includes('FROM members WHERE group_id')) return Promise.resolve([{ id: 7 }])
+      if (q.includes('INSERT INTO receipt_scans')) return Promise.resolve([{ id: 77 }])
+      if (q.includes('FROM receipt_scans')) return Promise.resolve([{ n: 0 }])
+      return Promise.resolve([])
+    }) as never)
+    fetchImpl = () => geminiOk(okFields)
+    expect((await call()).status).toBe(200)
+  })
+})
+
 describe('POST /receipts/parse: provider overload', () => {
   const call = () => parsePOST(imgReq('http://x/receipts/parse', 'POST'), parseProps)
   const okFields = { merchant: 'Kopi', total: 4.5, currency: 'SGD', date: null, category: null }
