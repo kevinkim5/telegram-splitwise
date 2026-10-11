@@ -30,7 +30,7 @@ Copy `.env.example` to `.env.local` for local development. Key vars:
 | `ADMIN_GITHUB_ID` | Numeric GitHub user ID allowed to access `/admin` routes |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | NextAuth GitHub OAuth credentials |
 
-Schema is auto-migrated on the first POST to `/api/groups/init` via `ensureSchema()` in `lib/db.ts`.
+Schema is auto-migrated on the first POST to `/api/groups/init` via `ensureSchema()` in `lib/db.ts`: it reads a stored version (`schema_meta`) and only runs the setup when the database is behind. **When you change the schema in `applySchema()`, bump `SCHEMA_VERSION`** (a test fails otherwise, and tells you the new fingerprint to put in `lib/__tests__/db-schema.test.ts`).
 
 After deploying, register the webhook: `curl -X POST https://<your-domain>/api/bot/setup-webhook -H "x-bot-token: <BOT_TOKEN>"`.
 
@@ -111,6 +111,7 @@ Schema (defined in `lib/db.ts`):
 |---|---|
 | `lib/splits.ts` | `computeEqualSplits` / `computeShareSplits` — distribute amounts with remainder on last member |
 | `lib/balances.ts` | `simplifyDebts` — greedy creditor/debtor matching to minimise transactions |
+| `lib/group-balances.ts` | `loadLedger` — the one balance calculation (balances route, settle-up check, notify group): members, per-(currency, payer, debtor) expense sums and settlement sums read in one read-only transaction, netted in whole cents, then `simplifyDebts`. Currencies are ordered by first use (expense id, then settlement id). `lib/__tests__/group-balances.test.ts` checks it against the old float calculation on thousands of random groups |
 | `lib/auth.ts` | `validateInitData` (HMAC), `getAuthUser` (extracts user from request headers) |
 | `lib/group-member.ts` | `getGroupMember` — confirms caller belongs to the group |
 | `lib/validate-group-members.ts` | Checks all member IDs in an expense belong to the same group |

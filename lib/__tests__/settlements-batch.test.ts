@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
+vi.mock('@/lib/sql', () => {
+  const sql: any = vi.fn()
+  sql.transaction = vi.fn()
+  return { sql }
+})
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
 
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { POST } from '../../app/api/groups/[chatId]/settlements/batch/route'
-import { loadSimplifiedDebts } from '@/lib/group-debts'
+import { loadSimplifiedDebts } from '@/lib/group-balances'
 
 const mockSql = vi.mocked(sql)
 const mockGetAuthUser = vi.mocked(getAuthUser)
@@ -35,17 +39,35 @@ function routeSql() {
       const ids = vals[1] as number[]
       return Promise.resolve(ids.filter(i => memberRowsForValidation.includes(i)).map(id => ({ id })))
     }
-    if (/^SELECT id, first_name, last_name FROM members/.test(q)) {
-      return Promise.resolve([{ id: ME, first_name: 'Kev' }, { id: ANN, first_name: 'Ann' }, { id: BEN, first_name: 'Ben' }])
-    }
-    if (/FROM expenses e JOIN expense_splits/.test(q)) return Promise.resolve(expenseRows)
-    if (/^SELECT from_member_id, to_member_id, amount, currency FROM settlements/.test(q)) return Promise.resolve(settlementRows)
+    // the ledger reads (members, expense sums, settlement sums) are batched in one transaction: tag each
+    // query here and let the transaction mock below return its rows
+    if (/^SELECT id, first_name, last_name FROM members/.test(q)) return { ledger: 'members' }
+    if (/FROM expenses e JOIN expense_splits/.test(q)) return { ledger: 'expenses' }
+    if (/^SELECT currency, from_member_id AS "from"/.test(q)) return { ledger: 'settlements' }
     if (/^INSERT INTO settlements/.test(q)) {
       insertValues.push(vals)
       return Promise.resolve([{ id: 1 }, { id: 2 }])
     }
     return Promise.resolve([])
   }) as never)
+}
+
+// What the database's GROUP BY would return for the raw rows above
+function ledgerRows(kind: string) {
+  if (kind === 'members') return [{ id: ME, first_name: 'Kev' }, { id: ANN, first_name: 'Ann' }, { id: BEN, first_name: 'Ben' }]
+  if (kind === 'expenses') {
+    const sums = new Map<string, Record<string, unknown>>()
+    expenseRows.forEach((r, i) => {
+      if (r.paid_by_member_id === r.member_id) return
+      const k = `${r.currency}|${r.paid_by_member_id}|${r.member_id}`
+      const cents = Math.round(parseFloat(String(r.amount)) * 100)
+      const cur = sums.get(k)
+      if (cur) cur.cents = String(Number(cur.cents) + cents)
+      else sums.set(k, { currency: r.currency, payer: r.paid_by_member_id, member: r.member_id, cents: String(cents), first_id: String(i + 1) })
+    })
+    return [...sums.values()]
+  }
+  return settlementRows.map((r, i) => ({ currency: r.currency, from: r.from_member_id, to: r.to_member_id, cents: String(Math.round(parseFloat(String(r.amount)) * 100)), first_id: String(i + 1) }))
 }
 
 const post = (body: unknown) =>
@@ -62,6 +84,7 @@ beforeEach(() => {
   expenseRows = [split(ANN, ME, 3000, 'JPY'), split(ANN, ME, 18.5, 'USD'), split(ME, ANN, 10, 'SGD')]
   settlementRows = []
   routeSql()
+  ;(mockSql as any).transaction.mockImplementation(async (queries: Array<{ ledger: string }>) => queries.map(q => ledgerRows(q.ledger)))
 })
 
 describe('loadSimplifiedDebts', () => {

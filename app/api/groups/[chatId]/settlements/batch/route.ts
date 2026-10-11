@@ -3,7 +3,7 @@ import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { validateGroupMembers } from '@/lib/validate-group-members'
-import { loadSimplifiedDebts } from '@/lib/group-debts'
+import { loadSimplifiedDebts } from '@/lib/group-balances'
 import { parseChatId } from '@/lib/parse-params'
 import { settlementBatchBodySchema } from '@/lib/schemas'
 
