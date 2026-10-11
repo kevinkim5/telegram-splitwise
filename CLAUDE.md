@@ -64,7 +64,7 @@ An expense can have at most one receipt image, stored in a private Vercel Blob s
 
 ### App icons
 
-`app/favicon.ico` (16/32/48px) and `app/apple-icon.png` (180px, full-bleed) are picked up by Next automatically and linked from every page, the Mini App and `/admin` alike. Not added on purpose: separate 16/32px PNGs (inside the .ico already) and 192/512px PNGs, which only matter for a web app manifest ("Add to Home Screen" from a browser); Telegram doesn't use them. Add a `manifest` plus those two if that is ever wanted.
+`app/favicon.ico` (16/32/48px, round with transparent corners) and `app/apple-icon.png` (180px, deliberately a full-bleed square: iOS fills transparent corners with black on the home screen, so don't swap in the round version) are picked up by Next automatically and linked from every page, the Mini App and `/admin` alike. Not added on purpose: separate 16/32px PNGs (inside the .ico already) and 192/512px PNGs, which only matter for a web app manifest ("Add to Home Screen" from a browser); Telegram doesn't use them. Add a `manifest` plus those two if that is ever wanted.
 
 ### Expense search and date filter
 
