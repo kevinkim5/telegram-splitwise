@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
 import { readReceiptImage, receiptExtension } from '@/lib/receipt-image'
 import { logReceiptChange } from '@/lib/expense-events'
@@ -21,11 +21,10 @@ async function resolveExpense(request: Request, props: Props) {
   const expenseId = parseResourceId(id)
   if (!expenseId) return { ok: false as const, response: NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 }) }
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return { ok: false as const, response: NextResponse.json({ error: 'Group not found' }, { status: 404 }) }
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return { ok: false as const, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return { ok: false as const, response: access.response }
+  const group = access.group
+  const member = access.member
 
   const [expense] = await sql`
     SELECT id, receipt_key FROM expenses

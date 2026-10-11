@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.hoisted(() => { process.env.BOT_TOKEN = 'T' }) // the route reads it when imported
 
-vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
+vi.mock('@/lib/sql', () => {
+  const sql: any = vi.fn()
+  sql.transaction = vi.fn()
+  return { sql }
+})
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
 
 import { sql } from '@/lib/sql'
@@ -94,25 +98,25 @@ describe('POST /notify-balances', () => {
     vi.mocked(getAuthUser).mockReturnValue({ id: 99, first_name: 'Kev' } as never)
     mockSql.mockImplementation(((strings: TemplateStringsArray) => {
       const q = strings.join('?').replace(/\s+/g, ' ').trim()
-      if (/^SELECT id, title FROM groups/.test(q)) return Promise.resolve([{ id: 5, title: 'Tokyo Trip' }])
-      if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 7 }])
+      if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve([{ id: 5, title: 'Tokyo Trip', currency: 'SGD', member_id: 7 }])
       if (/^SELECT id, first_name, last_name, username FROM members/.test(q)) {
         return Promise.resolve([{ id: 7, first_name: 'Kev', username: 'kev' }, { id: 8, first_name: 'Ann', username: 'ann' }])
       }
-      if (/^SELECT id, first_name, last_name FROM members/.test(q)) {
-        return Promise.resolve([{ id: 7, first_name: 'Kev' }, { id: 8, first_name: 'Ann' }])
-      }
-      if (/FROM expenses e JOIN expense_splits/.test(q)) {
-        // Ann paid JPY 6000 and USD 37, split equally with Kev
-        return Promise.resolve([
-          { paid_by_member_id: 8, member_id: 7, amount: '3000', currency: 'JPY' },
-          { paid_by_member_id: 8, member_id: 8, amount: '3000', currency: 'JPY' },
-          { paid_by_member_id: 8, member_id: 7, amount: '18.50', currency: 'USD' },
-          { paid_by_member_id: 8, member_id: 8, amount: '18.50', currency: 'USD' },
-        ])
-      }
+      // members, expense sums and settlement sums are read together in one transaction (tagged here, answered below)
+      if (/^SELECT id, first_name, last_name FROM members/.test(q)) return { ledger: 'members' }
+      if (/FROM expenses e JOIN expense_splits/.test(q)) return { ledger: 'expenses' }
+      if (/^SELECT currency, from_member_id AS "from"/.test(q)) return { ledger: 'settlements' }
       return Promise.resolve([])
     }) as never)
+    ;(mockSql as any).transaction.mockImplementation(async (queries: Array<{ ledger: string }>) => queries.map(({ ledger }) => {
+      if (ledger === 'members') return [{ id: 7, first_name: 'Kev' }, { id: 8, first_name: 'Ann' }]
+      // Ann paid JPY 6000 and USD 37, split equally with Kev: the database sums Kev's share per payer
+      if (ledger === 'expenses') return [
+        { currency: 'JPY', payer: 8, member: 7, cents: '300000', first_id: '1' },
+        { currency: 'USD', payer: 8, member: 7, cents: '1850', first_id: '2' },
+      ]
+      return []
+    }))
   })
   afterEach(() => vi.unstubAllGlobals())
 

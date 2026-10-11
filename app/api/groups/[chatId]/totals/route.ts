@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { parseChatId } from '@/lib/parse-params'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
@@ -12,14 +12,15 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const chatIdBig = parseChatId(chatId)
   if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const me = await getGroupMember(group.id as number, user.id)
-  if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const me = access.member
   const myMemberId = me.id
 
-  const summary = await sql`
+  // both figures in one round trip, read from the same snapshot
+  const [summary, byCategory] = await sql.transaction([
+    sql`
     SELECT
       e.currency,
       SUM(e.total_amount)::float       AS group_total,
@@ -31,9 +32,8 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
     GROUP BY e.currency
     ORDER BY SUM(e.total_amount) DESC
-  `
-
-  const byCategory = await sql`
+  `,
+    sql`
     SELECT
       e.currency,
       e.category,
@@ -46,7 +46,8 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL
     GROUP BY e.currency, e.category
     ORDER BY e.currency, SUM(e.total_amount) DESC
-  `
+  `,
+  ], { isolationLevel: 'RepeatableRead', readOnly: true })
 
   return NextResponse.json({
     group_currency: group.currency as string,

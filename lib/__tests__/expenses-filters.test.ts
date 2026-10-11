@@ -19,8 +19,7 @@ beforeEach(() => {
   vi.mocked(getAuthUser).mockReturnValue({ id: 99, first_name: 'Kev' } as never)
   mockSql.mockImplementation(((strings: TemplateStringsArray, ...vals: unknown[]) => {
     const q = strings.join('?').replace(/\s+/g, ' ').trim()
-    if (/^SELECT id FROM groups WHERE chat_id/.test(q)) return Promise.resolve([{ id: 5 }])
-    if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 7 }])
+    if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve([{ id: 5, title: 'Trip', currency: 'SGD', member_id: 7 }])
     if (/COUNT\(\*\) OVER\(\)/.test(q)) { listCalls.push([q, ...vals]); return Promise.resolve([{ id: 1, total_count: '1', receipt_key: null }]) }
     if (/GROUP BY e\.currency/.test(q)) { summaryCalls.push([q, ...vals]); return Promise.resolve([{ currency: 'SGD', total: 34, count: 2 }]) }
     return Promise.resolve([])

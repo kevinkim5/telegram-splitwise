@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId, parseResourceId } from '@/lib/parse-params'
@@ -49,11 +49,10 @@ export async function GET(
   const expenseId = parseResourceId(id)
   if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const expense = await getExpenseWithSplits(expenseId)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,11 +83,10 @@ export async function PUT(
   }
   const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const [existing] = await sql`
     SELECT * FROM expenses WHERE id = ${expenseId} AND group_id = ${group.id} AND deleted_at IS NULL
@@ -184,11 +182,10 @@ export async function DELETE(
   const expenseId = parseResourceId(id)
   if (!expenseId) return NextResponse.json({ error: 'Invalid expense ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const [existing] = await sql`
     SELECT id FROM expenses WHERE id = ${expenseId} AND group_id = ${group.id} AND deleted_at IS NULL

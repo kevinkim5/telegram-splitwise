@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { validateGroupMembers } from '@/lib/validate-group-members'
 import { computeEqualSplits } from '@/lib/splits'
 import { parseChatId } from '@/lib/parse-params'
@@ -39,11 +39,10 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const { searchParams } = new URL(request.url)
   const { page, limit, offset } = parsePaging(searchParams)
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const me = await getGroupMember(group.id as number, user.id)
-  if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const me = access.member
   const myMemberId = me.id
 
   // Optional filters: text (description, category or who paid) and a date range on the expense's date
@@ -110,11 +109,10 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   }
   const { description, total_amount, currency, paid_by_member_id, split_type, splits, date, category } = parsed.data
 
-  const [group] = await sql`SELECT id, currency FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const currentMember = await getGroupMember(group.id as number, user.id)
-  if (!currentMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const currentMember = access.member
 
   const allMemberIds = [paid_by_member_id, ...splits.map(s => s.member_id)]
   if (!await validateGroupMembers(group.id as number, allMemberIds)) {

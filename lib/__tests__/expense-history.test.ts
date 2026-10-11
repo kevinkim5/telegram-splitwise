@@ -108,8 +108,7 @@ function routeSql() {
   ;(sql as unknown as { transaction: unknown }).transaction = vi.fn(async (qs: unknown[]) => { txCalls = qs.length; return [] })
   mockSql.mockImplementation(((strings: TemplateStringsArray, ...vals: unknown[]) => {
     const q = strings.join('?').replace(/\s+/g, ' ').trim()
-    if (/^SELECT id, currency FROM groups/.test(q)) return Promise.resolve([{ id: 5, currency: 'SGD' }])
-    if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 1 }])
+    if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve([{ id: 5, title: 'Trip', currency: 'SGD', member_id: 1 }])
     if (/^SELECT \* FROM expenses WHERE id/.test(q)) return Promise.resolve([{ id: 40, currency: 'SGD', date: new Date(2026, 9, 3) }])
     if (/^SELECT id FROM members WHERE group_id = \? AND id = ANY/.test(q)) return Promise.resolve([{ id: 1 }, { id: 2 }])
     if (/^SELECT id, first_name, last_name FROM members/.test(q)) {

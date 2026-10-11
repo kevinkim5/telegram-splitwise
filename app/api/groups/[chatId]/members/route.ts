@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
+import { requireGroupMember } from '@/lib/group-access'
 import { parseChatId } from '@/lib/parse-params'
 
 export async function GET(request: Request, props: { params: Promise<{ chatId: string }> }) {
@@ -12,11 +12,10 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   const chatIdBig = parseChatId(chatId)
   if (!chatIdBig) return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
 
-  const [group] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig} AND deleted_at IS NULL`
-  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-
-  const member = await getGroupMember(group.id as number, user.id)
-  if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const access = await requireGroupMember(chatIdBig, user.id)
+  if (!access.ok) return access.response
+  const group = access.group
+  const member = access.member
 
   const members = await sql`
     SELECT id, group_id, telegram_user_id, first_name, last_name, username, photo_url, created_at

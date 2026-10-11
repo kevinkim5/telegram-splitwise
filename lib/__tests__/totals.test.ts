@@ -1,17 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
+vi.mock('@/lib/sql', () => {
+  const sql: any = vi.fn()
+  // the two totals queries run as one transaction: the tagged-template calls above supply the rows in order
+  sql.transaction = vi.fn((queries: unknown[]) => Promise.all(queries))
+  return { sql }
+})
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
-vi.mock('@/lib/group-member', () => ({ getGroupMember: vi.fn() }))
 
 import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
-import { getGroupMember } from '@/lib/group-member'
 import { GET as totalsGET } from '../../app/api/groups/[chatId]/totals/route'
 
 const mockSql = vi.mocked(sql)
 const mockGetAuthUser = vi.mocked(getAuthUser)
-const mockGetGroupMember = vi.mocked(getGroupMember)
 
 const authedUser = { id: 1, first_name: 'Alice' }
 
@@ -47,8 +49,7 @@ describe('GET /totals — authorization', () => {
   })
 
   it('returns 403 when caller is not a group member', async () => {
-    mockSql.mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])
-    mockGetGroupMember.mockResolvedValueOnce(null)
+    mockSql.mockResolvedValueOnce([{ id: 7, title: 'T', currency: 'SGD', member_id: null }]) // group + membership
     const res = await totalsGET(getRequest(), { params: Promise.resolve({ chatId: '-100123' }) })
     expect(res.status).toBe(403)
   })
@@ -60,8 +61,7 @@ describe('GET /totals — response shape', () => {
   const params = Promise.resolve({ chatId: '-100123' })
 
   beforeEach(() => {
-    mockSql.mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
+    mockSql.mockResolvedValueOnce([{ id: 7, title: 'T', currency: 'SGD', member_id: 5 }]) // group + membership
   })
 
   it('returns 200 with empty arrays when there are no expenses', async () => {
@@ -135,8 +135,7 @@ describe('GET /totals — response shape', () => {
 describe('GET /totals — calculation correctness', () => {
   it('my_total reflects 1/3 share when split equally among 3 members', async () => {
     // group_total 180 split equally → my share = 60
-    mockSql.mockResolvedValueOnce([{ id: 8, currency: 'SGD' }])
-    mockGetGroupMember.mockResolvedValueOnce({ id: 3 })
+    mockSql.mockResolvedValueOnce([{ id: 8, title: 'T', currency: 'SGD', member_id: 3 }]) // group + membership
     mockSql
       .mockResolvedValueOnce([{ currency: 'SGD', group_total: 180.0, my_total: 60.0, count: 3 }])
       .mockResolvedValueOnce([{ currency: 'SGD', category: '🍜 Food', group_total: 180.0, my_total: 60.0, count: 3 }])
@@ -147,8 +146,7 @@ describe('GET /totals — calculation correctness', () => {
   })
 
   it('my_total is 0 when member has no expense_splits (not involved in any expense)', async () => {
-    mockSql.mockResolvedValueOnce([{ id: 9, currency: 'USD' }])
-    mockGetGroupMember.mockResolvedValueOnce({ id: 4 })
+    mockSql.mockResolvedValueOnce([{ id: 9, title: 'T', currency: 'USD', member_id: 4 }]) // group + membership
     mockSql
       .mockResolvedValueOnce([{ currency: 'USD', group_total: 300.0, my_total: 0.0, count: 5 }])
       .mockResolvedValueOnce([])
@@ -160,8 +158,7 @@ describe('GET /totals — calculation correctness', () => {
   })
 
   it('category group_totals sum to overall group_total', async () => {
-    mockSql.mockResolvedValueOnce([{ id: 10, currency: 'SGD' }])
-    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
+    mockSql.mockResolvedValueOnce([{ id: 10, title: 'T', currency: 'SGD', member_id: 5 }]) // group + membership
     mockSql
       .mockResolvedValueOnce([{ currency: 'SGD', group_total: 200.0, my_total: 50.0, count: 4 }])
       .mockResolvedValueOnce([
@@ -181,8 +178,7 @@ describe('GET /totals — calculation correctness', () => {
   })
 
   it('my_total across all categories sums to overall my_total', async () => {
-    mockSql.mockResolvedValueOnce([{ id: 11, currency: 'JPY' }])
-    mockGetGroupMember.mockResolvedValueOnce({ id: 6 })
+    mockSql.mockResolvedValueOnce([{ id: 11, title: 'T', currency: 'JPY', member_id: 6 }]) // group + membership
     mockSql
       .mockResolvedValueOnce([{ currency: 'JPY', group_total: 12000.0, my_total: 4000.0, count: 6 }])
       .mockResolvedValueOnce([

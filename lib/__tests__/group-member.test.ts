@@ -72,8 +72,7 @@ describe('GET /api/groups/[chatId]/members', () => {
   it('returns 403 when authenticated user is not a member of the group', async () => {
     mockGetAuthUser.mockReturnValue({ id: 999, first_name: 'Outsider' })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])  // group found
-      .mockResolvedValueOnce([])            // getGroupMember → not a member
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD', member_id: null }])  // group found, caller is not a member of it
 
     const res = await membersGET(makeRequest(), { params })
     expect(res.status).toBe(403)
@@ -83,8 +82,7 @@ describe('GET /api/groups/[chatId]/members', () => {
   it('returns 200 with members list when user is a member', async () => {
     mockGetAuthUser.mockReturnValue({ id: 1, first_name: 'Alice' })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])                     // group found
-      .mockResolvedValueOnce([{ id: 3 }])                     // getGroupMember → member
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD', member_id: 3 }])  // group found, caller is member 3
       .mockResolvedValueOnce([                                  // members list
         { id: 3, first_name: 'Alice', last_name: null },
         { id: 4, first_name: 'Bob',   last_name: null },
@@ -113,8 +111,7 @@ describe('DELETE /api/groups/[chatId]/expenses/[id]', () => {
   it('returns 403 when authenticated user is not a member', async () => {
     mockGetAuthUser.mockReturnValue({ id: 999, first_name: 'Outsider' })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])  // group found
-      .mockResolvedValueOnce([])            // getGroupMember → not a member
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD', member_id: null }])  // group found, caller is not a member of it
 
     const res = await expenseDELETE(makeRequest(), { params })
     expect(res.status).toBe(403)
@@ -124,8 +121,7 @@ describe('DELETE /api/groups/[chatId]/expenses/[id]', () => {
   it('returns 404 when expense does not belong to the group', async () => {
     mockGetAuthUser.mockReturnValue({ id: 1, first_name: 'Alice' })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])  // group found
-      .mockResolvedValueOnce([{ id: 3 }])  // getGroupMember → is a member
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD', member_id: 3 }])  // group found, caller is member 3
       .mockResolvedValueOnce([])            // expense lookup → not found
 
     const res = await expenseDELETE(makeRequest(), { params })
@@ -135,8 +131,7 @@ describe('DELETE /api/groups/[chatId]/expenses/[id]', () => {
   it('soft-deletes expense and returns ok when user is a member', async () => {
     mockGetAuthUser.mockReturnValue({ id: 1, first_name: 'Alice' })
     mockSql
-      .mockResolvedValueOnce([{ id: 7 }])    // group found
-      .mockResolvedValueOnce([{ id: 3 }])    // getGroupMember → is a member
+      .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD', member_id: 3 }])  // group found, caller is member 3
       .mockResolvedValueOnce([{ id: 55 }])   // expense exists
     // soft delete + "deleted" activity entry run as one transaction
     const tx = vi.fn().mockResolvedValue([])
