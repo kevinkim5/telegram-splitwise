@@ -1,6 +1,36 @@
 import { sql } from '@/lib/sql'
 
+// Bump this whenever applySchema() changes (a new table, column or index). lib/__tests__/db-schema.test.ts
+// fails if the schema text changes without it. Databases already at this version skip the setup.
+export const SCHEMA_VERSION = 1
+
+let schemaChecked = false // per server instance: once confirmed, later calls cost nothing
+
+// Called when someone opens the app (and by admin pages as a fallback). The setup is ~22 statements
+// that were once run on every call; now it is one cheap read of the stored version, and only a
+// database that is behind runs the full setup.
 export async function ensureSchema() {
+  if (schemaChecked) return
+  try {
+    const [row] = await sql`SELECT version FROM schema_meta WHERE id = 1`
+    if (row && Number(row.version) >= SCHEMA_VERSION) {
+      schemaChecked = true
+      return
+    }
+  } catch {
+    // schema_meta does not exist yet (a database from before this check): run the setup below
+  }
+  await applySchema()
+  await sql`CREATE TABLE IF NOT EXISTS schema_meta (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)`
+  await sql`
+    INSERT INTO schema_meta (id, version) VALUES (1, ${SCHEMA_VERSION})
+    ON CONFLICT (id) DO UPDATE SET version = GREATEST(schema_meta.version, EXCLUDED.version)
+  `
+  schemaChecked = true
+}
+
+// Every statement is idempotent, so running it twice (two first-time opens at once) is harmless.
+async function applySchema() {
   await sql`
     CREATE TABLE IF NOT EXISTS groups (
       id         SERIAL PRIMARY KEY,
