@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ getAuthUser: vi.fn() }))
+vi.mock('@/lib/db', () => ({ ensureSchema: vi.fn() }))
 vi.mock('@/lib/group-access', () => ({ requireGroupMember: vi.fn() }))
 vi.mock('@/lib/group-balances', () => ({ loadSimplifiedDebts: vi.fn() }))
 
@@ -165,6 +166,15 @@ describe('GET /api/cron/balance-reminders', () => {
     }))
   })
   afterEach(() => { vi.unstubAllGlobals(); delete process.env.CRON_SECRET })
+
+  it('makes sure the schema exists before reading the reminder columns (first run after a deploy)', async () => {
+    const { ensureSchema } = await import('@/lib/db')
+    await cronGET(req('?day=1&dry=1'))
+    expect(ensureSchema).toHaveBeenCalledTimes(1)
+    vi.mocked(ensureSchema).mockClear()
+    await cronGET(req('?day=1', null)) // unauthorised: never touches the database
+    expect(ensureSchema).not.toHaveBeenCalled()
+  })
 
   it('refuses to run without CRON_SECRET configured, and without the right secret', async () => {
     delete process.env.CRON_SECRET
