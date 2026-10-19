@@ -248,6 +248,9 @@ export function BalancesPage() {
   const [notifying, setNotifying] = useState(false)
   const [notifyError, setNotifyError] = useState<string | null>(null)
   const [notifySent, setNotifySent] = useState(false)
+  // Private reminders (a direct message to each person who owes)
+  const [reminding, setReminding] = useState(false)
+  const [remindResult, setRemindResult] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(null)
 
   // Currency conversion
   const foreignCurrencies = data
@@ -283,6 +286,35 @@ export function BalancesPage() {
     }
   }
 
+
+  const handleRemind = async () => {
+    setReminding(true)
+    setRemindResult(null)
+    try {
+      const res = await fetch(`/api/groups/${chatId}/notify-private`, { method: 'POST', headers: apiHeaders })
+      const d = await res.json().catch(() => ({})) as { error?: string; total?: number; sent?: number; unreachable?: string[]; failed?: string[] }
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`)
+      const sent = d.sent ?? 0, total = d.total ?? 0
+      const missed = d.unreachable ?? [], failed = d.failed ?? []
+      const list = (names: string[]) => names.join(', ')
+      if (sent === total) {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+        setRemindResult({ tone: 'ok', text: `Reminder sent privately to ${sent} ${sent === 1 ? 'person' : 'people'} ✓` })
+      } else {
+        const parts: string[] = []
+        if (missed.length) parts.push(`${list(missed)} ${missed.length === 1 ? "hasn't" : "haven't"} started the bot yet. Ask them to open it and tap Start.`)
+        if (failed.length) parts.push(`Couldn't reach ${list(failed)} right now. Try again in a minute.`)
+        setRemindResult({
+          tone: sent === 0 ? 'error' : 'warn',
+          text: `${sent === 0 ? 'No reminders sent.' : `Sent to ${sent} of ${total}.`} ${parts.join(' ')}`,
+        })
+      }
+    } catch (e) {
+      setRemindResult({ tone: 'error', text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setReminding(false)
+    }
+  }
 
   // Record the chosen payments (one per currency) in a single request: all saved or none.
   const handleRecord = async (payments: Payment[]) => {
@@ -388,7 +420,7 @@ export function BalancesPage() {
         const showNotify = !!data && !allSettled
         if (!showRatesInfo && !showNotify) return null
         return (
-          <div className="flex items-center justify-between gap-3 mb-4 px-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-4 px-1">
             <div className="min-w-0 text-xs leading-snug" style={{ color: 'var(--tg-theme-hint-color)' }}>
               {showRatesInfo && (showConverted ? (
                 <p>
@@ -409,24 +441,51 @@ export function BalancesPage() {
               ))}
             </div>
             {showNotify && (
-              <button
-                onClick={handleNotify}
-                disabled={notifying}
-                className="text-sm font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"
-                style={{
-                  background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
-                  border: 'none',
-                  cursor: notifying ? 'default' : 'pointer',
-                  color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
-                  opacity: notifying ? 0.6 : 1,
-                }}
-              >
-                {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end ml-auto">
+                <button
+                  onClick={handleRemind}
+                  disabled={reminding || notifying}
+                  className="text-sm font-semibold px-3 py-1.5 rounded-xl"
+                  style={{
+                    background: 'var(--tg-theme-section-bg-color, var(--tg-theme-secondary-bg-color))',
+                    border: '1px solid var(--tg-theme-hint-color)',
+                    cursor: reminding ? 'default' : 'pointer',
+                    color: 'var(--tg-theme-text-color)',
+                    opacity: reminding ? 0.6 : 1,
+                  }}
+                >
+                  {reminding ? 'Sending…' : 'Remind privately'}
+                </button>
+                <button
+                  onClick={handleNotify}
+                  disabled={notifying || reminding}
+                  className="text-sm font-semibold px-3 py-1.5 rounded-xl"
+                  style={{
+                    background: notifySent ? 'rgba(52,199,89,0.15)' : 'var(--tg-theme-button-color)',
+                    border: 'none',
+                    cursor: notifying ? 'default' : 'pointer',
+                    color: notifySent ? '#34c759' : 'var(--tg-theme-button-text-color)',
+                    opacity: notifying ? 0.6 : 1,
+                  }}
+                >
+                  {notifying ? 'Sending…' : notifySent ? 'Sent ✓' : 'Notify Group'}
+                </button>
+              </div>
             )}
           </div>
         )
       })()}
+
+      {/* Result of "Remind privately": who was reached and who was not */}
+      {remindResult && (
+        <p
+          role="status"
+          className="text-xs mb-3 px-1"
+          style={{ color: remindResult.tone === 'ok' ? '#34c759' : remindResult.tone === 'warn' ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-destructive-text-color, #ff3b30)' }}
+        >
+          {remindResult.text}
+        </p>
+      )}
 
       {/* Inline error rows */}
       {notifyError && (
