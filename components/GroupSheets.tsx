@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
+import { REMINDER_TIME_LABEL, WEEKDAYS as WEEKDAY_NAMES } from '@/lib/reminder'
 
 const AVATAR_COLORS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#DDA0DD',
@@ -88,9 +89,61 @@ export function MembersSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
+const pillStyle = (selected: boolean): React.CSSProperties => ({
+  minWidth: 44, padding: '8px 12px', borderRadius: 999, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+  border: selected ? 'none' : '1px solid var(--tg-theme-hint-color)',
+  background: selected ? 'var(--tg-theme-button-color)' : 'transparent',
+  color: selected ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-text-color)',
+})
+
+// Weekdays in the order people read them (Monday first); the value is the weekday number the server stores (0 = Sunday)
+const REMINDER_PILLS: { label: string; day: number }[] = [
+  { label: 'Mon', day: 1 }, { label: 'Tue', day: 2 }, { label: 'Wed', day: 3 }, { label: 'Thu', day: 4 },
+  { label: 'Fri', day: 5 }, { label: 'Sat', day: 6 }, { label: 'Sun', day: 0 },
+]
+
 export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const { chatId, group, apiHeaders, refreshGroup } = useAppContext()
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false)
+
+  // Weekly reminder: loaded when the sheet opens; a tap saves straight away
+  const [reminder, setReminder] = useState<{ day: number | null; setBy: string | null } | null>(null)
+  const [reminderError, setReminderError] = useState<string | null>(null)
+  const [reminderSaving, setReminderSaving] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/groups/${chatId}/settings`, { headers: apiHeaders })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { reminder_day?: number | null; reminder_set_by?: string | null } | null) => {
+        if (!cancelled && d) setReminder({ day: d.reminder_day ?? null, setBy: d.reminder_set_by ?? null })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [chatId, apiHeaders])
+
+  const saveReminder = async (day: number | null) => {
+    if (!reminder || reminderSaving) return
+    const previous = reminder
+    setReminder({ day, setBy: previous.setBy })
+    setReminderError(null)
+    setReminderSaving(true)
+    try {
+      const res = await fetch(`/api/groups/${chatId}/settings`, {
+        method: 'PUT',
+        headers: apiHeaders,
+        body: JSON.stringify({ reminder_day: day }),
+      })
+      if (!res.ok) throw new Error()
+      const d = await res.json() as { reminder_day?: number | null; reminder_set_by?: string | null }
+      setReminder({ day: d.reminder_day ?? null, setBy: d.reminder_set_by ?? null })
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+    } catch {
+      setReminder(previous)
+      setReminderError("Couldn't save the reminder. Check your connection and try again.")
+    } finally {
+      setReminderSaving(false)
+    }
+  }
 
   const handleCurrencySelect = async (currency: string) => {
     try {
@@ -120,7 +173,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               ×
             </button>
           </div>
-          <div className="px-4 pb-6">
+          <div className="px-4 pb-6 overflow-y-auto">
             <p className="tg-label mb-2">Default Currency</p>
             <div className="tg-section">
               <button
@@ -133,6 +186,40 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
                   {group.currency} ›
                 </span>
               </button>
+            </div>
+
+            <p className="tg-label mt-5 mb-2">Weekly reminder</p>
+            <div className="tg-section" style={{ padding: '12px 16px' }}>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Reminder day">
+                <button
+                  onClick={() => saveReminder(null)}
+                  aria-pressed={reminder?.day === null}
+                  disabled={!reminder || reminderSaving}
+                  style={pillStyle(reminder?.day === null)}
+                >
+                  Off
+                </button>
+                {REMINDER_PILLS.map(p => (
+                  <button
+                    key={p.day}
+                    onClick={() => saveReminder(p.day)}
+                    aria-pressed={reminder?.day === p.day}
+                    disabled={!reminder || reminderSaving}
+                    style={pillStyle(reminder?.day === p.day)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs mt-3" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                {reminder?.day === null || !reminder
+                  ? 'Pick a day and the group gets its outstanding balances posted automatically each week.'
+                  : `Every ${WEEKDAY_NAMES[reminder.day]} at about ${REMINDER_TIME_LABEL} (Singapore time) the outstanding balances are posted in this group. Skipped when everyone is settled up.`}
+                {reminder?.day !== null && reminder?.setBy ? ` Set by ${reminder.setBy}.` : ''}
+              </p>
+              {reminderError && (
+                <p className="text-xs mt-2" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{reminderError}</p>
+              )}
             </div>
           </div>
         </div>

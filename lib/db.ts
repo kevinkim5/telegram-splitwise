@@ -2,7 +2,7 @@ import { sql } from '@/lib/sql'
 
 // Bump this whenever applySchema() changes (a new table, column or index). lib/__tests__/db-schema.test.ts
 // fails if the schema text changes without it. Databases already at this version skip the setup.
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 let schemaChecked = false // per server instance: once confirmed, later calls cost nothing
 
@@ -73,6 +73,11 @@ async function applySchema() {
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_key VARCHAR(255)`
   await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS photo_url TEXT`
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  // Weekly balance reminder: day of week (0 = Sunday .. 6), who set it, and the day it last went out
+  // (so a repeated cron call on the same day does not post twice)
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_day SMALLINT CHECK (reminder_day BETWEEN 0 AND 6)`
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_set_by INTEGER REFERENCES members(id) ON DELETE SET NULL`
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_last_sent_on DATE`
   await sql`
     CREATE TABLE IF NOT EXISTS expense_splits (
       id         SERIAL PRIMARY KEY,

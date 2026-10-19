@@ -29,6 +29,7 @@ Copy `.env.example` to `.env.local` for local development. Key vars:
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store) for receipt images (optional). Added automatically when a Blob store is connected; also used to sign receipt view links |
 | `ADMIN_GITHUB_ID` | Numeric GitHub user ID allowed to access `/admin` routes |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | NextAuth GitHub OAuth credentials |
+| `CRON_SECRET` | Bearer secret for the daily weekly-reminder cron (`vercel.json` -> `/api/cron/balance-reminders`). Vercel adds it automatically to cron calls when the variable exists; without it the endpoint refuses to run. Set it for Production (crons only run on production deployments) |
 
 Schema is auto-migrated on the first POST to `/api/groups/init` via `ensureSchema()` in `lib/db.ts`: it reads a stored version (`schema_meta`) and only runs the setup when the database is behind. **When you change the schema in `applySchema()`, bump `SCHEMA_VERSION`** (a test fails otherwise, and tells you the new fingerprint to put in `lib/__tests__/db-schema.test.ts`).
 
@@ -69,6 +70,10 @@ An expense can have at most one receipt image, stored in a private Vercel Blob s
 ### Balance notifications
 
 Two buttons on the Balances tab. **Notify Group** (`POST /notify-balances`) posts the outstanding balances in the Telegram group. **Remind privately** (`POST /notify-private`, `lib/telegram-send.ts`) sends each person who owes a direct message with only what they owe (`buildPrivateMessages` in `lib/notify-message.ts`, same SGD-total-plus-breakdown rules as the group message, with an "Open Split" button when `TELEGRAM_APP_URL` is set) and posts nothing in the group. Telegram only lets a bot message people who have opened it (pressed Start in a private chat), so the response lists `unreachable` (403 / chat not found: never started or blocked the bot) and `failed` (rate limit, timeout) names and the app shows who was missed. People who are only owed money get no message.
+
+### Weekly balance reminder
+
+A group can pick a weekday in Group Settings (any member; the sheet shows who set it): the app then posts the outstanding balances in the group chat that day, same message as **Notify Group** (`lib/notify-group.ts`, shared), and skips groups that are all settled up. Stored on `groups` (`reminder_day` 0=Sunday..6, `reminder_set_by`, `reminder_last_sent_on`). Scheduling is one Vercel Cron call a day (`vercel.json`, 01:00 UTC = 9 am Singapore; on the Hobby plan Vercel may start it later within the hour), so the day is per group and the time is the same for everyone. `GET /api/cron/balance-reminders` (needs `Authorization: Bearer $CRON_SECRET`) claims today's groups in one UPDATE (so a repeated call the same day cannot post twice; a failed post releases its claim), posts to each, and logs a `balance_reminders` line. `?dry=1` lists what is due without sending; `?day=N` pretends today is weekday N. Cron only runs on production deployments: to test elsewhere, call the endpoint by hand with the secret.
 
 ### Expense search and date filter
 

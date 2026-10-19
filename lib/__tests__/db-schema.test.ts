@@ -47,7 +47,8 @@ describe('ensureSchema', () => {
     // the marker is written last, so a setup that failed half way is retried next time
     expect(t[t.length - 2]).toMatch(/CREATE TABLE IF NOT EXISTS schema_meta/)
     expect(t[t.length - 1]).toMatch(/INSERT INTO schema_meta/)
-    expect(mockSql.mock.calls[mockSql.mock.calls.length - 1]![1]).toBe(1)
+    const { SCHEMA_VERSION: current } = await import('../db')
+    expect(mockSql.mock.calls[mockSql.mock.calls.length - 1]![1]).toBe(current)
   })
 
   it('a database behind the current version runs the setup', async () => {
@@ -78,7 +79,7 @@ describe('ensureSchema', () => {
 // text in lib/db.ts changes without a new SCHEMA_VERSION. After bumping SCHEMA_VERSION, update both
 // numbers below.
 describe('schema version guard', () => {
-  const EXPECTED = { version: 1, fingerprint: '554dfd461944bcf4' }
+  const EXPECTED = { version: 2, fingerprint: '102d334dad8b3fbc' }
 
   it('SCHEMA_VERSION is bumped whenever applySchema() changes', async () => {
     const src = readFileSync('lib/db.ts', 'utf8')
