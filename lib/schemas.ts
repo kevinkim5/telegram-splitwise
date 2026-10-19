@@ -33,6 +33,10 @@ export const settlementBatchBodySchema = z.object({
   })).min(1).max(20),
 })
 
-export const settingsBodySchema = z.object({
-  currency,
-})
+// Either field may be sent on its own; reminder_day null turns the weekly reminder off
+export const settingsBodySchema = z
+  .object({
+    currency: currency.optional(),
+    reminder_day: z.number().int().min(0).max(6).nullable().optional(),
+  })
+  .refine(d => d.currency !== undefined || d.reminder_day !== undefined, { message: 'Nothing to change' })

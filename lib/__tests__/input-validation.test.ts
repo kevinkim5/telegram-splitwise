@@ -312,6 +312,7 @@ describe('PUT /settings — valid frontend payload (regression)', () => {
       .mockResolvedValueOnce([{ id: 7 }])                          // group lookup
       .mockResolvedValueOnce([])                                     // UPDATE
       .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'SGD' }]) // SELECT after update
+      .mockResolvedValueOnce([{ reminder_day: null, set_by: null }])       // weekly reminder setting
 
     const res = await settingsPUT(
       jsonRequest({ currency: 'SGD' }, 'PUT'),
@@ -328,6 +329,7 @@ describe('PUT /settings — valid frontend payload (regression)', () => {
       .mockResolvedValueOnce([{ id: 7 }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: 7, title: 'Trip', currency: 'USD' }])
+      .mockResolvedValueOnce([{ reminder_day: null, set_by: null }])
 
     const res = await settingsPUT(
       jsonRequest({ currency: 'USD' }, 'PUT'),
