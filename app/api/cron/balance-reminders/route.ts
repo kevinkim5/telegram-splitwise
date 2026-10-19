@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
 import { sql } from '@/lib/sql'
+import { ensureSchema } from '@/lib/db'
 import { postGroupBalances } from '@/lib/notify-group'
 import { isReminderDay, singaporeToday } from '@/lib/reminder'
 
@@ -26,6 +27,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Not configured' }, { status: 500 })
   }
   if (!authorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // the first run after a deploy can come before anyone has opened the app, which is what adds the reminder columns
+  await ensureSchema()
 
   const url = new URL(request.url)
   const dry = url.searchParams.get('dry') === '1'
