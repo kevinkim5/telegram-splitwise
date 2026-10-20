@@ -5,7 +5,7 @@ import { fetchRates } from '@/lib/rates'
 
 export type NotifyGroupResult =
   | { ok: true }
-  | { ok: false; status: number; error: string; settled?: boolean }
+  | { ok: false; status: number; error: string; settled?: boolean; detail?: string } // detail: what Telegram said, for the reminder record
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -48,7 +48,7 @@ export async function postGroupBalances(group: { id: number; title: string; curr
   const result = await res.json()
   if (!result.ok) {
     console.error('Telegram sendMessage failed:', JSON.stringify(result))
-    return { ok: false, status: 500, error: 'Failed to send message to group' }
+    return { ok: false, status: 500, error: 'Failed to send message to group', detail: String(result.description ?? 'unknown error') }
   }
   return { ok: true }
 }

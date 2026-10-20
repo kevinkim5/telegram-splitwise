@@ -10,7 +10,7 @@ import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { requireGroupMember } from '@/lib/group-access'
 import { loadSimplifiedDebts } from '@/lib/group-balances'
-import { isReminderDay, singaporeToday } from '../reminder'
+import { describeReminderResult, failedResult, isReminderDay, singaporeToday } from '../reminder'
 import { settingsBodySchema } from '../schemas'
 import { GET as cronGET } from '../../app/api/cron/balance-reminders/route'
 import { GET as settingsGET, PUT as settingsPUT } from '../../app/api/groups/[chatId]/settings/route'
@@ -32,6 +32,21 @@ describe('singaporeToday', () => {
   it('isReminderDay accepts 0-6 only', () => {
     for (const ok of [0, 3, 6]) expect(isReminderDay(ok)).toBe(true)
     for (const bad of [-1, 7, 1.5, NaN, '3', null, undefined]) expect(isReminderDay(bad)).toBe(false)
+  })
+})
+
+describe('reminder result text', () => {
+  it('describes posted / skipped / failed, and nothing for an empty or unknown value', () => {
+    expect(describeReminderResult('posted')).toEqual({ tone: 'ok', text: 'posted in the group' })
+    expect(describeReminderResult('settled')).toEqual({ tone: 'info', text: 'skipped, everyone was settled up' })
+    expect(describeReminderResult('failed: Forbidden: bot was kicked')).toEqual({ tone: 'error', text: "couldn't post (Forbidden: bot was kicked)" })
+    expect(describeReminderResult(null)).toBeNull()
+    expect(describeReminderResult('')).toBeNull()
+    expect(describeReminderResult('something else')).toBeNull()
+  })
+  it('failedResult flattens whitespace and caps the length', () => {
+    expect(failedResult('a\n  b   c')).toBe('failed: a b c')
+    expect(failedResult('x'.repeat(500)).length).toBe('failed: '.length + 140)
   })
 })
 
@@ -84,9 +99,18 @@ describe('settings: weekly reminder', () => {
   const put = (body: unknown) => settingsPUT(new Request('http://x', { method: 'PUT', body: JSON.stringify(body) }), props)
 
   it('GET returns the reminder day and who set it (null when off)', async () => {
-    expect(await (await settingsGET(new Request('http://x'), props)).json()).toEqual({ currency: 'SGD', title: 'Trip', reminder_day: null, reminder_set_by: null })
+    expect(await (await settingsGET(new Request('http://x'), props)).json()).toEqual({
+      currency: 'SGD', title: 'Trip', reminder_day: null, reminder_set_by: null, reminder_last_run_at: null, reminder_last_result: null,
+    })
     stored = { reminder_day: 3, set_by: 'Ann Lee' }
     expect(await (await settingsGET(new Request('http://x'), props)).json()).toMatchObject({ reminder_day: 3, reminder_set_by: 'Ann Lee' })
+  })
+
+  it('GET also returns what the last scheduled reminder did (time as ISO, result text)', async () => {
+    stored = { reminder_day: 2, set_by: 'Kev', reminder_last_run_at: new Date('2026-10-20T01:01:02Z'), reminder_last_result: 'failed: Forbidden: bot was kicked' } as never
+    expect(await (await settingsGET(new Request('http://x'), props)).json()).toMatchObject({
+      reminder_last_run_at: '2026-10-20T01:01:02.000Z', reminder_last_result: 'failed: Forbidden: bot was kicked',
+    })
   })
 
   it('setting a day saves it with the member who set it, and does not touch the currency', async () => {
@@ -134,6 +158,8 @@ describe('GET /api/cron/balance-reminders', () => {
   let claimed: { id: number; chat_id: string; title: string }[]
   let claimSql: { text: string; vals: unknown[] }[]
   let released: unknown[][]
+  let recorded: { id: unknown; result: unknown }[]
+  let recordFails: boolean
   let tgSent: { chat_id: string; text: string }[]
   let tgFail: Set<string>
   let debts: SimplifiedDebt[]
@@ -147,12 +173,16 @@ describe('GET /api/cron/balance-reminders', () => {
     process.env.CRON_SECRET = 's3cret'
     process.env.BOT_TOKEN = 'T'
     claimed = [{ id: 5, chat_id: '-100123', title: 'Tokyo' }, { id: 6, chat_id: '-100456', title: 'Bali' }]
-    claimSql = []; released = []; tgSent = []; tgFail = new Set()
+    claimSql = []; released = []; recorded = []; recordFails = false; tgSent = []; tgFail = new Set()
     debts = [debt(7, 8, 12)]
     vi.mocked(loadSimplifiedDebts).mockImplementation(async () => debts)
     mockSql.mockImplementation(((strings: TemplateStringsArray, ...vals: unknown[]) => {
       const q = strings.join('?').replace(/\s+/g, ' ').trim()
       if (/^UPDATE groups SET reminder_last_sent_on = \?::date WHERE/.test(q)) { claimSql.push({ text: q, vals }); return Promise.resolve(claimed) }
+      if (/^UPDATE groups SET reminder_last_run_at = NOW\(\), reminder_last_result = \? WHERE id = \?$/.test(q)) {
+        if (recordFails) return Promise.reject(new Error('db down'))
+        recorded.push({ id: vals[1], result: vals[0] }); return Promise.resolve([])
+      }
       if (/^UPDATE groups SET reminder_last_sent_on = NULL/.test(q)) { released.push(vals); return Promise.resolve([]) }
       if (/^SELECT id, title FROM groups WHERE reminder_day/.test(q)) { claimSql.push({ text: q, vals }); return Promise.resolve(claimed.map(({ id, title }) => ({ id, title }))) }
       if (/^SELECT id, first_name, last_name, username FROM members/.test(q)) return Promise.resolve([{ id: 7, first_name: 'Kev', username: 'kev' }, { id: 8, first_name: 'Ann', username: null }])
@@ -222,6 +252,30 @@ describe('GET /api/cron/balance-reminders', () => {
     expect(tgSent.map(s => s.chat_id)).toEqual(['-100456'])
     expect(released).toHaveLength(1)
     expect(released[0][0]).toBe(5)
+  })
+
+  it('records what happened for each group: posted, skipped because settled, or failed with Telegram\'s reason', async () => {
+    tgFail.add('-100123')
+    await cronGET(req('?day=1'))
+    const by = Object.fromEntries(recorded.map(r => [String(r.id), r.result]))
+    expect(by['5']).toBe('failed: Forbidden: bot was kicked')
+    expect(by['6']).toBe('posted')
+    recorded.length = 0; tgFail.clear(); debts = []
+    await cronGET(req('?day=1'))
+    expect(recorded.map(r => r.result)).toEqual(['settled', 'settled'])
+  })
+
+  it('a failure that is not from Telegram (e.g. the database) is recorded too', async () => {
+    vi.mocked(loadSimplifiedDebts).mockRejectedValue(new Error('connection reset'))
+    await cronGET(req('?day=1'))
+    expect(recorded.map(r => r.result)).toEqual(['failed: connection reset', 'failed: connection reset'])
+  })
+
+  it('if recording the result fails the run still completes and reports normally', async () => {
+    recordFails = true
+    const res = await cronGET(req('?day=1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ due: 2, sent: 2, failed: [] })
   })
 
   it('?dry=1 lists the groups that are due and sends and changes nothing', async () => {

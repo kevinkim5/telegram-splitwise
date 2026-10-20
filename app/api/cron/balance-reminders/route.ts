@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'crypto'
 import { sql } from '@/lib/sql'
 import { ensureSchema } from '@/lib/db'
 import { postGroupBalances } from '@/lib/notify-group'
-import { isReminderDay, singaporeToday } from '@/lib/reminder'
+import { failedResult, isReminderDay, singaporeToday, type ReminderResult } from '@/lib/reminder'
 
 export const maxDuration = 30
 
@@ -57,21 +57,28 @@ export async function GET(request: Request) {
   const failed: number[] = []
   for (let i = 0; i < claimed.length; i += 5) { // a few at a time: groups are few, Telegram is quick
     await Promise.all(claimed.slice(i, i + 5).map(async g => {
-      let ok = false, isSettled = false
+      let result: ReminderResult
       try {
         const r = await postGroupBalances({ id: g.id as number, title: g.title as string }, String(g.chat_id))
-        ok = r.ok
-        isSettled = !r.ok && !!r.settled
-        if (!r.ok && !r.settled) console.error(`Balance reminder not sent (group ${g.id}): ${r.error}`)
+        if (r.ok) result = 'posted'
+        else if (r.settled) result = 'settled'
+        else {
+          console.error(`Balance reminder not sent (group ${g.id}): ${r.error}${r.detail ? ` (${r.detail})` : ''}`)
+          result = failedResult(r.detail ?? r.error)
+        }
       } catch (e) {
         console.error(`Balance reminder error (group ${g.id}):`, e)
+        result = failedResult(e instanceof Error ? e.message : String(e))
       }
-      if (ok) sent++
-      else if (isSettled) settled++
+      if (result === 'posted') sent++
+      else if (result === 'settled') settled++
       else {
         failed.push(g.id as number)
+        // not delivered: release today's claim so a manual rerun can retry it
         await sql`UPDATE groups SET reminder_last_sent_on = NULL WHERE id = ${g.id} AND reminder_last_sent_on = ${today.date}::date`.catch(() => {})
       }
+      // keep what happened, so it can be checked after the (one hour) logs are gone; never fails the run
+      await sql`UPDATE groups SET reminder_last_run_at = NOW(), reminder_last_result = ${result} WHERE id = ${g.id}`.catch(() => {})
     }))
   }
 

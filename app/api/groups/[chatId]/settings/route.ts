@@ -8,13 +8,16 @@ import { settingsBodySchema } from '@/lib/schemas'
 // The weekly reminder setting and who set it, for the settings sheet
 async function loadReminder(groupId: number) {
   const [r] = await sql`
-    SELECT g.reminder_day, m.first_name || COALESCE(' ' || m.last_name, '') AS set_by
+    SELECT g.reminder_day, g.reminder_last_run_at, g.reminder_last_result,
+           m.first_name || COALESCE(' ' || m.last_name, '') AS set_by
     FROM groups g LEFT JOIN members m ON m.id = g.reminder_set_by
     WHERE g.id = ${groupId}
   `
   return {
     reminder_day: r?.reminder_day === null || r?.reminder_day === undefined ? null : Number(r.reminder_day),
     reminder_set_by: (r?.set_by as string | null) ?? null,
+    reminder_last_run_at: r?.reminder_last_run_at ? new Date(r.reminder_last_run_at as string).toISOString() : null,
+    reminder_last_result: (r?.reminder_last_result as string | null) ?? null,
   }
 }
 
