@@ -48,6 +48,10 @@ export async function ensureSchema() {
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_day SMALLINT CHECK (reminder_day BETWEEN 0 AND 6)`
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_set_by INTEGER REFERENCES members(id) ON DELETE SET NULL`
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_last_sent_on DATE`
+  // What the last scheduled reminder did for this group (posted / skipped / failed and why), so it can be
+  // checked afterwards: Vercel's free plan keeps logs for only an hour
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_last_run_at TIMESTAMPTZ`
+  await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS reminder_last_result TEXT`
   await sql`
     CREATE TABLE IF NOT EXISTS expense_splits (
       id         SERIAL PRIMARY KEY,
