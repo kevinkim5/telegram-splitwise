@@ -1,12 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/sql', () => ({ sql: vi.fn() }))
+vi.mock('@/lib/db', () => ({ ensureSchema: vi.fn() }))
 
 import { sql } from '@/lib/sql'
 import { requireGroupMember } from '../group-access'
 
 const mockSql = vi.mocked(sql)
 beforeEach(() => vi.clearAllMocks())
+
+describe('requireGroupMember right after a deploy that adds removed_at', () => {
+  it('if the column does not exist yet it applies the schema and retries once, instead of failing', async () => {
+    const { ensureSchema } = await import('@/lib/db')
+    mockSql.mockRejectedValueOnce(new Error('column m.removed_at does not exist') as never)
+    mockSql.mockResolvedValueOnce([{ id: 5, title: 'T', currency: 'SGD', member_id: 7 }] as never)
+    const r = await requireGroupMember(BigInt(-100123), 99)
+    expect(r.ok).toBe(true)
+    expect(vi.mocked(ensureSchema)).toHaveBeenCalledTimes(1)
+  })
+  it('any other database error is not swallowed', async () => {
+    mockSql.mockRejectedValueOnce(new Error('connection reset') as never)
+    await expect(requireGroupMember(BigInt(-100123), 99)).rejects.toThrow('connection reset')
+  })
+})
 
 describe('requireGroupMember (group + membership in one query)', () => {
   it('a member of an existing group: ok, with the group and the member id', async () => {
