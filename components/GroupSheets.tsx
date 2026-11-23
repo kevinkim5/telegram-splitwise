@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useAppContext } from '@/components/AppProvider'
 import { CurrencyPicker } from '@/components/CurrencyPicker'
+import { useGroupData } from '@/components/GroupData'
+import { balanceLinesFor, removalConfirmText } from '@/lib/member-removal'
 import { REMINDER_TIME_LABEL, WEEKDAYS as WEEKDAY_NAMES, describeReminderResult } from '@/lib/reminder'
 
 const AVATAR_COLORS = [
@@ -43,7 +45,55 @@ export function GearIcon() {
 }
 
 export function MembersSheet({ onClose }: { onClose: () => void }) {
-  const { members } = useAppContext()
+  const { chatId, members, allMembers, currentMember, apiHeaders, refreshMembers } = useAppContext()
+  const { balances, refreshBalances } = useGroupData()
+  const removed = allMembers.filter(m => m.removed_at)
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const fullName = (m: { first_name: string; last_name?: string | null }) => `${m.first_name}${m.last_name ? ` ${m.last_name}` : ''}`
+  const confirmAsk = (text: string, then: () => void) => {
+    const tg = window.Telegram?.WebApp
+    if (tg?.showConfirm) tg.showConfirm(text, ok => { if (ok) then() })
+    else if (window.confirm(text)) then()
+  }
+
+  const act = async (id: number, request: () => Promise<Response>, after?: () => void) => {
+    setBusyId(id)
+    setError(null)
+    try {
+      const res = await request()
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(d.error ?? "Couldn't save that. Check your connection and try again.")
+      }
+      await Promise.all([refreshMembers(), refreshBalances()])
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success')
+      after?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const remove = (m: { id: number; first_name: string; last_name?: string | null }) => {
+    const self = m.id === currentMember.id
+    const lines = balanceLinesFor(m.id, balances?.balances_by_currency)
+    confirmAsk(removalConfirmText(fullName(m), self, lines), () =>
+      act(m.id, () => fetch(`/api/groups/${chatId}/members/${m.id}`, { method: 'DELETE', headers: apiHeaders }),
+        // someone who just left can't use the group any more: reload shows them the "removed" notice
+        self ? () => window.location.reload() : undefined),
+    )
+  }
+
+  const addBack = (m: { id: number }) =>
+    act(m.id, () => fetch(`/api/groups/${chatId}/members/${m.id}/restore`, { method: 'POST', headers: apiHeaders }))
+
+  const linkBtn = (color: string): React.CSSProperties => ({
+    background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '6px 4px', color,
+  })
+
   return (
     <div
       className="fixed inset-0 flex items-end justify-center z-50"
@@ -64,6 +114,9 @@ export function MembersSheet({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="overflow-y-auto px-4 pb-6">
+          {error && (
+            <p role="alert" className="text-xs mb-3" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>{error}</p>
+          )}
           <div className="tg-section">
             {members.map((m, idx) => (
               <div
@@ -74,15 +127,61 @@ export function MembersSheet({ onClose }: { onClose: () => void }) {
                 <MemberAvatar member={m} size={36} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {m.first_name}{m.last_name ? ` ${m.last_name}` : ''}
+                    {fullName(m)}{m.id === currentMember.id ? ' (you)' : ''}
                   </p>
                   {m.username && (
                     <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>@{m.username}</p>
                   )}
                 </div>
+                {members.length > 1 && (
+                  <button
+                    onClick={() => remove(m)}
+                    disabled={busyId !== null}
+                    aria-label={m.id === currentMember.id ? 'Leave group' : `Remove ${fullName(m)}`}
+                    style={{ ...linkBtn('var(--tg-theme-destructive-text-color, #ff3b30)'), opacity: busyId === m.id ? 0.5 : 1 }}
+                  >
+                    {m.id === currentMember.id ? 'Leave' : 'Remove'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
+
+          {removed.length > 0 && (
+            <>
+              <p className="tg-label mt-5 mb-2">Removed</p>
+              <div className="tg-section">
+                {removed.map((m, idx) => {
+                  const lines = balanceLinesFor(m.id, balances?.balances_by_currency)
+                  return (
+                    <div
+                      key={m.id}
+                      className="tg-list-item flex items-center gap-3"
+                      style={{ borderBottom: idx === removed.length - 1 ? 'none' : undefined, opacity: 0.85 }}
+                    >
+                      <MemberAvatar member={m} size={36} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{fullName(m)}</p>
+                        {lines.length > 0 && (
+                          <p className="text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                            {lines.map(l => `${l.net < 0 ? 'owes' : 'is owed'} ${l.currency} ${Math.abs(l.net).toFixed(2)}`).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => addBack(m)}
+                        disabled={busyId !== null}
+                        aria-label={`Add ${fullName(m)} back`}
+                        style={{ ...linkBtn('var(--tg-theme-link-color)'), opacity: busyId === m.id ? 0.5 : 1 }}
+                      >
+                        Add back
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

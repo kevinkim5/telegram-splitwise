@@ -9,7 +9,8 @@ interface AppContextValue {
   initData: string
   group: Group
   currentMember: Member
-  members: Member[]
+  members: Member[]     // current members only: what pickers and the header show
+  allMembers: Member[]  // everyone, removed members too: names for old expenses, the "removed" list
   refreshMembers: () => Promise<void>
   refreshGroup: () => Promise<void>
   apiHeaders: Record<string, string>
@@ -334,12 +335,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         const membersRes = await fetch(`/api/groups/${chatId}/members`, { headers: apiHeaders })
-        const members: Member[] = await membersRes.json()
+        const allMembers: Member[] = await membersRes.json()
+        const members = allMembers.filter(m => !m.removed_at)
 
         const refreshMembers = async () => {
           const r = await fetch(`/api/groups/${chatId}/members`, { headers: apiHeaders })
-          const m: Member[] = await r.json()
-          setCtx(prev => prev ? { ...prev, members: m } : prev)
+          const all: Member[] = await r.json()
+          setCtx(prev => prev ? { ...prev, members: all.filter(m => !m.removed_at), allMembers: all } : prev)
         }
 
         const refreshGroup = async () => {
@@ -348,7 +350,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setCtx(prev => prev ? { ...prev, group: { ...prev.group, ...g } } : prev)
         }
 
-        setCtx({ chatId, initData, group, currentMember: member, members, refreshMembers, refreshGroup, apiHeaders })
+        setCtx({ chatId, initData, group, currentMember: member, members, allMembers, refreshMembers, refreshGroup, apiHeaders })
       } catch (e) {
         setError(String(e))
       }

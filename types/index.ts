@@ -15,6 +15,7 @@ export interface Member {
   username: string | null
   photo_url?: string | null
   created_at: string
+  removed_at?: string | null // set once the member has been removed from the group
 }
 
 export interface ExpenseSplit {

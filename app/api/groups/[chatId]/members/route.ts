@@ -19,10 +19,12 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const members = await sql`
-    SELECT id, group_id, telegram_user_id, first_name, last_name, username, photo_url, created_at
+    SELECT id, group_id, telegram_user_id, first_name, last_name, username, photo_url, created_at, removed_at
     FROM members
     WHERE group_id = ${group.id}
     ORDER BY first_name
   `
+  // Everyone, removed members included (flagged by removed_at): the app needs their names for past
+  // expenses and unsettled balances, and shows only the active ones in pickers and the header
   return NextResponse.json(members)
 }
