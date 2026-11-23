@@ -7,6 +7,9 @@ import { AdminBalances, type AdminMember } from './AdminBalances'
 import { ExpensesList, type AdminExpense, type HistoryEvent } from './ExpensesList'
 import { SettlementsList, type AdminSettlement } from './SettlementsList'
 import { GroupTotals } from './GroupTotals'
+import { MembersList, type AdminGroupMember } from './MembersList'
+import type { MemberActionResult } from '@/lib/admin-members'
+import { adminRemoveMember, adminRestoreMember } from '@/lib/admin-members'
 import { AdminTabs, parseTab } from './AdminTabs'
 import { ExpenseFilterBar } from './ExpenseFilterBar'
 import { expensesHref, isFiltered, parseAdminFilter } from '@/lib/admin-expense-filter'
@@ -34,14 +37,6 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
 }
 
 const pagerLink: React.CSSProperties = { color: '#2563eb', fontWeight: 600, textDecoration: 'none', minWidth: 64 }
-
-function Row({ children, last }: { children: React.ReactNode; last?: boolean }) {
-  return (
-    <div style={{ padding: '0.75rem 1rem', borderBottom: last ? 'none' : '0.5px solid #f3f4f6' }}>
-      {children}
-    </div>
-  )
-}
 
 export default async function AdminGroupPage({
   params,
@@ -255,6 +250,54 @@ export default async function AdminGroupPage({
     revalidatePath(`/admin/${group.id}`)
   }
 
+  // Remove / add back a member (the same rules as in the app; nothing is deleted)
+  async function removeMemberAction(memberId: number): Promise<MemberActionResult> {
+    'use server'
+    if (!(await auth())) throw new Error('Unauthorized')
+    const result = await adminRemoveMember(group.id as number, memberId)
+    revalidatePath(`/admin/${group.id}`)
+    return result
+  }
+
+  async function restoreMemberAction(memberId: number): Promise<MemberActionResult> {
+    'use server'
+    if (!(await auth())) throw new Error('Unauthorized')
+    const result = await adminRestoreMember(group.id as number, memberId)
+    revalidatePath(`/admin/${group.id}`)
+    return result
+  }
+
+  // What each member still owes / is owed, in whole cents per currency: shown on the Members tab so the
+  // admin can see the effect before removing someone (only that tab loads it)
+  const netRows = tab === 'members' ? await sql`
+    SELECT member_id, currency, SUM(c)::bigint AS cents FROM (
+      SELECT e.paid_by_member_id AS member_id, e.currency, (SUM(es.amount) * 100)::bigint AS c
+      FROM expenses e JOIN expense_splits es ON es.expense_id = e.id
+      WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL AND es.member_id <> e.paid_by_member_id GROUP BY 1, 2
+      UNION ALL
+      SELECT es.member_id, e.currency, -(SUM(es.amount) * 100)::bigint
+      FROM expenses e JOIN expense_splits es ON es.expense_id = e.id
+      WHERE e.group_id = ${group.id} AND e.deleted_at IS NULL AND es.member_id <> e.paid_by_member_id GROUP BY 1, 2
+      UNION ALL
+      SELECT from_member_id, currency, (SUM(amount) * 100)::bigint FROM settlements
+      WHERE group_id = ${group.id} AND deleted_at IS NULL GROUP BY 1, 2
+      UNION ALL
+      SELECT to_member_id, currency, -(SUM(amount) * 100)::bigint FROM settlements
+      WHERE group_id = ${group.id} AND deleted_at IS NULL GROUP BY 1, 2
+    ) t GROUP BY member_id, currency HAVING SUM(c) <> 0
+    ORDER BY currency
+  ` : []
+  const fmtDay = (v: unknown) => new Date(v as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const groupMembers: AdminGroupMember[] = members.map(m => ({
+    id: m.id as number,
+    name: `${m.first_name}${m.last_name ? ' ' + m.last_name : ''}`,
+    username: (m.username as string | null) ?? null,
+    telegramId: String(m.telegram_user_id),
+    joined: fmtDay(m.created_at),
+    removed: m.removed_at ? fmtDay(m.removed_at) : null,
+    lines: netRows.filter(r => Number(r.member_id) === (m.id as number)).map(r => ({ currency: String(r.currency), net: Number(r.cents) / 100 })),
+  }))
+
   const memberIds = members.map(m => m.id as number)
   const memberNameMap = new Map(members.map(m => [
     m.id as number,
@@ -414,23 +457,7 @@ export default async function AdminGroupPage({
 
       {tab === 'members' && (
         <Section>
-          {members.map((m, i) => (
-            <Row key={String(m.id)} last={i === members.length - 1}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontWeight: 500, fontSize: '0.875rem', ...(m.removed_at ? { color: '#9ca3af' } : {}) }}>
-                  {String(m.first_name)}{m.last_name ? ` ${m.last_name}` : ''}
-                  {m.removed_at && <span style={{ marginLeft: 6, fontSize: '0.625rem', fontWeight: 700, color: '#b91c1c', background: '#fee2e2', borderRadius: 999, padding: '1px 8px' }}>removed</span>}
-                </span>
-                <span style={{ fontSize: '0.8125rem', color: '#6b7280', textAlign: 'right' }}>
-                  {m.username ? `@${m.username}` : '—'}
-                </span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
-                Telegram ID {String(m.telegram_user_id)} · joined {new Date(m.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                {m.removed_at ? ` · removed ${new Date(m.removed_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
-              </div>
-            </Row>
-          ))}
+          <MembersList members={groupMembers} remove={removeMemberAction} restore={restoreMemberAction} />
         </Section>
       )}
     </div>
