@@ -5,6 +5,7 @@ export interface NamedBalance {
   member_name: string
   net_amount: number
   currency: string
+  removed?: boolean // the member has been removed from the group but still owes or is owed money
 }
 
 export function simplifyDebts(balances: NamedBalance[]): SimplifiedDebt[] {

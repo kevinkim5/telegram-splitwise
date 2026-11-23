@@ -55,7 +55,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const group = access.group
   const member = access.member
 
-  if (!await validateGroupMembers(group.id as number, [from_member_id, to_member_id])) {
+  if (!await validateGroupMembers(group.id as number, [from_member_id, to_member_id], { allowRemoved: true })) {
     return NextResponse.json({ error: 'One or more member IDs do not belong to this group' }, { status: 422 })
   }
 

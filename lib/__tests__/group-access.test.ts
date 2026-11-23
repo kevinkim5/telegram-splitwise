@@ -51,7 +51,7 @@ describe('requireGroupMember (group + membership in one query)', () => {
     await requireGroupMember(BigInt(-100123), 99)
     expect(mockSql).toHaveBeenCalledTimes(1)
     const text = (mockSql.mock.calls[0]![0] as unknown as string[]).join('?').replace(/\s+/g, ' ')
-    expect(text).toMatch(/FROM groups g LEFT JOIN members m ON m\.group_id = g\.id AND m\.telegram_user_id = \?/)
+    expect(text).toMatch(/FROM groups g LEFT JOIN members m ON m\.group_id = g\.id AND m\.telegram_user_id = \? AND m\.removed_at IS NULL/)
     expect(text).toMatch(/WHERE g\.chat_id = \? AND g\.deleted_at IS NULL/)
     expect(mockSql.mock.calls[0]!.slice(1)).toEqual([99, BigInt(-100123)])
   })

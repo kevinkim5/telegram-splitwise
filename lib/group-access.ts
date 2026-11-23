@@ -9,13 +9,13 @@ export type GroupAccess =
 
 // "Does this group exist, and is the caller one of its members?" in ONE query (it used to be two, one
 // after the other, at the start of every request). Same answers as before: a missing or archived
-// group is 404, a group the caller does not belong to is 403. The member is matched on this group
-// and this Telegram user only.
+// group is 404, a group the caller does not belong to (or was removed from) is 403. The member is
+// matched on this group and this Telegram user only, and only while not removed.
 export async function requireGroupMember(chatId: bigint, telegramUserId: number): Promise<GroupAccess> {
   const [row] = await sql`
     SELECT g.id, g.title, g.currency, m.id AS member_id
     FROM groups g
-    LEFT JOIN members m ON m.group_id = g.id AND m.telegram_user_id = ${telegramUserId}
+    LEFT JOIN members m ON m.group_id = g.id AND m.telegram_user_id = ${telegramUserId} AND m.removed_at IS NULL
     WHERE g.chat_id = ${chatId} AND g.deleted_at IS NULL
   `
   if (!row) return { ok: false, response: NextResponse.json({ error: 'Group not found' }, { status: 404 }) }

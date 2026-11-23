@@ -113,6 +113,56 @@ describe('balance calculation: new cents-in-SQL version equals the old float ver
   })
 })
 
+describe('removed members', () => {
+  it('on 2000 random groups with random removed members: debts are unchanged, and a removed member is listed (marked) only while any currency is open', () => {
+    for (let seed = 1; seed <= 2000; seed++) {
+      const sc = scenario(seed)
+      const r = rng(seed * 7919)
+      const removedIds = new Set(sc.members.filter(() => r() < 0.4).map(m => m.id))
+      const members = sc.members.map(m => ({ ...m, removed: removedIds.has(m.id) }))
+      const expected = legacy(sc.members, sc.splits, sc.settlements, sc.groupCurrency)
+      const agg = aggregate(sc.splits, sc.settlements)
+      const actual = buildLedger(members, agg.expenses, agg.settlements, sc.groupCurrency)
+
+      expect(actual.simplified_debts, `debts, seed ${seed}`).toEqual(expected.simplified_debts) // removing someone never changes who owes whom
+      const open = (id: number) => Object.values(expected.balances_by_currency).some(rows => rows.some(b => b.member_id === id && b.net_amount !== 0))
+      const shape = (rows: typeof expected.balances) => rows
+        .filter(b => !removedIds.has(b.member_id) || open(b.member_id))
+        .map(b => (removedIds.has(b.member_id) ? { ...b, removed: true } : b))
+      expect(actual.balances, `flat, seed ${seed}`).toEqual(shape(expected.balances))
+      for (const cur of Object.keys(expected.balances_by_currency)) {
+        expect(actual.balances_by_currency[cur], `${cur}, seed ${seed}`).toEqual(shape(expected.balances_by_currency[cur]))
+      }
+    }
+  })
+
+  it('a removed member who is square disappears; one who still owes stays and is marked; active members are never marked', () => {
+    const kev = { id: 7, first_name: 'Kev', last_name: null }
+    const ann = { id: 8, first_name: 'Ann', last_name: null, removed: true }
+    const ben = { id: 9, first_name: 'Ben', last_name: null, removed: true }
+    const e = (payer: number, member: number, cents: number, firstId: number) => ({ currency: 'SGD', payer, member, cents, firstId })
+    const l = buildLedger([kev, ann, ben], [e(7, 8, 1250, 1), e(7, 9, 500, 2)], [{ currency: 'SGD', from: 9, to: 7, cents: 500, firstId: 1 }], 'SGD')
+    const ids = l.balances_by_currency.SGD.map(b => b.member_id)
+    expect(ids).toEqual([7, 8]) // Ben paid everything back and is gone; Ann still owes 12.50
+    expect(l.balances_by_currency.SGD.find(b => b.member_id === 8)).toMatchObject({ removed: true, net_amount: -12.5 })
+    expect(l.balances_by_currency.SGD.find(b => b.member_id === 7)).not.toHaveProperty('removed')
+    expect(l.simplified_debts).toEqual([expect.objectContaining({ from_member_id: 8, to_member_id: 7, amount: 12.5 })])
+    expect(l.balances.map(b => b.member_id)).toEqual([7, 8])
+  })
+
+  it('loadLedger reads removed_at and passes it on', async () => {
+    const mockSql = vi.mocked(sql) as unknown as { transaction: ReturnType<typeof vi.fn> }
+    ;(sql as any).mockImplementation(() => ({}))
+    mockSql.transaction.mockResolvedValue([
+      [{ id: 7, first_name: 'Kev', last_name: null, removed_at: null }, { id: 8, first_name: 'Ann', last_name: null, removed_at: '2026-11-20T00:00:00Z' }],
+      [{ currency: 'SGD', payer: 7, member: 8, cents: '1250', first_id: '1' }],
+      [],
+    ])
+    const l = await loadLedger(5, 'SGD')
+    expect(l.balances_by_currency.SGD.find(b => b.member_id === 8)).toMatchObject({ removed: true, net_amount: -12.5 })
+  })
+})
+
 describe('buildLedger edge cases', () => {
   const kev = { id: 7, first_name: 'Kev', last_name: null }
   const ann = { id: 8, first_name: 'Ann', last_name: 'Lee' }

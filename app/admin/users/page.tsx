@@ -21,7 +21,7 @@ export default async function AdminUsersPage() {
       COUNT(m.id)::int AS group_count,
       json_agg(json_build_object('id', g.id, 'title', g.title) ORDER BY g.title) AS groups
     FROM latest l
-    JOIN members m ON m.telegram_user_id = l.telegram_user_id
+    JOIN members m ON m.telegram_user_id = l.telegram_user_id AND m.removed_at IS NULL
     JOIN groups  g ON g.id = m.group_id
     GROUP BY l.telegram_user_id, l.first_name, l.last_name, l.username
     ORDER BY l.first_name, l.last_name NULLS LAST

@@ -79,7 +79,7 @@ describe('ensureSchema', () => {
 // text in lib/db.ts changes without a new SCHEMA_VERSION. After bumping SCHEMA_VERSION, update both
 // numbers below.
 describe('schema version guard', () => {
-  const EXPECTED = { version: 3, fingerprint: '59de6edc46bd7ac5' }
+  const EXPECTED = { version: 4, fingerprint: 'b17a06da85394a7f' }
 
   it('SCHEMA_VERSION is bumped whenever applySchema() changes', async () => {
     const src = readFileSync('lib/db.ts', 'utf8')

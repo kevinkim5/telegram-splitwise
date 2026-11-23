@@ -27,7 +27,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const group = access.group
 
   const members = await sql`
-    SELECT id, first_name, last_name, username, telegram_user_id FROM members WHERE group_id = ${group.id}
+    SELECT id, first_name, last_name, username, telegram_user_id, removed_at FROM members WHERE group_id = ${group.id}
   `
   const info = new Map(members.map(m => [
     m.id as number,
@@ -35,6 +35,7 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
       name: `${m.first_name}${m.last_name ? ' ' + m.last_name : ''}`,
       username: m.username as string | null,
       telegramId: String(m.telegram_user_id),
+      removed: !!m.removed_at,
     },
   ]))
 
@@ -61,7 +62,14 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
     ? { reply_markup: { inline_keyboard: [[{ text: 'Open Split', url: `${TELEGRAM_APP_URL}?startapp=${chatId}` }]] } }
     : {}
 
-  const results = await Promise.all([...messages.entries()].map(async ([debtorId, text]) => {
+  // People who were removed from the group still show in the debts (they owe until settled) but get no
+  // private message: they're no longer part of it
+  const recipients = [...messages.entries()].filter(([debtorId]) => !info.get(debtorId)?.removed)
+  if (recipients.length === 0) {
+    return NextResponse.json({ error: 'Nobody who owes is still in the group' }, { status: 400 })
+  }
+
+  const results = await Promise.all(recipients.map(async ([debtorId, text]) => {
     const m = info.get(debtorId)
     if (!m) return { name: 'Unknown', kind: 'failed' as const }
     const r = await sendTelegramMessage(BOT_TOKEN, m.telegramId, text, extra)

@@ -94,7 +94,11 @@ export async function PUT(
   if (!existing) return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
 
   const allMemberIds = [paid_by_member_id, ...splits.map(s => s.member_id)]
-  if (!await validateGroupMembers(group.id as number, allMemberIds)) {
+  // Someone removed from the group can't be added to an expense, but one who is already on this expense
+  // stays valid, so an old expense can still be edited (fix the amount, the date, ...)
+  const alreadyOn = await sql`SELECT member_id FROM expense_splits WHERE expense_id = ${expenseId}`
+  const keepable = [existing.paid_by_member_id as number, ...alreadyOn.map(r => r.member_id as number)]
+  if (!await validateGroupMembers(group.id as number, allMemberIds, { allowRemoved: keepable })) {
     return NextResponse.json({ error: 'One or more member IDs do not belong to this group' }, { status: 422 })
   }
 

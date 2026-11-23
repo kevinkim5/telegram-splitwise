@@ -7,7 +7,7 @@ import type { SimplifiedDebt } from '@/types'
 // page and the checks used when recording a settlement or notifying the group go through here, so
 // there is one calculation.
 
-export interface LedgerMember { id: number; first_name: string; last_name: string | null }
+export interface LedgerMember { id: number; first_name: string; last_name: string | null; removed?: boolean }
 // Expense splits summed per (currency, who paid, who owes): one row each, self-splits left out
 export interface ExpensePair { currency: string; payer: number; member: number; cents: number; firstId: number }
 // Live settlements summed per (currency, from, to)
@@ -77,7 +77,7 @@ export function buildLedger(
       currency,
     }))
     balances_by_currency[currency] = rows
-    simplified_debts.push(...simplifyDebts(rows))
+    simplified_debts.push(...simplifyDebts(rows)) // from everyone, removed members included: their debts still count
   }
 
   const balances: NamedBalance[] = memberIds.map(memberId => {
@@ -85,6 +85,19 @@ export function buildLedger(
     for (const byMember of net.values()) cents += byMember.get(memberId) ?? 0
     return { member_id: memberId, member_name: names.get(memberId) ?? 'Unknown', net_amount: cents / 100, currency: groupCurrency }
   })
+
+  // A member removed from the group is listed (marked `removed`) only while they still owe or are owed
+  // money in some currency, so the others can settle with them; once square they vanish from the lists
+  const removedIds = new Set(members.filter(m => m.removed).map(m => m.id))
+  if (removedIds.size > 0) {
+    const stillOwes = (id: number) => [...net.values()].some(byMember => (byMember.get(id) ?? 0) !== 0)
+    const visible = (b: NamedBalance) => !removedIds.has(b.member_id) || stillOwes(b.member_id)
+    const mark = (b: NamedBalance): NamedBalance => (removedIds.has(b.member_id) ? { ...b, removed: true } : b)
+    for (const currency of Object.keys(balances_by_currency)) {
+      balances_by_currency[currency] = balances_by_currency[currency].filter(visible).map(mark)
+    }
+    return { balances: balances.filter(visible).map(mark), balances_by_currency, simplified_debts }
+  }
   return { balances, balances_by_currency, simplified_debts }
 }
 
@@ -92,7 +105,7 @@ export function buildLedger(
 // read-only transaction so they describe the same moment even if someone is saving an expense.
 export async function loadLedger(groupId: number, groupCurrency: string): Promise<Ledger> {
   const [members, expenseRows, settlementRows] = await sql.transaction([
-    sql`SELECT id, first_name, last_name FROM members WHERE group_id = ${groupId} ORDER BY id`,
+    sql`SELECT id, first_name, last_name, removed_at FROM members WHERE group_id = ${groupId} ORDER BY id`,
     sql`
       SELECT e.currency, e.paid_by_member_id AS payer, es.member_id AS member,
              (SUM(es.amount) * 100)::bigint AS cents, MIN(e.id) AS first_id
@@ -111,7 +124,7 @@ export async function loadLedger(groupId: number, groupCurrency: string): Promis
   ], { isolationLevel: 'RepeatableRead', readOnly: true })
 
   return buildLedger(
-    members.map(m => ({ id: Number(m.id), first_name: String(m.first_name), last_name: (m.last_name as string | null) ?? null })),
+    members.map(m => ({ id: Number(m.id), first_name: String(m.first_name), last_name: (m.last_name as string | null) ?? null, removed: !!m.removed_at })),
     expenseRows.map(r => ({ currency: String(r.currency), payer: Number(r.payer), member: Number(r.member), cents: Number(r.cents), firstId: Number(r.first_id) })),
     settlementRows.map(r => ({ currency: String(r.currency), from: Number(r.from), to: Number(r.to), cents: Number(r.cents), firstId: Number(r.first_id) })),
     groupCurrency,

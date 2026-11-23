@@ -16,7 +16,11 @@ interface Props {
 
 export function ExpenseFormPage({ editId }: Props) {
   const router = useRouter()
-  const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
+  const { chatId, group, members, allMembers, currentMember, apiHeaders } = useAppContext()
+  // Someone removed from the group can't be added to an expense, but stays selectable on an old expense
+  // they are already part of, so it can still be edited
+  const [keepRemoved, setKeepRemoved] = useState<number[]>([])
+  const pickerMembers = [...members, ...allMembers.filter(m => m.removed_at && keepRemoved.includes(m.id))]
   const isEdit = !!editId
 
   const [description, setDescription] = useState('')
@@ -68,6 +72,7 @@ export function ExpenseFormPage({ editId }: Props) {
         setHadReceipt(!!exp.has_receipt)
         setExistingReceiptUrl(exp.receipt_url ?? null)
         const ids = (exp.splits ?? []).map(s => s.member_id)
+        setKeepRemoved([exp.paid_by_member_id, ...ids].filter(id => allMembers.some(m => m.id === id && m.removed_at)))
         setSelectedMembers(ids.length ? ids : members.map(m => m.id))
         if (exp.split_type === 'custom' || exp.split_type === 'shares') {
           const ca: Record<number, string> = {}
@@ -81,7 +86,7 @@ export function ExpenseFormPage({ editId }: Props) {
       }
     }
     load()
-  }, [isEdit, editId, chatId, apiHeaders, members])
+  }, [isEdit, editId, chatId, apiHeaders, members, allMembers])
 
   // Edit mode: remember how the form looked once loaded, so Save only lights up after a real change
   // and the changed fields can be outlined. Compared by value, so undoing an edit un-dirties it.
@@ -583,10 +588,10 @@ export function ExpenseFormPage({ editId }: Props) {
               value={paidBy}
               onChange={e => setPaidBy(Number(e.target.value))}
             >
-              {members.map(m => (
+              {pickerMembers.map(m => (
                 <option key={m.id} value={m.id}>
                   {m.first_name}{m.last_name ? ` ${m.last_name}` : ''}
-                  {m.id === currentMember.id ? ' (you)' : ''}
+                  {m.id === currentMember.id ? ' (you)' : ''}{m.removed_at ? ' (removed)' : ''}
                 </option>
               ))}
             </select>
@@ -621,9 +626,9 @@ export function ExpenseFormPage({ editId }: Props) {
 
           {/* Member selection */}
           <div className="tg-section">
-            {members.map((m, idx) => {
+            {pickerMembers.map((m, idx) => {
               const checked = selectedMembers.includes(m.id)
-              const isLast = idx === members.length - 1
+              const isLast = idx === pickerMembers.length - 1
               return (
                 <div
                   key={m.id}
@@ -648,6 +653,7 @@ export function ExpenseFormPage({ editId }: Props) {
                     {m.id === currentMember.id ? (
                       <span style={{ color: 'var(--tg-theme-hint-color)' }}> (you)</span>
                     ) : null}
+                    {m.removed_at ? <span style={{ color: 'var(--tg-theme-hint-color)' }}> (removed)</span> : null}
                   </span>
 
                   {/* Equal: show per-person amount */}

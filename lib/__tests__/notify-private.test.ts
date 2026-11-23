@@ -109,11 +109,11 @@ describe('sendTelegramMessage', () => {
 // ── the route ──
 const mockSql = vi.mocked(sql)
 const props = { params: Promise.resolve({ chatId: '-100123' }) }
-const MEMBERS = [
-  { id: 7, first_name: 'Kev', last_name: null, username: 'kev', telegram_user_id: '99' },
-  { id: 8, first_name: 'Ann', last_name: null, username: 'ann', telegram_user_id: '100' },
-  { id: 9, first_name: 'Ben', last_name: 'Tan', username: null, telegram_user_id: '101' },
-  { id: 10, first_name: 'Cai', last_name: null, username: null, telegram_user_id: '102' },
+const MEMBERS: Array<{ id: number; first_name: string; last_name: string | null; username: string | null; telegram_user_id: string; removed_at: string | null }> = [
+  { id: 7, first_name: 'Kev', last_name: null, username: 'kev', telegram_user_id: '99', removed_at: null },
+  { id: 8, first_name: 'Ann', last_name: null, username: 'ann', telegram_user_id: '100', removed_at: null },
+  { id: 9, first_name: 'Ben', last_name: 'Tan', username: null, telegram_user_id: '101', removed_at: null },
+  { id: 10, first_name: 'Cai', last_name: null, username: null, telegram_user_id: '102', removed_at: null },
 ]
 
 describe('POST /notify-private', () => {
@@ -132,7 +132,7 @@ describe('POST /notify-private', () => {
     mockSql.mockImplementation(((strings: TemplateStringsArray) => {
       const q = strings.join('?').replace(/\s+/g, ' ').trim()
       if (/FROM groups g LEFT JOIN members m/.test(q)) return Promise.resolve(noGroup ? [] : [{ id: 5, title: 'Tokyo Trip', currency: 'SGD', member_id: memberId }])
-      if (/^SELECT id, first_name, last_name, username, telegram_user_id FROM members/.test(q)) return Promise.resolve(MEMBERS)
+      if (/^SELECT id, first_name, last_name, username, telegram_user_id, removed_at FROM members/.test(q)) return Promise.resolve(MEMBERS)
       return Promise.resolve([])
     }) as never)
     tgReply = () => new Response(JSON.stringify({ ok: true, result: {} }))
@@ -212,6 +212,27 @@ describe('POST /notify-private', () => {
     noGroup = false; memberId = null
     expect((await call()).status).toBe(403)
     expect(sent).toHaveLength(0)
+  })
+
+  it('a debtor who was removed from the group gets no message and is not counted; the others still do', async () => {
+    MEMBERS[3].removed_at = '2026-11-20T00:00:00Z' // Cai (owes Kev SGD 20) was removed
+    try {
+      const body = await (await call()).json()
+      expect(body).toEqual({ ok: true, total: 1, sent: 1, unreachable: [], failed: [] })
+      expect(sent.map(s => s.chat_id)).toEqual(['99'])
+      expect(sent.some(s => s.chat_id === '102')).toBe(false)
+    } finally { MEMBERS[3].removed_at = null }
+  })
+
+  it('when everyone who owes has been removed: 400 and nothing is sent', async () => {
+    vi.mocked(loadSimplifiedDebts).mockResolvedValue([debt(10, 7, 20, 'SGD')])
+    MEMBERS[3].removed_at = '2026-11-20T00:00:00Z'
+    try {
+      const res = await call()
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toMatch(/still in the group/)
+      expect(sent).toHaveLength(0)
+    } finally { MEMBERS[3].removed_at = null }
   })
 
   it('the response never contains message text or amounts', async () => {

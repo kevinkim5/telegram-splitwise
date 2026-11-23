@@ -35,6 +35,17 @@ export async function POST(request: Request) {
   const [existing] = await sql`SELECT id FROM groups WHERE chat_id = ${chatIdBig}`
   const is_new_group = !existing
 
+  // Someone removed from this group stays out: they are still in the Telegram chat, so without this
+  // check opening the app would simply register them again. A current member can add them back.
+  if (existing) {
+    const [row] = await sql`
+      SELECT removed_at FROM members WHERE group_id = ${existing.id} AND telegram_user_id = ${user.id}
+    `
+    if (row?.removed_at) {
+      return NextResponse.json({ error: 'You were removed from this group. Ask a member to add you back.' }, { status: 403 })
+    }
+  }
+
   // The chat id comes from the client, so being logged in to Telegram doesn't prove you belong to
   // that chat. People already registered (they messaged the group, or opened the app before) are
   // let straight through, with no extra Telegram call. Anyone new must be confirmed by Telegram.

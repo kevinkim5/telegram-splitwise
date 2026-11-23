@@ -621,7 +621,12 @@ export function BalancesPage() {
                           textAlign: 'left',
                         }}
                       >
-                        <span className="text-sm font-medium">{name}</span>
+                        <span className="text-sm font-medium">
+                          {name}
+                          {data?.balances.find(b => b.member_id === memberId)?.removed && (
+                            <span className="text-xs font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}> · removed</span>
+                          )}
+                        </span>
                         <span className="flex items-center gap-2">
                           <span className="flex flex-col items-end gap-0.5">
                             {lines.length === 0 ? (

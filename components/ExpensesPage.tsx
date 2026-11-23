@@ -58,6 +58,7 @@ function TrashIcon() {
 function DetailPanel({
   detail,
   members,
+  allMembers,
   onClose,
   onEdit,
   onDeleteExpense,
@@ -67,6 +68,7 @@ function DetailPanel({
 }: {
   detail: DetailState
   members: Member[]
+  allMembers: Member[] // includes removed members, who can still be on an old payment
   onClose: () => void
   onEdit: (id: number) => void
   onDeleteExpense: (id: number) => void
@@ -77,6 +79,10 @@ function DetailPanel({
   const [isEditing, setIsEditing] = useState(false)
   const [editFrom, setEditFrom] = useState(0)
   const [editTo, setEditTo] = useState(0)
+  // Current members, plus a removed member only where this payment already involves them
+  const settlementPickable = detail.kind === 'settlement'
+    ? allMembers.filter(m => !m.removed_at || m.id === detail.item.from_member_id || m.id === detail.item.to_member_id)
+    : members
   const [editAmount, setEditAmount] = useState('')
   const [editCurrency, setEditCurrency] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
@@ -306,7 +312,7 @@ function DetailPanel({
                     value={editFrom}
                     onChange={e => setEditFrom(Number(e.target.value))}
                   >
-                    {members.map(m => (
+                    {settlementPickable.map(m => (
                       <option key={m.id} value={m.id}>{memberName(m)}</option>
                     ))}
                   </select>
@@ -320,7 +326,7 @@ function DetailPanel({
                     value={editTo}
                     onChange={e => setEditTo(Number(e.target.value))}
                   >
-                    {members.map(m => (
+                    {settlementPickable.map(m => (
                       <option key={m.id} value={m.id}>{memberName(m)}</option>
                     ))}
                   </select>
@@ -437,7 +443,7 @@ const SEARCH_PAUSE_MS = 350
 
 export function ExpensesPage() {
   const router = useRouter()
-  const { chatId, group, members, currentMember, apiHeaders } = useAppContext()
+  const { chatId, group, members, allMembers, currentMember, apiHeaders } = useAppContext()
 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [settlements, setSettlements] = useState<Settlement[]>([])
@@ -895,6 +901,7 @@ export function ExpensesPage() {
       <DetailPanel
         detail={detail}
         members={members}
+        allMembers={allMembers}
         onClose={() => setDetail(null)}
         onEdit={id => navigate(`/edit/${id}`)}
         onDeleteExpense={id => handleDelete(id, () => setDetail(null))}
