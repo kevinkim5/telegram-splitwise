@@ -19,6 +19,7 @@ import { POST as restorePOST } from '../../app/api/groups/[chatId]/members/[memb
 import { GET as membersGET } from '../../app/api/groups/[chatId]/members/route'
 import { GET as balancesGET } from '../../app/api/groups/[chatId]/balances/route'
 import { POST as initPOST } from '../../app/api/groups/init/route'
+import { POST as expensePOST } from '../../app/api/groups/[chatId]/expenses/route'
 
 const mockSql = vi.mocked(sql)
 const text = (i: number) => (mockSql.mock.calls[i]![0] as unknown as string[]).join('?').replace(/\s+/g, ' ').trim()
@@ -34,6 +35,22 @@ describe('getGroupMember: a removed member is no longer a member', () => {
     mockSql.mockResolvedValueOnce([] as never)
     expect(await getGroupMember(5, 99)).toBeNull()
     expect(text(0)).toMatch(/WHERE group_id = \? AND telegram_user_id = \? AND removed_at IS NULL$/)
+  })
+})
+
+describe('getGroupMember right after a deploy that adds removed_at', () => {
+  it('if the column does not exist yet it applies the schema and retries once, instead of failing', async () => {
+    const { ensureSchema } = await import('@/lib/db')
+    mockSql
+      .mockRejectedValueOnce(new Error('column "removed_at" does not exist') as never) // the lookup
+    // ensureSchema runs its own statements (mocked to resolve with nothing), then the retry finds the member
+    mockSql.mockResolvedValue([{ id: 42 }] as never)
+    expect(await getGroupMember(5, 99)).toEqual({ id: 42 })
+    expect(vi.mocked(ensureSchema)).toHaveBeenCalledTimes(1)
+  })
+  it('any other database error is not swallowed', async () => {
+    mockSql.mockRejectedValueOnce(new Error('connection reset') as never)
+    await expect(getGroupMember(5, 99)).rejects.toThrow('connection reset')
   })
 })
 
@@ -265,5 +282,48 @@ describe('GET /balances with removed members', () => {
     ])
     expect(body.balances_by_currency.JPY.map((b: { member_id: number }) => b.member_id)).toContain(8)
     expect(body.balances_by_currency.SGD.map((b: { member_id: number }) => b.member_id)).toContain(8) // listed in every currency while any is open
+  })
+})
+
+// ── a new expense cannot include a removed member, even if the app is bypassed ──
+describe('POST /expenses with a removed member', () => {
+  const REMOVED = 9
+  // A fake database for the membership checks: members 7 and 8 are current, 9 is removed. It honours the
+  // removed_at filter in the query the route actually sends, so this fails if the filter is dropped.
+  const db = () => mockSql.mockImplementation(((strings: TemplateStringsArray, ...v: unknown[]) => {
+    const q = strings.join('?').replace(/\s+/g, ' ').trim()
+    if (/^SELECT g\.id|^SELECT id, currency FROM groups/.test(q)) return Promise.resolve([{ id: 5, title: 'T', currency: 'SGD', member_id: 7 }])
+    if (/^SELECT id FROM members WHERE group_id = \? AND telegram_user_id/.test(q)) return Promise.resolve([{ id: 7 }])
+    if (/^SELECT id FROM members WHERE group_id = \? AND id = ANY/.test(q)) {
+      const ids = v[1] as number[]
+      const activeOnly = /removed_at IS NULL$/.test(q)
+      return Promise.resolve([7, 8, REMOVED].filter(id => ids.includes(id) && (!activeOnly || id !== REMOVED)).map(id => ({ id })))
+    }
+    return Promise.resolve([])
+  }) as never)
+  const post = (body: object) => expensePOST(
+    new Request('http://x', { method: 'POST', body: JSON.stringify({ description: 'Dinner', total_amount: 30, currency: 'SGD', split_type: 'equal', date: '2026-11-20', ...body }) }),
+    { params: Promise.resolve({ chatId: '-100123' }) },
+  )
+  const inserts = () => mockSql.mock.calls.map((_, i) => text(i)).filter(t => /^(WITH|INSERT)/.test(t))
+
+  it('a removed person as the payer is refused with a 422 and nothing is saved', async () => {
+    db()
+    const res = await post({ paid_by_member_id: REMOVED, splits: [{ member_id: 7 }, { member_id: 8 }] })
+    expect(res.status).toBe(422)
+    expect(inserts()).toEqual([])
+  })
+  it('a removed person in the split is refused with a 422 and nothing is saved', async () => {
+    db()
+    const res = await post({ paid_by_member_id: 7, splits: [{ member_id: 7 }, { member_id: REMOVED }] })
+    expect(res.status).toBe(422)
+    expect(inserts()).toEqual([])
+  })
+  it('the same expense with only current members passes the membership check', async () => {
+    db()
+    // the fake database has no expense rows to return afterwards, so the route may fail after saving;
+    // what matters here is that it got as far as saving (it was not stopped by the membership check)
+    await post({ paid_by_member_id: 7, splits: [{ member_id: 7 }, { member_id: 8 }] }).catch(() => {})
+    expect(inserts().length).toBeGreaterThan(0)
   })
 })
