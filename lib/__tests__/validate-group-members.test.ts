@@ -134,6 +134,7 @@ describe('PUT /api/groups/[chatId]/expenses/[id] — member ID validation', () =
     mockSql
       .mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])            // group
       .mockResolvedValueOnce([{ id: 55, currency: 'SGD', date: '2024-01-01' }]) // existing expense
+      .mockResolvedValueOnce([])                                       // who is already on it (removed members stay valid)
       .mockResolvedValueOnce([{ id: 1 }])                              // validateGroupMembers → only 1 found
     mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
 
@@ -141,6 +142,22 @@ describe('PUT /api/groups/[chatId]/expenses/[id] — member ID validation', () =
     expect(res.status).toBe(422)
     const body = await res.json()
     expect(body.error).toMatch(/member IDs do not belong/)
+  })
+
+  it('lets a removed member stay on an expense they are already part of: its payer and splits are passed as the allowed removed members', async () => {
+    mockGetAuthUser.mockReturnValue({ id: 99, first_name: 'Alice' })
+    mockSql
+      .mockResolvedValueOnce([{ id: 7, currency: 'SGD' }])
+      .mockResolvedValueOnce([{ id: 55, currency: 'SGD', date: '2024-01-01', paid_by_member_id: 4 }])
+      .mockResolvedValueOnce([{ member_id: 4 }, { member_id: 2 }])   // already on the expense
+      .mockResolvedValueOnce([{ id: 1 }])                              // validate: member 2 is not accepted
+    mockGetGroupMember.mockResolvedValueOnce({ id: 5 })
+
+    await expensePUT(makePutRequest({ ...validBody, paid_by_member_id: 4, splits: [{ member_id: 4 }, { member_id: 2 }] }), { params })
+    const validateCall = mockSql.mock.calls[3]! as unknown[]
+    const sqlText = (validateCall[0] as unknown as string[]).join('?').replace(/\s+/g, ' ')
+    expect(sqlText).toMatch(/removed_at IS NULL OR id = ANY/)
+    expect(validateCall[3]).toEqual([4, 4, 2]) // the allow-list: existing payer, then the existing splits
   })
 })
 

@@ -42,6 +42,11 @@ export async function ensureSchema() {
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(50)`
   await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_key VARCHAR(255)`
   await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS photo_url TEXT`
+  // A removed member keeps their row: their past expenses, splits and settlements still point at it
+  // (deleting it would be refused by the foreign keys, or silently drop their splits). removed_at marks
+  // them as no longer in the group; removed_by is who did it (the member themselves, when they leave).
+  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ`
+  await sql`ALTER TABLE members ADD COLUMN IF NOT EXISTS removed_by INTEGER REFERENCES members(id) ON DELETE SET NULL`
   await sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
   // Weekly balance reminder: day of week (0 = Sunday .. 6), who set it, and the day it last went out
   // (so a repeated cron call on the same day does not post twice)

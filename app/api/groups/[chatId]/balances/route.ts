@@ -21,13 +21,14 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const members = await sql`
-    SELECT id, first_name, last_name FROM members WHERE group_id = ${group.id}
+    SELECT id, first_name, last_name, removed_at FROM members WHERE group_id = ${group.id}
   `
   const memberNameMap = new Map(members.map(m => [
     m.id as number,
     `${m.first_name}${m.last_name ? ' ' + m.last_name : ''}`,
   ]))
   const memberIds = members.map(m => m.id as number)
+  const removedIds = new Set(members.filter(m => m.removed_at).map(m => m.id as number))
 
   // Track net balance per (currency, member): positive = owed money, negative = owes
   const netByCurrency = new Map<string, Map<number, number>>()
@@ -100,5 +101,15 @@ export async function GET(request: Request, props: { params: Promise<{ chatId: s
     }
   })
 
-  return NextResponse.json({ balances: flatBalances, balances_by_currency, simplified_debts })
+  // A member who has been removed from the group is listed (marked `removed`) only while they still owe or
+  // are owed money in some currency, so the others can settle with them; once they are square they vanish
+  const stillOwes = (memberId: number) =>
+    [...netByCurrency.values()].some(map => Math.abs(Math.round((map.get(memberId) ?? 0) * 100)) > 0)
+  const visible = (b: NamedBalance) => !removedIds.has(b.member_id) || stillOwes(b.member_id)
+  const mark = (b: NamedBalance): NamedBalance => (removedIds.has(b.member_id) ? { ...b, removed: true } : b)
+  for (const cur of Object.keys(balances_by_currency)) {
+    balances_by_currency[cur] = balances_by_currency[cur].filter(visible).map(mark)
+  }
+
+  return NextResponse.json({ balances: flatBalances.filter(visible).map(mark), balances_by_currency, simplified_debts })
 }

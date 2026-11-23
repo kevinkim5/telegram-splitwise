@@ -5,7 +5,7 @@ import { CONVERT_TO, sumConverted } from '@/lib/convert'
 import { useRates } from '@/lib/use-rates'
 
 interface Line { currency: string; net: number } // positive = gets back, negative = owes
-export interface AdminMember { id: number; name: string; lines: Line[] }
+export interface AdminMember { id: number; name: string; lines: Line[]; removed?: boolean }
 export interface AdminDebt { from_member_id: number; from_name: string; to_member_id: number; to_name: string; amount: number; currency: string }
 
 const grey = '#9ca3af'
@@ -64,7 +64,7 @@ export function AdminBalances({ members, debts }: { members: AdminMember[]; debt
               onClick={() => hasDetails && toggle(m.id)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem 1rem', background: 'none', border: 'none', textAlign: 'left', cursor: hasDetails ? 'pointer' : 'default' }}
             >
-              <span style={{ fontWeight: 500, fontSize: '0.875rem', color: '#111827' }}>{m.name}</span>
+              <span style={{ fontWeight: 500, fontSize: '0.875rem', color: '#111827' }}>{m.name}{m.removed && <span style={{ fontWeight: 400, color: grey }}> · removed</span>}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '0.8125rem', fontWeight: 700 }}>
                   {m.lines.length === 0 ? (

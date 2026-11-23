@@ -83,7 +83,7 @@ export default async function AdminGroupPage({
       GROUP BY currency
       ORDER BY currency
     `,
-    sql`SELECT COUNT(*)::int AS n FROM members WHERE group_id = ${group.id}`,
+    sql`SELECT COUNT(*)::int AS n FROM members WHERE group_id = ${group.id} AND removed_at IS NULL`,
   ])
   const memberCount = Number(mCount?.n ?? 0)
   const activeExpenseCount = Number(counts?.active ?? 0)
@@ -322,14 +322,16 @@ export default async function AdminGroupPage({
     deletedDate: r.deleted_at ? new Date(r.deleted_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null,
   }))
 
+  // A removed member is listed only while they still owe or are owed money, like in the app
   const adminMembers: AdminMember[] = members.map(m => ({
     id: m.id as number,
     name: memberNameMap.get(m.id as number) ?? 'Unknown',
+    removed: !!m.removed_at,
     lines: [...netByCurrency.entries()].flatMap(([currency, byMember]) => {
       const net = Math.round((byMember.get(m.id as number) ?? 0) * 100) / 100
       return Math.abs(net) > 0.005 ? [{ currency, net }] : []
     }),
-  }))
+  })).filter(m => !m.removed || m.lines.length > 0)
 
   return (
     <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.25rem 1rem 2rem' }}>
@@ -415,8 +417,9 @@ export default async function AdminGroupPage({
           {members.map((m, i) => (
             <Row key={String(m.id)} last={i === members.length - 1}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                <span style={{ fontWeight: 500, fontSize: '0.875rem', ...(m.removed_at ? { color: '#9ca3af' } : {}) }}>
                   {String(m.first_name)}{m.last_name ? ` ${m.last_name}` : ''}
+                  {m.removed_at && <span style={{ marginLeft: 6, fontSize: '0.625rem', fontWeight: 700, color: '#b91c1c', background: '#fee2e2', borderRadius: 999, padding: '1px 8px' }}>removed</span>}
                 </span>
                 <span style={{ fontSize: '0.8125rem', color: '#6b7280', textAlign: 'right' }}>
                   {m.username ? `@${m.username}` : '—'}
@@ -424,6 +427,7 @@ export default async function AdminGroupPage({
               </div>
               <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.125rem' }}>
                 Telegram ID {String(m.telegram_user_id)} · joined {new Date(m.created_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {m.removed_at ? ` · removed ${new Date(m.removed_at as string).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
               </div>
             </Row>
           ))}

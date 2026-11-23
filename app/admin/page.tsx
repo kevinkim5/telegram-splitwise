@@ -40,7 +40,7 @@ export default async function AdminPage() {
           (SELECT MAX(GREATEST(created_at, deleted_at)) FROM settlements WHERE group_id = g.id),
           (SELECT MAX(ev.created_at) FROM expense_events ev JOIN expenses e ON e.id = ev.expense_id WHERE e.group_id = g.id)
         ) AS last_activity,
-        (SELECT COUNT(*) FROM members     WHERE group_id = g.id)                          AS member_count,
+        (SELECT COUNT(*) FROM members     WHERE group_id = g.id AND removed_at IS NULL)   AS member_count,
         (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL)   AS expense_count,
         (SELECT COUNT(*) FROM settlements WHERE group_id = g.id AND deleted_at IS NULL)   AS settlement_count,
         (SELECT COALESCE(json_agg(json_build_object('currency', t.currency, 'total', t.total) ORDER BY t.currency), '[]'::json)
@@ -73,7 +73,7 @@ export default async function AdminPage() {
     `,
     sql`
       SELECT g.id, g.title, g.currency, g.deleted_at,
-        (SELECT COUNT(*) FROM members     WHERE group_id = g.id) AS member_count,
+        (SELECT COUNT(*) FROM members     WHERE group_id = g.id AND removed_at IS NULL) AS member_count,
         (SELECT COUNT(*) FROM expenses    WHERE group_id = g.id AND deleted_at IS NULL) AS expense_count
       FROM groups g
       WHERE g.deleted_at IS NOT NULL
