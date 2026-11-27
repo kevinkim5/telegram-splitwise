@@ -3,6 +3,7 @@ import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { parseChatId } from '@/lib/parse-params'
+import { restoreMember } from '@/lib/member-store'
 
 // Add a removed member back. Any current member can do it (the same people who can remove someone), so
 // a mistaken removal is undone in one tap. Everything of theirs comes back as it was.
@@ -22,11 +23,6 @@ export async function POST(request: Request, props: { params: Promise<{ chatId: 
   const caller = await getGroupMember(group.id as number, user.id)
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const restored = await sql`
-    UPDATE members SET removed_at = NULL, removed_by = NULL
-    WHERE id = ${targetId} AND group_id = ${group.id} AND removed_at IS NOT NULL
-    RETURNING id
-  `
-  if (restored.length === 0) return NextResponse.json({ error: 'That member is not removed' }, { status: 404 })
+  if (!await restoreMember(group.id as number, targetId)) return NextResponse.json({ error: 'That member is not removed' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

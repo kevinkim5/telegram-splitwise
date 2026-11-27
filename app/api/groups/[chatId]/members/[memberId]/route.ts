@@ -3,6 +3,7 @@ import { sql } from '@/lib/sql'
 import { getAuthUser } from '@/lib/auth'
 import { getGroupMember } from '@/lib/group-member'
 import { parseChatId } from '@/lib/parse-params'
+import { removeMember } from '@/lib/member-store'
 
 // Remove a member from the group (or, when it is yourself, leave it).
 //
@@ -31,24 +32,10 @@ export async function DELETE(request: Request, props: { params: Promise<{ chatId
   const caller = await getGroupMember(group.id as number, user.id)
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // The group row is locked first, in the same transaction: two people removing at once (the last two
-  // members, say) then run one after the other, and the second sees the first one's removal. Without the
-  // lock both would see two members left and both succeed, leaving the group empty.
-  const [, removed] = await sql.transaction([
-    sql`SELECT id FROM groups WHERE id = ${group.id} FOR UPDATE`,
-    sql`
-      UPDATE members SET removed_at = NOW(), removed_by = ${caller.id}
-      WHERE id = ${targetId} AND group_id = ${group.id} AND removed_at IS NULL
-        AND (SELECT COUNT(*) FROM members WHERE group_id = ${group.id} AND removed_at IS NULL) > 1
-      RETURNING id
-    `,
-  ])
-  if (removed.length === 0) {
-    const [target] = await sql`SELECT removed_at FROM members WHERE id = ${targetId} AND group_id = ${group.id}`
-    if (!target) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-    if (target.removed_at) return NextResponse.json({ error: 'Already removed from the group' }, { status: 409 })
-    return NextResponse.json({ error: "You can't remove the last member of a group" }, { status: 409 })
-  }
+  const result = await removeMember(group.id as number, targetId, caller.id)
+  if (result === 'not_found') return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+  if (result === 'already_removed') return NextResponse.json({ error: 'Already removed from the group' }, { status: 409 })
+  if (result === 'last_member') return NextResponse.json({ error: "You can't remove the last member of a group" }, { status: 409 })
 
   return NextResponse.json({ ok: true, left: targetId === caller.id })
 }
